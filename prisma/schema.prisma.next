@@ -1,0 +1,181 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  name        String
+  email       String   @unique
+  password    String
+  role        Role     @default(STUDENT)
+
+  // Optional link to student
+  studentId   String?  @unique
+  student     Student? @relation(fields: [studentId], references: [id])
+
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Community {
+  SC
+  ST
+  SCA
+  MBC
+  BC
+  OBC
+  OTHERS
+}
+
+enum AcademicStream {
+  BIO_MATHS        // Physics, Chemistry, Maths, Biology
+  CS_MATHS         // Physics, Chemistry, Maths, Computer Science
+  BIO_CS           // Physics, Chemistry, Biology, Computer Science
+  COMMERCE         // Commerce, Economics, Accountancy, Computer Application
+}
+
+model Student {
+  id                String   @id @default(uuid())
+  name              String
+  standard          String
+  gender            Gender
+  dob               DateTime
+  religion          String?
+  community         Community
+  caste             String?
+  motherTongue      String?
+  aadharNo          String?
+  bloodGroup        String?
+  identification1   String?
+  identification2   String?
+  previousSchool    String?
+  transportMode     String? // Local / Van
+  rte               Boolean @default(false)
+
+  // Relations
+  family            Family?
+  address           Address?
+  admission         Admission?
+  document          Document? @relation(fields: [documentId], references: [id])
+  documentId        String?   @unique
+  academics         AcademicDetail[]
+  users             User?  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Family {
+  id           String  @id @default(uuid())
+  studentId    String  @unique
+
+  fatherName   String?
+  fatherPhone  String?
+  fatherWhatsapp String?
+  fatherAadhar String?
+  fatherOccupation String?
+
+  motherName   String?
+  motherPhone  String?
+  motherWhatsapp String?
+  motherAadhar String?
+  motherOccupation String?
+
+  otherWhatsapp String?
+  familyIncome  Float?
+  siblings      String?
+  hostelRequired Boolean @default(false)
+
+  student      Student @relation(fields: [studentId], references: [id])
+}
+
+model Address {
+  id        String @id @default(uuid())
+  studentId String @unique
+
+  line1     String
+  line2     String?
+  line3     String?
+  pin       String
+
+  student   Student @relation(fields: [studentId], references: [id])
+}
+
+model AcademicDetail {
+  id              String @id @default(uuid())
+  studentId       String @unique
+
+  examName        String?
+  registerNo      String?
+  monthYear       String?
+  totalPercentage Float?
+
+  stream          AcademicStream?
+
+  subjects        SubjectMark[]
+
+  student         Student @relation(fields: [studentId], references: [id])
+}
+
+model SubjectMark {
+  id              String @id @default(uuid())
+  academicId      String
+
+  subjectName     String
+  maxMarks        Int
+  obtainedMarks   Int
+  percentage      Float
+
+  academic        AcademicDetail @relation(fields: [academicId], references: [id])
+}
+
+model Document {
+  id              String @id @default(uuid())
+
+  // ✅ Checkbox status (from form)
+  photo           Boolean @default(false)
+  birthCert       Boolean @default(false)
+  communityCert   Boolean @default(false)
+  aadharFather    Boolean @default(false)
+  aadharMother    Boolean @default(false)
+  aadharStudent   Boolean @default(false)
+  transferCert    Boolean @default(false)
+
+  // ✅ Actual uploaded file paths
+  photoPath         String?
+  birthCertPath     String?
+  communityCertPath String?
+  aadharFatherPath  String?
+  aadharMotherPath  String?
+  aadharStudentPath String?
+  transferCertPath  String?
+
+  student         Student?
+}
+
+model Admission {
+  id                  String   @id @default(uuid())
+  studentId           String   @unique
+
+  admissionNo         String
+  admissionDate       DateTime
+  // ...
+}

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseInterceptors, UploadedFiles, Put } from '@nestjs/common';
 import { AnyFilesInterceptor } from '@nestjs/platform-express';
 import { multerConfig } from '../utils/multer.config';
 import { AdmissionService } from './admission.service';
@@ -10,31 +10,25 @@ export class AdmissionController {
 
   @Post()
   @UseInterceptors(AnyFilesInterceptor(multerConfig))
-  create(@Body() body: any, @UploadedFiles() files: Array<Express.Multer.File>) {
+  async create(@Body() body: any, @UploadedFiles() files: Array<Express.Multer.File>) {
     let parsedBody = body;
-    // Handle if frontend sends JSON as string in a 'data' field
     if (body.data && typeof body.data === 'string') {
       try {
         parsedBody = JSON.parse(body.data);
-      } catch (e) {
-        // Fallback to body
-      }
+      } catch (e) {}
     }
 
     if (!parsedBody.documents) parsedBody.documents = {};
-    if (!parsedBody.admission) parsedBody.admission = {};
 
     if (files && files.length > 0) {
       files.forEach((file) => {
-        if (file.fieldname === 'principalSignature') parsedBody.admission.principalSignaturePath = file.path;
-        if (file.fieldname === 'staffSignature') parsedBody.admission.staffSignaturePath = file.path;
-        if (file.fieldname === 'aadhar') parsedBody.documents.aadharStudentPath = file.path;
-        if (file.fieldname === 'tc') parsedBody.documents.transferCertPath = file.path;
-        if (file.fieldname === 'birthCert') parsedBody.documents.birthCertPath = file.path;
-        if (file.fieldname === 'photo') parsedBody.documents.photoPath = file.path;
+        if (!parsedBody.documents[file.fieldname]) parsedBody.documents[file.fieldname] = {};
+        parsedBody.documents[file.fieldname].path = file.path.replace(/\\/g, '/');
+        parsedBody.documents[file.fieldname].uploaded = true;
       });
     }
 
+    // Save as JSON
     return this.service.createAdmission(parsedBody);
   }
 
@@ -46,5 +40,28 @@ export class AdmissionController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.service.getStudentById(id);
+  }
+
+  @Put(':id')
+  @UseInterceptors(AnyFilesInterceptor(multerConfig))
+  update(@Param('id') id: string, @Body() body: any, @UploadedFiles() files: Array<Express.Multer.File>) {
+    let parsedBody = body;
+    if (body.data && typeof body.data === 'string') {
+      try {
+        parsedBody = JSON.parse(body.data);
+      } catch (e) {}
+    }
+
+    if (!parsedBody.documents) parsedBody.documents = {};
+
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        if (!parsedBody.documents[file.fieldname]) parsedBody.documents[file.fieldname] = {};
+        parsedBody.documents[file.fieldname].path = file.path.replace(/\\/g, '/');
+        parsedBody.documents[file.fieldname].uploaded = true;
+      });
+    }
+
+    return this.service.updateStudent(id, parsedBody);
   }
 }

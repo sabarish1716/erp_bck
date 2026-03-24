@@ -57,23 +57,14 @@ export class AdmissionService {
         documents: data.documents ? {
           create: {
             photo: data.documents.photo || false,
-            photoPath: data.documents.photoPath,
-            
+            photoPath: data.documents.photoPath || "",
             birthCert: data.documents.birthCert || false,
-            birthCertPath: data.documents.birthCertPath,
-            
+            birthCertPath: data.documents.birthCertPath || "",
             communityCert: data.documents.communityCert || false,
-            communityCertPath: data.documents.communityCertPath,
-            
+            communityCertPath: data.documents.communityCertPath || "",
             aadharFather: data.documents.aadharFather || false,
-            aadharFatherPath: data.documents.aadharFatherPath,
-            
             aadharMother: data.documents.aadharMother || false,
-            aadharMotherPath: data.documents.aadharMotherPath,
-            
             aadharStudent: data.documents.aadharStudent || false,
-            aadharStudentPath: data.documents.aadharStudentPath,
-            
             transferCert: data.documents.transferCert || false,
             transferCertPath: data.documents.transferCertPath,
           },
@@ -136,4 +127,139 @@ export class AdmissionService {
       },
     });
   }
+    async updateStudent(id: string, data: CreateAdmissionDto) {
+
+    // Defensive: check for missing or invalid data
+    if (!data || typeof data !== 'object') {
+      throw new Error('Invalid update data: expected an object');
+    }
+    const updateData: any = {
+      name: data.name,
+      standard: data.standard || 'Unknown',
+      gender: data.gender || 'MALE',
+      religion: data.religion,
+      community: data.community || 'OTHERS',
+      caste: data.caste,
+      motherTongue: data.motherTongue,
+      aadharNo: data.aadharNo,
+      bloodGroup: data.bloodGroup,
+      identification1: data.identification1,
+      identification2: data.identification2,
+      previousSchool: data.previousSchool,
+      transportMode: data.transportMode,
+      rte: typeof data.rte === 'boolean' ? data.rte : false,
+    };
+    if (data.dob) updateData.dob = new Date(data.dob);
+
+    if (data.family) {
+      updateData.family = {
+        upsert: {
+          update: {
+            fatherName: data.family.fatherName,
+            fatherPhone: data.family.fatherPhone,
+            fatherWhatsapp: data.family.fatherWhatsapp,
+            fatherAadhar: data.family.fatherAadhar,
+            fatherOccupation: data.family.fatherOccupation,
+            motherName: data.family.motherName,
+            motherPhone: data.family.motherPhone,
+            motherWhatsapp: data.family.motherWhatsapp,
+            motherAadhar: data.family.motherAadhar,
+            motherOccupation: data.family.motherOccupation,
+            familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
+            siblings: data.family.siblings,
+            hostelRequired: data.family.hostelRequired || false,
+          },
+          create: {
+            fatherName: data.family.fatherName,
+            fatherPhone: data.family.fatherPhone,
+            fatherWhatsapp: data.family.fatherWhatsapp,
+            fatherAadhar: data.family.fatherAadhar,
+            fatherOccupation: data.family.fatherOccupation,
+            motherName: data.family.motherName,
+            motherPhone: data.family.motherPhone,
+            motherWhatsapp: data.family.motherWhatsapp,
+            motherAadhar: data.family.motherAadhar,
+            motherOccupation: data.family.motherOccupation,
+            familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
+            siblings: data.family.siblings,
+            hostelRequired: data.family.hostelRequired || false,
+          },
+        },
+      };
+    }
+    if (data.address) {
+      updateData.address = {
+        upsert: {
+          update: {
+            line1: data.address.line1 || 'Pending',
+            line2: data.address.line2,
+            line3: data.address.line3,
+            pin: data.address.pin || '000000',
+          },
+          create: {
+            line1: data.address.line1 || 'Pending',
+            line2: data.address.line2,
+            line3: data.address.line3,
+            pin: data.address.pin || '000000',
+          },
+        },
+      };
+    }
+    if (data.documents) {
+        // Helper to normalize slashes
+        const normalizePath = (p: string | undefined | null) =>
+          typeof p === 'string' ? p.replace(/\\/g, '/') : p;
+        updateData.documents = {
+          deleteMany: {},
+          create: [{
+            photo: data.documents.photo || false,
+            photoPath: normalizePath(data.documents.photoPath) || '',
+            birthCert: data.documents.birthCert || false,
+            birthCertPath: normalizePath(data.documents.birthCertPath) || '',
+            communityCert: data.documents.communityCert || false,
+            communityCertPath: normalizePath(data.documents.communityCertPath) || '',
+            aadharFather: data.documents.aadharFather || false,
+            aadharMother: data.documents.aadharMother || false,
+            aadharStudent: data.documents.aadharStudent || false,
+            transferCert: data.documents.transferCert || false,
+            transferCertPath: normalizePath(data.documents.transferCertPath),
+          }],
+        };
+    }
+    // Academics update logic can be more complex (delete/create or upsert per item)
+    // For simplicity, not updating academics here
+    if (data.admission) {
+      updateData.admission = {
+        upsert: {
+          update: {
+            admissionNo: data.admission.admissionNo || 'TBD',
+            admissionDate: data.admission.admissionDate ? new Date(data.admission.admissionDate) : undefined,
+            standard: data.admission.standard || data.standard || 'Unknown',
+            staffSignature: data.admission.staffSignaturePath || data.admission.staffSignature,
+            principalSignature: data.admission.principalSignaturePath || data.admission.principalSignature,
+          },
+          create: {
+            admissionNo: data.admission.admissionNo || 'TBD',
+            admissionDate: data.admission.admissionDate ? new Date(data.admission.admissionDate) : new Date(),
+            standard: data.admission.standard || data.standard || 'Unknown',
+            staffSignature: data.admission.staffSignaturePath || data.admission.staffSignature,
+            principalSignature: data.admission.principalSignaturePath || data.admission.principalSignature,
+          },
+        },
+      };
+    }
+    return this.prisma.student.update({
+      // where: { id },
+      where:{ id },
+      data: updateData,
+      include: {
+        family: true,
+        address: true,
+        documents: true,
+        academics: true,
+        admission: true,
+      },
+    });
+  }
 }
+

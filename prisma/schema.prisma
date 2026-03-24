@@ -82,6 +82,7 @@ model Student {
   users             User?  
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
+  documentsJson     Json?
 }
 
 model Family {
@@ -122,7 +123,7 @@ model Address {
 
 model AcademicDetail {
   id              String @id @default(uuid())
-  studentId       String
+  studentId       String @unique
 
   examName        String?
   registerNo      String?
@@ -150,7 +151,7 @@ model SubjectMark {
 
 model Document {
   id              String @id @default(uuid())
-  studentId       String
+  studentId       String @unique
 
   // ✅ Checkbox status (from form)
   photo           Boolean @default(false)

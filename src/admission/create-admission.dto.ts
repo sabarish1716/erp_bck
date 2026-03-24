@@ -40,7 +40,7 @@ class AddressDto {
 
 class DocumentsDto {
   @IsOptional() @IsBoolean() photo?: boolean;
-  @IsOptional() @IsString() photoPath?: string;
+  @IsOptional()  photoPath?: string;
 
   @IsOptional() @IsBoolean() birthCert?: boolean;
   @IsOptional() @IsString() birthCertPath?: string;
@@ -112,10 +112,10 @@ export class CreateAdmissionDto {
   @Type(() => AddressDto)
   address?: AddressDto;
 
-  @IsOptional()
-  @ValidateNested()
-  @Type(() => DocumentsDto)
-  documents?: DocumentsDto;
+  // @IsOptional()
+  // @ValidateNested()
+  // @Type(() => DocumentsDto)
+  // documents?: DocumentsDto;
 
   @IsOptional()
   @IsArray()
@@ -127,4 +127,7 @@ export class CreateAdmissionDto {
   @ValidateNested()
   @Type(() => AdmissionInfoDto)
   admission?: AdmissionInfoDto;
+
+  @IsOptional()
+  documents?: Record<string, any>;
 }
