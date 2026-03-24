@@ -11,7 +11,7 @@ async function bootstrap() {
   ensureUploadDirs();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableCors();
-  app.useStaticAssets(join(__dirname, '..', 'uploads'), { prefix: '/uploads/' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,        // remove extra fields
