@@ -12,262 +12,119 @@ import {
 import { Type } from 'class-transformer';
 import { Gender, Community, AcademicStream } from '@prisma/client';
 
-/* ---------------- FAMILY DTO ---------------- */
-
 class FamilyDto {
-  @IsOptional()
-  @IsString()
-  fatherName?: string;
-
-  @IsOptional()
-  @IsString()
-  fatherPhone?: string;
-
-  @IsOptional()
-  @IsString()
-  fatherWhatsapp?: string;
-
-  @IsOptional()
-  @IsString()
-  fatherAadhar?: string;
-
-  @IsOptional()
-  @IsString()
-  fatherOccupation?: string;
-
-  @IsOptional()
-  @IsString()
-  motherName?: string;
-
-  @IsOptional()
-  @IsString()
-  motherPhone?: string;
-
-  @IsOptional()
-  @IsString()
-  motherWhatsapp?: string;
-
-  @IsOptional()
-  @IsString()
-  motherAadhar?: string;
-
-  @IsOptional()
-  @IsString()
-  motherOccupation?: string;
-
-  @IsOptional()
-  @IsString()
-  otherWhatsapp?: string;
-
-  @IsOptional()
-  @IsNumber()
-  familyIncome?: number;
-
-  @IsOptional()
-  @IsString()
-  siblings?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  hostelRequired?: boolean;
+  @IsOptional() @IsString() fatherName?: string;
+  @IsOptional() @IsString() fatherPhone?: string;
+  @IsOptional() @IsString() fatherWhatsapp?: string;
+  @IsOptional() @IsString() fatherAadhar?: string;
+  @IsOptional() @IsString() fatherOccupation?: string;
+  
+  @IsOptional() @IsString() motherName?: string;
+  @IsOptional() @IsString() motherPhone?: string;
+  @IsOptional() @IsString() motherWhatsapp?: string;
+  @IsOptional() @IsString() motherAadhar?: string;
+  @IsOptional() @IsString() motherOccupation?: string;
+  
+  @IsOptional() @IsString() otherWhatsapp?: string;
+  @IsOptional() familyIncome?: string;
+  @IsOptional() @IsString() siblings?: string;
+  @IsOptional() @IsBoolean() hostelRequired?: boolean;
 }
-
-/* ---------------- ADDRESS DTO ---------------- */
 
 class AddressDto {
-  @IsNotEmpty()
-  @IsString()
-  line1: string;
-
-  @IsOptional()
-  @IsString()
-  line2?: string;
-
-  @IsOptional()
-  @IsString()
-  line3?: string;
-
-  @IsNotEmpty()
-  @IsString()
-  pin: string;
+  @IsOptional() @IsString() line1?: string;
+  @IsOptional() @IsString() line2?: string;
+  @IsOptional() @IsString() line3?: string;
+  @IsOptional() @IsString() pin?: string;
 }
 
-/* ---------------- DOCUMENT DTO ---------------- */
+class DocumentsDto {
+  @IsOptional() @IsBoolean() photo?: boolean;
+  @IsOptional() @IsString() photoPath?: string;
 
-class DocumentDto {
-  @IsBoolean()
-  photo: boolean;
+  @IsOptional() @IsBoolean() birthCert?: boolean;
+  @IsOptional() @IsString() birthCertPath?: string;
 
-  @IsBoolean()
-  birthCert: boolean;
+  @IsOptional() @IsBoolean() communityCert?: boolean;
+  @IsOptional() @IsString() communityCertPath?: string;
 
-  @IsBoolean()
-  communityCert: boolean;
+  @IsOptional() @IsBoolean() aadharFather?: boolean;
+  @IsOptional() @IsString() aadharFatherPath?: string;
 
-  @IsBoolean()
-  aadharFather: boolean;
+  @IsOptional() @IsBoolean() aadharMother?: boolean;
+  @IsOptional() @IsString() aadharMotherPath?: string;
 
-  @IsBoolean()
-  aadharMother: boolean;
+  @IsOptional() @IsBoolean() aadharStudent?: boolean;
+  @IsOptional() @IsString() aadharStudentPath?: string;
 
-  @IsBoolean()
-  aadharStudent: boolean;
-
-  @IsBoolean()
-  transferCert: boolean;
+  @IsOptional() @IsBoolean() transferCert?: boolean;
+  @IsOptional() @IsString() transferCertPath?: string;
 }
-
-/* ---------------- SUBJECT DTO ---------------- */
-
-class SubjectMarkDto {
-  @IsString()
-  subjectName: string;
-
-  @IsNumber()
-  maxMarks: number;
-
-  @IsNumber()
-  obtainedMarks: number;
-
-  @IsNumber()
-  percentage: number;
-}
-
-/* ---------------- ACADEMIC DTO ---------------- */
 
 class AcademicDto {
-  @IsOptional()
-  @IsString()
-  examName?: string;
-
-  @IsOptional()
-  @IsString()
-  registerNo?: string;
-
-  @IsOptional()
-  @IsString()
-  monthYear?: string;
-
-  @IsOptional()
-  @IsNumber()
-  totalPercentage?: number;
-
-  @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
-
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => SubjectMarkDto)
-  subjects: SubjectMarkDto[];
+  @IsOptional() @IsString() examName?: string;
+  @IsOptional() @IsString() registerNo?: string;
+  @IsOptional() @IsString() monthYear?: string;
+  @IsOptional() @IsNumber() totalPercentage?: number;
+  @IsOptional() @IsString() stream?: string;
+  @IsOptional() @IsArray() subjects?: any[];
 }
-
-/* ---------------- ADMISSION DTO ---------------- */
 
 class AdmissionInfoDto {
-  @IsNotEmpty()
-  @IsString()
-  admissionNo: string;
+  @IsOptional() @IsString() admissionNo?: string;
+  @IsOptional() @IsString() admissionDate?: string;
+  @IsOptional() @IsString() standard?: string;
 
-  @IsDateString()
-  admissionDate: string;
+  @IsOptional() @IsString() staffSignature?: string;
+  @IsOptional() @IsString() staffSignaturePath?: string;
 
-  @IsNotEmpty()
-  @IsString()
-  standard: string;
-
-  @IsOptional()
-  @IsString()
-  staffSignature?: string;
-
-  // ✅ IMPORTANT: Principal sign required
-  @IsNotEmpty()
-  @IsString()
-  principalSignature: string;
+  @IsOptional() @IsString() principalSignature?: string;
+  @IsOptional() @IsString() principalSignaturePath?: string;
 }
 
-/* ---------------- MAIN DTO ---------------- */
-
 export class CreateAdmissionDto {
-  /* Student Info */
+  @IsNotEmpty() @IsString() name: string;
+  @IsOptional() @IsString() standard?: string;
+  @IsOptional() @IsString() gender?: Gender;
+  @IsOptional() @IsDateString() dob?: string;
+  @IsOptional() @IsString() community?: Community;
+  
+  @IsOptional() @IsString() religion?: string;
+  @IsOptional() @IsString() caste?: string;
+  @IsOptional() @IsString() motherTongue?: string;
+  @IsOptional() @IsString() aadharNo?: string;
+  @IsOptional() @IsString() bloodGroup?: string;
+  
+  @IsOptional() @IsString() identification1?: string;
+  @IsOptional() @IsString() identification2?: string;
+  @IsOptional() @IsString() previousSchool?: string;
+  @IsOptional() @IsString() transportMode?: string;
+  @IsOptional() @IsBoolean() rte?: boolean;
 
-  @IsNotEmpty()
-  @IsString()
-  name: string;
-
-  @IsNotEmpty()
-  @IsString()
-  standard: string;
-
-  @IsEnum(Gender)
-  gender: Gender;
-
-  @IsDateString()
-  dob: string;
-
+  /* Nested Objects mapped from your JSON */
   @IsOptional()
-  @IsString()
-  religion?: string;
-
-  @IsEnum(Community)
-  community: Community;
-
-  @IsOptional()
-  @IsString()
-  caste?: string;
-
-  @IsOptional()
-  @IsString()
-  motherTongue?: string;
-
-  @IsOptional()
-  @IsString()
-  aadharNo?: string;
-
-  @IsOptional()
-  @IsString()
-  bloodGroup?: string;
-
-  @IsOptional()
-  @IsString()
-  identification1?: string;
-
-  @IsOptional()
-  @IsString()
-  identification2?: string;
-
-  @IsOptional()
-  @IsString()
-  previousSchool?: string;
-
-  @IsOptional()
-  @IsString()
-  transportMode?: string;
-
-  @IsOptional()
-  @IsBoolean()
-  rte?: boolean;
-
-  /* Nested Objects */
-
   @ValidateNested()
   @Type(() => FamilyDto)
-  family: FamilyDto;
+  family?: FamilyDto;
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => AddressDto)
-  address: AddressDto;
+  address?: AddressDto;
 
+  @IsOptional()
   @ValidateNested()
-  @Type(() => DocumentDto)
-  documents: DocumentDto;
+  @Type(() => DocumentsDto)
+  documents?: DocumentsDto;
 
+  @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => AcademicDto)
-  academics: AcademicDto[];
+  academics?: AcademicDto[];
 
+  @IsOptional()
   @ValidateNested()
   @Type(() => AdmissionInfoDto)
-  admission: AdmissionInfoDto;
+  admission?: AdmissionInfoDto;
 }
