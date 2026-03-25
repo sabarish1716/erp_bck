@@ -130,4 +130,6 @@ export class CreateAdmissionDto {
 
   @IsOptional()
   documents?: Record<string, any>;
+
+  @IsOptional() @IsString() email?: string;
 }

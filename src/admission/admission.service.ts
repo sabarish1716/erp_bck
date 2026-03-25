@@ -132,7 +132,18 @@ async createAdmission(data: CreateAdmissionDto) {
             },
           }
         : undefined,
+        users: {
+          create: {
+            name: data.name,
+            email: data?.email ?? `user${data.admission?.admissionNo}@example.com`,
+            password: 'defaultpassword', // In real app, hash this and generate properly
+            role: 'STUDENT',
+            // isActive: true,
+           
+          },
+        },
     },
+    
 
     include: {
       family: true,

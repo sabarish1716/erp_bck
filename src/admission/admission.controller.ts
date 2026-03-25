@@ -178,7 +178,16 @@ async update(
     'transferCert',
   ];
 
+  // profilephoto is from frontend but our seid we use photo
+
   docKeys.forEach((key) => {
+    if(key === 'profilePhoto' && uploadedMap['profilePhoto']) {
+       parsedBody.documents['photo'] = {
+        path: uploadedMap[key],
+        uploaded: true
+      };
+    }
+
     if (!parsedBody.documents[key]) {
       parsedBody.documents[key] = {};
     }
