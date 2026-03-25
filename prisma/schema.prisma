@@ -188,3 +188,20 @@ model Admission {
 
   student             Student   @relation(fields: [studentId], references: [id])
 }
+
+
+model Van {
+  id        String   @id @default(uuid())
+  number    String
+  locations Location[]
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  vanId     String
+  latitude  Float
+  longitude Float
+  createdAt DateTime @default(now())
+
+  van Van @relation(fields: [vanId], references: [id])
+}
