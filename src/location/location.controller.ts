@@ -1,19 +1,21 @@
-// location.controller.ts
-import { Controller, Post, Body, Get, Param } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { LocationService } from './location.service';
-import { UpdateLocationDto } from './dto/update-location.dto';
+import { CreateLocationDto } from './dto/create-location.dto';
 
 @Controller('location')
 export class LocationController {
-  constructor(private readonly service: LocationService) {}
+  constructor(private readonly locationService: LocationService) {}
 
-  @Post('update')
-  update(@Body() body: UpdateLocationDto) {
-    return this.service.updateLocation(body);
+  // POST /location
+  @Post()
+  async create(@Body() dto: CreateLocationDto) {
+    console.log('Received location data:', dto);
+    return this.locationService.create(dto);
   }
 
-  @Get(':vanId')
-  getLatest(@Param('vanId') vanId: string) {
-    return this.service.getLatestLocation(vanId);
+  // GET /location/:driverId
+  @Get(':driverId')
+  async getLatest(@Param('driverId') driverId: string) {
+    return this.locationService.getLatestLocation(driverId);
   }
 }

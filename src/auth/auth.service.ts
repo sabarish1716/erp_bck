@@ -1,7 +1,9 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Post, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { AuthGuard } from '@nestjs/passport';
+import { Driver } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -25,6 +27,14 @@ export class AuthService {
     return user;
   }
 
+  @UseGuards(AuthGuard('jwt'))
+@Post('bulk')
+async loginDriver(driver: Driver) {
+  const payload = { sub: driver.id };
+  return {
+    access_token: this.jwtService.sign(payload),
+  };
+}
   async login(data: any) {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },

@@ -1,39 +1,26 @@
-// location.service.ts
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { UpdateLocationDto } from './dto/update-location.dto';
-import { LocationGateway } from './location.gateway';
+import { CreateLocationDto } from './dto/create-location.dto';
 
 @Injectable()
 export class LocationService {
-  constructor(
-    private prisma: PrismaService,
-    private gateway: LocationGateway,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
-  async updateLocation(data: UpdateLocationDto) {
-    const location = await this.prisma.location.create({
+  async create(dto: CreateLocationDto) {
+    return this.prisma.location.create({
       data: {
-        vanId: data.vanId,
-        latitude: data.latitude,
-        longitude: data.longitude,
+        latitude: dto.latitude,
+        longitude: dto.longitude,
+        driverId: dto.driverId,
+        busId: dto.busId || "",
+        createdAt: new Date(),
       },
     });
-
-    // 🔥 Emit real-time update
-    this.gateway.sendLocationUpdate({
-      vanId: data.vanId,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      timestamp: new Date(),
-    });
-
-    return location;
   }
 
-  async getLatestLocation(vanId: string) {
+  async getLatestLocation(driverId: string) {
     return this.prisma.location.findFirst({
-      where: { vanId },
+      where: { driverId },
       orderBy: { createdAt: 'desc' },
     });
   }

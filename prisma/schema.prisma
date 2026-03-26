@@ -190,18 +190,88 @@ model Admission {
 }
 
 
-model Van {
+
+
+// model Driver {
+//   id        String   @id @default(uuid())
+//   name      String
+//   phone     String?
+//   deviceId  String?
+//   busId     String?
+//   bus       Bus?     @relation(fields: [busId], references: [id])
+//   locations Location[]
+//   createdAt DateTime @default(now())
+// }
+
+// model Bus {
+//   id          String   @id @default(uuid())
+//   number      String   // e.g. TN-01-1234
+//   routeName   String?
+//   capacity    Int?
+//   drivers     Driver[]
+//   locations   Location[]
+//   createdAt   DateTime @default(now())
+// }
+
+// model Location {
+//   id        String   @id @default(uuid())
+//   driverId  String
+//   busId     String
+//   latitude  Float
+//   longitude Float
+//   speed     Float?
+//   createdAt DateTime
+
+//   driver Driver @relation(fields: [driverId], references: [id])
+//   bus    Bus    @relation(fields: [busId], references: [id])
+
+//   @@index([driverId])
+//   @@index([busId])
+//   @@index([createdAt])
+
+//   // prevent duplicates during retry sync
+//   @@unique([driverId, createdAt])
+// }
+
+
+model Driver {
   id        String   @id @default(uuid())
-  number    String
+  name      String
+  email     String   @unique
+  phone     String?
+  deviceId  String?
+  busId     String?
+  bus       Bus?     @relation(fields: [busId], references: [id])
   locations Location[]
+  createdAt DateTime @default(now())
+}
+
+model Bus {
+  id          String   @id @default(uuid())
+  number      String   // e.g. TN-01-1234
+  routeName   String?
+  capacity    Int?
+  drivers     Driver[]
+  locations   Location[]
+  createdAt   DateTime @default(now())
 }
 
 model Location {
   id        String   @id @default(uuid())
-  vanId     String
+  driverId  String
+  busId     String
   latitude  Float
   longitude Float
-  createdAt DateTime @default(now())
+  speed     Float?
+  createdAt DateTime
 
-  van Van @relation(fields: [vanId], references: [id])
+  driver Driver @relation(fields: [driverId], references: [id])
+  bus    Bus    @relation(fields: [busId], references: [id])
+
+  @@index([driverId])
+  @@index([busId])
+  @@index([createdAt])
+
+  // prevent duplicates during retry sync
+  @@unique([driverId, createdAt])
 }
