@@ -1,0 +1,80 @@
+import { Role } from './role.enum';
+import { Permission } from './permission.enum';
+
+/**
+ * Maps each role to the set of permissions it has.
+ *
+ * ADMIN        – full access to everything
+ * PRINCIPAL    – read everything + approve admissions/fee actions; no user management
+ * STAFF        – manage admissions, read fees/reports; cannot create fee structures or delete
+ * STUDENT      – read-only access to their own data (admission, fees, transport)
+ */
+export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  [Role.ADMIN]: Object.values(Permission) as Permission[],
+
+  [Role.PRINCIPAL]: [
+    // Admission
+    Permission.ADMISSION_CREATE,
+    Permission.ADMISSION_READ,
+    Permission.ADMISSION_UPDATE,
+    Permission.ADMISSION_APPROVE,
+    Permission.ADMISSION_DELETE,
+    // Student
+    Permission.STUDENT_READ,
+    Permission.STUDENT_CREATE,
+    Permission.STUDENT_UPDATE,
+    // Fees — read + collect; no structure create/delete
+    Permission.FEES_STRUCTURE_READ,
+    Permission.FEES_ASSIGN,
+    Permission.FEES_COLLECT,
+    Permission.FEES_READ,
+    Permission.FEES_DASHBOARD,
+    // Transport
+    Permission.TRANSPORT_ROUTE_READ,
+    Permission.TRANSPORT_ASSIGN,
+    Permission.TRANSPORT_READ,
+    // Staff
+    Permission.STAFF_READ,
+    Permission.STAFF_CREATE,
+    Permission.STAFF_UPDATE,
+    // Reports
+    Permission.REPORTS_READ,
+    // Location
+    Permission.LOCATION_READ,
+  ],
+
+  [Role.STAFF]: [
+    // Admission
+    Permission.ADMISSION_CREATE,
+    Permission.ADMISSION_READ,
+    Permission.ADMISSION_UPDATE,
+    // Student
+    Permission.STUDENT_READ,
+    Permission.STUDENT_UPDATE,
+    // Fees — read only + collect payments
+    Permission.FEES_STRUCTURE_READ,
+    Permission.FEES_READ,
+    Permission.FEES_COLLECT,
+    Permission.FEES_DASHBOARD,
+    // Transport — read only
+    Permission.TRANSPORT_ROUTE_READ,
+    Permission.TRANSPORT_READ,
+    // Staff
+    Permission.STAFF_READ,
+    // Reports — read only
+    Permission.REPORTS_READ,
+    // Location
+    Permission.LOCATION_READ,
+  ],
+
+  [Role.STUDENT]: [
+    // Only view their own data — controllers enforce student-level filtering
+    Permission.ADMISSION_READ,
+    Permission.STUDENT_READ,
+    Permission.FEES_READ,
+    Permission.TRANSPORT_READ,
+    Permission.LOCATION_READ,
+  ],
+};
+
+export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = ROLE_PERMISSIONS;

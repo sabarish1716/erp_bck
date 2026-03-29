@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 
@@ -6,22 +6,189 @@ import { CreateLocationDto } from './dto/create-location.dto';
 export class LocationService {
   constructor(private prisma: PrismaService) {}
 
+  private toRad(value: number) {
+    return (value * Math.PI) / 180;
+  }
+
+  private haversineDistanceMeters(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ) {
+    const R = 6371000;
+    const dLat = this.toRad(lat2 - lat1);
+    const dLon = this.toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRad(lat1)) *
+        Math.cos(this.toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private getGeofenceConfig() {
+    const centerLat = Number(process.env.SCHOOL_GEOFENCE_LAT || 13.0827);
+    const centerLng = Number(process.env.SCHOOL_GEOFENCE_LNG || 80.2707);
+    const radiusMeters = Number(process.env.SCHOOL_GEOFENCE_RADIUS_M || 250);
+
+    return {
+      centerLat,
+      centerLng,
+      radiusMeters,
+    };
+  }
+
+  private async resolveDriverAndBus(dto: CreateLocationDto) {
+    const driverRef = String(dto.driverId || '').trim();
+    if (!driverRef) {
+      throw new BadRequestException('driverId is required');
+    }
+
+    let driver = await this.prisma.driver.findFirst({
+      where: {
+        OR: [{ id: driverRef }, { phone: driverRef }, { deviceId: driverRef }],
+      },
+      include: { bus: true },
+    });
+
+    if (!driver) {
+      const refDigits = driverRef.replace(/\D/g, '');
+      if (refDigits.length >= 10) {
+        const allDrivers = await this.prisma.driver.findMany({
+          where: { phone: { not: null } },
+          include: { bus: true },
+        });
+        const target = refDigits.slice(-10);
+        driver =
+          allDrivers.find((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target) ||
+          null;
+      }
+    }
+
+    if (!driver) {
+      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+    }
+
+    const busId = dto.busId || driver.busId;
+    if (!busId) {
+      throw new BadRequestException('Bus is not mapped for this driver. Provide busId or assign bus to driver.');
+    }
+
+    return { driver, busId };
+  }
+
   async create(dto: CreateLocationDto) {
+    const { driver, busId } = await this.resolveDriverAndBus(dto);
     return this.prisma.location.create({
       data: {
         latitude: dto.latitude,
         longitude: dto.longitude,
-        driverId: dto.driverId,
-        busId: dto.busId || "",
+        driverId: driver.id,
+        busId,
         createdAt: new Date(),
       },
     });
   }
 
-  async getLatestLocation(driverId: string) {
+  async getLatestLocation(driverRef: string) {
+    let driver = await this.prisma.driver.findFirst({
+      where: {
+        OR: [{ id: driverRef }, { phone: driverRef }, { deviceId: driverRef }],
+      },
+      select: { id: true },
+    });
+
+    if (!driver) {
+      const refDigits = String(driverRef || '').replace(/\D/g, '');
+      if (refDigits.length >= 10) {
+        const allDrivers = await this.prisma.driver.findMany({
+          where: { phone: { not: null } },
+          select: { id: true, phone: true },
+        });
+        const target = refDigits.slice(-10);
+        const found = allDrivers.find(
+          (d) => String(d.phone || '').replace(/\D/g, '').slice(-10) === target,
+        );
+        if (found) {
+          driver = { id: found.id };
+        }
+      }
+    }
+
+    if (!driver) {
+      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+    }
+
     return this.prisma.location.findFirst({
-      where: { driverId },
+      where: { driverId: driver.id },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async getLiveDriverLocations() {
+    const geofence = this.getGeofenceConfig();
+
+    const latestCandidates = await this.prisma.location.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 2000,
+      include: {
+        driver: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            bus: {
+              select: {
+                id: true,
+                number: true,
+                routeName: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const seen = new Set<string>();
+    const latestPerDriver = [] as typeof latestCandidates;
+    for (const item of latestCandidates) {
+      if (seen.has(item.driverId)) continue;
+      seen.add(item.driverId);
+      latestPerDriver.push(item);
+    }
+
+    const drivers = latestPerDriver.map((item) => {
+      const distanceMeters = this.haversineDistanceMeters(
+        geofence.centerLat,
+        geofence.centerLng,
+        item.latitude,
+        item.longitude,
+      );
+
+      return {
+        id: item.id,
+        createdAt: item.createdAt,
+        latitude: item.latitude,
+        longitude: item.longitude,
+        driverId: item.driverId,
+        busId: item.busId,
+        driver: item.driver,
+        distanceToSchoolMeters: Math.round(distanceMeters),
+        insideSchoolGeofence: distanceMeters <= geofence.radiusMeters,
+      };
+    });
+
+    return {
+      geofence,
+      drivers,
+      total: drivers.length,
+      insideGeofenceCount: drivers.filter((x) => x.insideSchoolGeofence).length,
+      outsideGeofenceCount: drivers.filter((x) => !x.insideSchoolGeofence).length,
+      lastUpdatedAt: new Date().toISOString(),
+    };
   }
 }

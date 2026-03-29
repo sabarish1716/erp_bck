@@ -1,4 +1,5 @@
-import { IsNumber, IsOptional, IsString } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
 
 export class CreateLocationDto {
   @IsNumber()
@@ -7,10 +8,13 @@ export class CreateLocationDto {
   @IsNumber()
   longitude: number;
 
+  @Transform(({ value }) => String(value ?? '').trim())
   @IsString()
+  @IsNotEmpty()
   driverId: string;
 
+  @Transform(({ value }) => (value === undefined || value === null ? undefined : String(value).trim()))
   @IsString()
-@IsOptional()
+  @IsOptional()
   busId?: string;
 }

@@ -1,21 +1,52 @@
-import { Controller, Post, Body, Get, Param, UseInterceptors, UploadedFiles, Put, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, UseInterceptors, UploadedFiles, Put, Delete, Patch, Req, Query, BadRequestException } from '@nestjs/common';
 import { AnyFilesInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
 import { multerConfig } from '../utils/multer.config';
 import { AdmissionService } from './admission.service';
 import { CreateAdmissionDto } from './create-admission.dto';
 import { diskStorage } from 'multer';
 import { extname } from 'path/win32';
-
+import { Permissions } from '../auth/permissions.decorator';
+import { Permission } from '../auth/permission.enum';
+import { SetAdmissionApprovalDto } from './set-admission-approval.dto';
+import { PromoteStudentsDto } from './promote-students.dto';
+import { LinkSiblingsDto } from './link-siblings.dto';
+import { UpdateStandardSeatsDto } from './standard-seats.dto';
 
 @Controller('admissions')
 export class AdmissionController {
   constructor(private readonly service: AdmissionService) {}
+
+  @Get('next-admission-no')
+  @Permissions(Permission.ADMISSION_CREATE)
+  async getNextAdmissionNo() {
+    const admissionNo = await this.service.generateAdmissionNo();
+    return { admissionNo };
+  }
+
+  @Post('bulk-approval')
+  @Permissions(Permission.ADMISSION_APPROVE)
+  async bulkApproval(@Body() body: { studentIds: string[]; approved: boolean; reason?: string }, @Req() req: any) {
+    return this.service.bulkApproval(body.studentIds, body.approved, req?.user, body.reason);
+  }
+
+  @Post('bulk-upload')
+  @Permissions(Permission.ADMISSION_CREATE)
+  async bulkUpload(@Body() body: { rows: any[] }) {
+    if (!body.rows || !Array.isArray(body.rows) || body.rows.length === 0) {
+      throw new BadRequestException('No rows provided');
+    }
+    if (body.rows.length > 500) {
+      throw new BadRequestException('Maximum 500 rows allowed per upload');
+    }
+    return this.service.bulkCreateFromCsv(body.rows);
+  }
 
 
 
 
 
   @Post()
+  @Permissions(Permission.ADMISSION_CREATE)
   @UseInterceptors(
     FileFieldsInterceptor(
       [
@@ -90,13 +121,72 @@ export class AdmissionController {
   }
 
   @Get()
+  @Permissions(Permission.ADMISSION_READ)
   findAll() {
     return this.service.getAllStudents();
   }
 
+  @Get('pending')
+  @Permissions(Permission.ADMISSION_READ)
+  findPending() {
+    return this.service.getPendingAdmissions();
+  }
+
+  @Get('dashboard/summary')
+  @Permissions(Permission.ADMISSION_READ)
+  getDashboard(@Query('academicYear') academicYear?: string) {
+    return this.service.getAdmissionDashboard(academicYear);
+  }
+
+  @Get('export/csv')
+  @Permissions(Permission.ADMISSION_READ)
+  async exportCsv(@Query('academicYear') academicYear?: string) {
+    const csv = await this.service.exportAdmissionsCsv(academicYear);
+    return {
+      filename: `admissions-${academicYear || 'all'}.csv`,
+      contentType: 'text/csv',
+      csv,
+    };
+  }
+
+  @Get('seats')
+  @Permissions(Permission.ADMISSION_READ)
+  getSeatConfig() {
+    return this.service.getStandardSeatConfig();
+  }
+
+  @Put('seats')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  updateSeatConfig(@Body() body: UpdateStandardSeatsDto, @Req() req: any) {
+    return this.service.updateStandardSeatConfig(body.seats, req?.user?.email);
+  }
+
+  @Post('promote')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  promoteStudents(@Body() body: PromoteStudentsDto) {
+    return this.service.promoteStudents(body.fromStandard, body.toStandard, body.academicYear);
+  }
+
+  @Post('siblings/link')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  linkSiblings(@Body() body: LinkSiblingsDto) {
+    return this.service.linkSiblings(body.studentIds, body.siblingGroupId);
+  }
+
   @Get(':id')
+  @Permissions(Permission.ADMISSION_READ)
   findOne(@Param('id') id: string) {
     return this.service.getStudentById(id);
+  }
+
+  @Patch(':id/approval')
+  @Permissions(Permission.ADMISSION_APPROVE)
+  setApproval(
+    @Param('id') id: string,
+    @Body() body: SetAdmissionApprovalDto,
+    @Req() req: any,
+  ) {
+    return this.service.setAdmissionApproval(id, body.approved, req?.user, body.reason);
   }
 
 //   @Put(':id')
@@ -128,6 +218,7 @@ export class AdmissionController {
 //     return this.service.updateStudent(id, parsedBody);
 //   }
 @Put(':id')
+@Permissions(Permission.ADMISSION_UPDATE)
 @UseInterceptors(AnyFilesInterceptor(multerConfig))
 async update(
   @Param('id') id: string,
@@ -221,8 +312,11 @@ async update(
   return this.service.updateStudent(id, parsedBody);
 }
   @Delete(':id')
+  @Permissions(Permission.ADMISSION_DELETE)
   delete(@Param('id') id: string) {
     return this.service.deleteStudent(id);
 }
+
+
 
 }

@@ -1,0 +1,57 @@
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsArray,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+class StudentCustomFeeItemDto {
+  @IsNotEmpty() @IsString() name: string;
+  @IsNotEmpty() @IsNumber() amount: number;
+}
+
+enum DiscountTypeEnum {
+  FLAT = 'FLAT',
+  PERCENTAGE = 'PERCENTAGE',
+  TEACHER_DISCOUNT = 'TEACHER_DISCOUNT',
+  SIBLING_DISCOUNT = 'SIBLING_DISCOUNT',
+  RTE_COMMUNITY = 'RTE_COMMUNITY',
+}
+
+class DiscountDto {
+  @IsNotEmpty() @IsEnum(DiscountTypeEnum) type: DiscountTypeEnum;
+  @IsNotEmpty() @IsNumber() value: number;
+  @IsOptional() @IsString() reason?: string;
+}
+
+export class AssignFeeDto {
+  @IsNotEmpty() @IsString() studentId: string;
+  @IsNotEmpty() @IsString() academicYear: string;
+
+  @IsOptional() @IsNumber() tuitionFee?: number;
+  @IsOptional() @IsNumber() transportFee?: number;
+  @IsOptional() @IsNumber() bookFee?: number;
+  @IsOptional() @IsNumber() hostelFee?: number;
+  @IsOptional() @IsNumber() otherFee?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => StudentCustomFeeItemDto)
+  customItems?: StudentCustomFeeItemDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DiscountDto)
+  discounts?: DiscountDto[];
+
+  // Auto-detect flags — if true, server will check eligibility and apply
+  @IsOptional() autoTeacherDiscount?: boolean;
+  @IsOptional() autoSiblingDiscount?: boolean;
+  @IsOptional() autoRteDiscount?: boolean;
+}

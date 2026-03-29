@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { PrismaService } from './prisma/prisma.service';
 import { UserModule } from './user/user.module';
 import { UserService } from './user/user.service';
@@ -6,9 +7,22 @@ import { AuthModule } from './auth/auth.module';
 import { AdmissionModule } from './admission/admission.module';
 import { DriverModule } from './driver/driver.module';
 import { LocationModule } from './location/location.module';
+import { StudentModule } from './student/student.module';
+import { FeesModule } from './fees/fees.module';
+import { TransportModule } from './transport/transport.module';
+import { StaffModule } from './staff/staff.module';
+import { SettingsModule } from './settings/settings.module';
+import { PaymentLinkModule } from './payment-link/payment-link.module';
+import { JwtAuthGuard } from './auth/jwt.guard';
+import { PermissionsGuard } from './auth/permissions.guard';
 
 @Module({
-  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule],
-  providers: [PrismaService,UserService],
+  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule],
+  providers: [
+    PrismaService,
+    UserService,
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
+  ],
 })
 export class AppModule {}

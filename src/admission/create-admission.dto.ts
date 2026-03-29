@@ -12,6 +12,8 @@ import {
 import { Type } from 'class-transformer';
 import { Gender, Community, AcademicStream } from '@prisma/client';
 
+export { AcademicStream };
+
 class FamilyDto {
   @IsOptional() @IsString() fatherName?: string;
   @IsOptional() @IsString() fatherPhone?: string;
@@ -61,19 +63,36 @@ class DocumentsDto {
   @IsOptional() @IsString() transferCertPath?: string;
 }
 
+class SubjectMarkDto {
+  @IsNotEmpty() @IsString() subjectName: string;
+  @IsNotEmpty() @IsNumber() maxMarks: number;
+  @IsNotEmpty() @IsNumber() obtainedMarks: number;
+  @IsOptional() @IsNumber() percentage?: number;
+}
+
 class AcademicDto {
-  @IsOptional() @IsString() examName?: string;
+  @IsOptional() @IsString() examName?: string;       // SSLC / MATRIC / CBSE
   @IsOptional() @IsString() registerNo?: string;
-  @IsOptional() @IsString() monthYear?: string;
-  @IsOptional() @IsNumber() totalPercentage?: number;
-  @IsOptional() @IsString() stream?: string;
-  @IsOptional() @IsArray() subjects?: any[];
+  @IsOptional() @IsString() monthYear?: string;       // e.g. "March 2024"
+  // TOTAL row fields from the qualifying examination table
+  @IsOptional() @IsNumber() totalMaxMarks?: number;
+  @IsOptional() @IsNumber() totalObtainedMarks?: number;
+  @IsOptional() @IsNumber() totalPercentage?: number; // overall % (top-right of form)
+  // stream for qualifying exam record (e.g. SSLC/Matric/CBSE board)
+  @IsOptional() @IsEnum(AcademicStream) stream?: AcademicStream;
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubjectMarkDto)
+  subjects?: SubjectMarkDto[];
 }
 
 class AdmissionInfoDto {
   @IsOptional() @IsString() admissionNo?: string;
   @IsOptional() @IsString() admissionDate?: string;
   @IsOptional() @IsString() standard?: string;
+  @IsOptional() @IsString() admissionFrom?: string;
+  @IsOptional() @IsString() admissionTo?: string;
 
   @IsOptional() @IsString() staffSignature?: string;
   @IsOptional() @IsString() staffSignaturePath?: string;
@@ -88,7 +107,7 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() gender?: Gender;
   @IsOptional() @IsDateString() dob?: string;
   @IsOptional() @IsString() community?: Community;
-  
+  @IsOptional() @IsString() customCommunity?: string; // For "Others" option
   @IsOptional() @IsString() religion?: string;
   @IsOptional() @IsString() caste?: string;
   @IsOptional() @IsString() motherTongue?: string;
@@ -100,6 +119,14 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() previousSchool?: string;
   @IsOptional() @IsString() transportMode?: string;
   @IsOptional() @IsBoolean() rte?: boolean;
+
+  // 11th & 12th standard: subject stream selection
+  // (Part III: BIO_MATHS, CS_MATHS, BIO_CS, COMMERCE)
+  @IsOptional() @IsEnum(AcademicStream) academicStream?: AcademicStream;
+
+  // Discount-related
+  @IsOptional() @IsString() staffParentId?: string;
+  @IsOptional() @IsString() siblingGroupId?: string;
 
   /* Nested Objects mapped from your JSON */
   @IsOptional()

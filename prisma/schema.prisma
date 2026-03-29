@@ -27,7 +27,8 @@ model User {
 
 enum Role {
   ADMIN
-  TEACHER
+  PRINCIPAL
+  STAFF
   STUDENT
 }
 
@@ -48,6 +49,23 @@ enum Community {
   OTHERS
 }
 
+enum Standard {
+  LKG
+  UKG
+  STD_1
+  STD_2
+  STD_3
+  STD_4
+  STD_5
+  STD_6
+  STD_7
+  STD_8
+  STD_9
+  STD_10
+  STD_11
+  STD_12
+}
+
 enum AcademicStream {
   BIO_MATHS        // Physics, Chemistry, Maths, Biology
   CS_MATHS         // Physics, Chemistry, Maths, Computer Science
@@ -55,13 +73,22 @@ enum AcademicStream {
   COMMERCE         // Commerce, Economics, Accountancy, Computer Application
 }
 
+enum DiscountType {
+  FLAT
+  PERCENTAGE
+  TEACHER_DISCOUNT    // Staff child discount
+  SIBLING_DISCOUNT    // Sibling studying in same school
+  RTE_COMMUNITY       // RTE / community-based discount (SC/ST/MBC etc.)
+}
+
 model Student {
   id                String   @id @default(uuid())
   name              String
-  standard          String
+  standard          Standard
   gender            Gender
   dob               DateTime
   religion          String?
+  customCommunity   String? // For "Others" option in
   community         Community
   caste             String?
   motherTongue      String?
@@ -73,13 +100,23 @@ model Student {
   transportMode     String? // Local / Van
   rte               Boolean @default(false)
 
+  // 11th/12th higher secondary stream selection
+  academicStream    AcademicStream?
+
+  // Discount-related links
+  staffParentId     String?  // If parent is a staff member → teacher discount
+  staffParent       Staff?   @relation("StaffChildren", fields: [staffParentId], references: [id])
+  siblingGroupId    String?  // Group ID to link siblings → sibling discount
+
   // Relations
   family            Family?
   address           Address?
   admission         Admission?
   documents         Document[]
   academics         AcademicDetail[]
-  users             User?  
+  users             User?
+  studentFees       StudentFee[]
+  studentTransport  StudentTransport?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   documentsJson     Json?
@@ -122,19 +159,23 @@ model Address {
 }
 
 model AcademicDetail {
-  id              String @id @default(uuid())
-  studentId       String @unique
+  id                 String @id @default(uuid())
+  studentId          String
 
-  examName        String?
-  registerNo      String?
-  monthYear       String?
-  totalPercentage Float?
+  examName           String?   // e.g. "SSLC", "MATRIC", "CBSE"
+  registerNo         String?
+  monthYear          String?   // e.g. "March 2024"
 
-  stream          AcademicStream?
+  // TOTAL row from the qualifying exam table
+  totalMaxMarks      Int?      // sum of Maximum Marks Prescribed
+  totalObtainedMarks Int?      // sum of Marks Obtained
+  totalPercentage    Float?    // overall % (top-right of form)
 
-  subjects        SubjectMark[]
+  stream             AcademicStream?
 
-  student         Student @relation(fields: [studentId], references: [id])
+  subjects           SubjectMark[]
+
+  student            Student @relation(fields: [studentId], references: [id])
 }
 
 model SubjectMark {
@@ -151,7 +192,7 @@ model SubjectMark {
 
 model Document {
   id              String @id @default(uuid())
-  studentId       String @unique
+  studentId       String
 
   // ✅ Checkbox status (from form)
   photo           Boolean @default(false)
@@ -179,14 +220,59 @@ model Admission {
 
   admissionNo         String
   admissionDate       DateTime
-  standard            String
+  admissionFrom       DateTime?
+  admissionTo         DateTime?
+  standard            Standard
 
   staffSignature      String?   // uploaded file path
   principalSignature  String?   // must be added later by principal
 
   isApproved          Boolean   @default(false) // ✅ ADD THIS
+  approvedAt          DateTime?
+  approvedByRole      Role?
+  approvedByEmail     String?
+  approvalNote        String?
 
   student             Student   @relation(fields: [studentId], references: [id])
+}
+
+model AppSetting {
+  id             String   @id @default(uuid())
+  key            String   @unique
+  value          Json
+  updatedByEmail String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════
+// PHONEPE PAYMENT LINKS
+// ═══════════════════════════════════════════════
+
+model PaymentLink {
+  id                    String     @id @default(uuid())
+  studentFeeId          String
+
+  amount                Float
+  phoneNumber           String
+  channel               String     // SMS / WHATSAPP
+
+  merchantTransactionId String     @unique
+  phonePeUrl            String?
+
+  // PENDING / SUCCESS / FAILED / EXPIRED
+  status                String     @default("PENDING")
+
+  // Linked Payment once webhook confirms success
+  paymentId             String?
+
+  notificationSent      Boolean    @default(false)
+  notificationError     String?
+
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+
+  studentFee            StudentFee @relation(fields: [studentFeeId], references: [id])
 }
 
 
@@ -233,6 +319,26 @@ model Admission {
 //   @@unique([driverId, createdAt])
 // }
 
+model Staff {
+  id            String   @id @default(uuid())
+  employeeId    String   @unique
+  name          String
+  email         String   @unique
+  phone         String?
+  designation   String   // e.g. "Teacher", "HOD", "Principal", "Clerk"
+  department    String?  // e.g. "Mathematics", "Science", "Administration"
+  qualification String?
+  joiningDate   DateTime?
+  salary        Float?
+  isActive      Boolean  @default(true)
+
+  // Link to children studying here (for teacher discount)
+  children      Student[] @relation("StaffChildren")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 
 model Driver {
   id        String   @id @default(uuid())
@@ -250,9 +356,11 @@ model Bus {
   id          String   @id @default(uuid())
   number      String   // e.g. TN-01-1234
   routeName   String?
+  routeId     String?
   capacity    Int?
   drivers     Driver[]
   locations   Location[]
+  route       TransportRoute? @relation("RouteBuses", fields: [routeId], references: [id])
   createdAt   DateTime @default(now())
 }
 
@@ -274,4 +382,182 @@ model Location {
 
   // prevent duplicates during retry sync
   @@unique([driverId, createdAt])
+}
+
+model FeeStructure {
+  id           String   @id @default(uuid())
+  standard     Standard
+  academicYear String
+
+  tuitionFee   Float
+  transportFee Float   @default(0)
+  bookFee      Float   @default(0)
+  hostelFee    Float   @default(0)
+  otherFee     Float   @default(0)
+
+  numberOfTerms Int    @default(1)  // 1, 2, or 3
+
+  customItems  CustomFeeItem[]
+  terms        FeeTermTemplate[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([standard, academicYear])
+}
+
+// Term-wise breakdown template (auto-generated from structure)
+model FeeTermTemplate {
+  id              String       @id @default(uuid())
+  feeStructureId  String
+  termNumber      Int          // 1, 2, 3
+  termName        String       // "Term 1", "Term 2", etc.
+  dueDate         DateTime?
+  amount          Float        // portion of total for this term
+
+  feeStructure    FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+}
+
+model StudentFee {
+  id            String   @id @default(uuid())
+  studentId     String
+  academicYear  String
+
+  tuitionFee    Float   @default(0)
+  transportFee  Float   @default(0)
+  bookFee       Float   @default(0)
+  hostelFee     Float   @default(0)
+  otherFee      Float   @default(0)
+
+  totalFee      Float
+  discount      Float   @default(0)
+  netFee        Float
+
+  numberOfTerms Int     @default(1)
+
+  student       Student @relation(fields: [studentId], references: [id])
+  payments      Payment[]
+  discounts     Discount[]
+  customItems   StudentCustomFeeItem[]
+  terms         StudentFeeTerm[]
+  paymentLinks  PaymentLink[]
+
+  @@unique([studentId, academicYear])
+}
+
+// Term-wise breakdown per student
+model StudentFeeTerm {
+  id            String     @id @default(uuid())
+  studentFeeId  String
+  termNumber    Int        // 1, 2, 3
+  termName      String     // "Term 1", "Term 2"
+  amount        Float      // how much is due this term
+  dueDate       DateTime?
+  status        String     @default("PENDING") // PENDING / PARTIAL / PAID
+
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
+}
+
+
+model Payment {
+  id            String   @id @default(uuid())
+  studentFeeId  String
+
+  amount        Float
+  paymentDate   DateTime @default(now())
+  paymentMode   String   // CASH / UPI / BANK
+  receiptNo     String?
+  remarks       String?
+  termNumber    Int?     // which term this payment is for (null = general)
+  status        String   @default("SUCCESS")
+  statusReason  String?
+  refundAmount  Float?
+  receiptComponents Json?
+
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
+
+  createdAt     DateTime @default(now())
+}
+
+
+model Discount {
+  id            String       @id @default(uuid())
+  studentFeeId  String
+
+  type          DiscountType // FLAT / PERCENTAGE / TEACHER_DISCOUNT / SIBLING_DISCOUNT / RTE_COMMUNITY
+  value         Float
+  reason        String?
+
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
+}
+
+// Custom fee items on the FeeStructure template (e.g. Lab Fee for a standard)
+model CustomFeeItem {
+  id              String       @id @default(uuid())
+  feeStructureId  String
+  name            String       // e.g. "Lab Fee", "Sports Fee"
+  amount          Float
+
+  feeStructure    FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+}
+
+// Custom fee items assigned to a specific student
+model StudentCustomFeeItem {
+  id            String     @id @default(uuid())
+  studentFeeId  String
+  name          String     // e.g. "Lab Fee", "Special Coaching"
+  amount        Float
+
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════════
+// TRANSPORT MANAGEMENT
+// ═══════════════════════════════════════════════
+
+model TransportRoute {
+  id            String   @id @default(uuid())
+  routeName     String   // e.g. "Route A - Velachery"
+  routeNo       String?  @unique
+  baseFee       Float    // normal fee for this route
+  splClassFee   Float    @default(0) // additional surcharge for special/spl class
+  description   String?
+
+  stops         TransportStop[]
+  students      StudentTransport[]
+  buses         Bus[]     @relation("RouteBuses")
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model TransportStop {
+  id            String         @id @default(uuid())
+  routeId       String
+  stopName      String         // e.g. "Tambaram", "Chrompet"
+  stopOrder     Int            // order of stop on route
+  distanceKm    Float?
+  pickupTime    String?        // e.g. "07:30 AM"
+  dropTime      String?        // e.g. "04:15 PM"
+  fee           Float?         // optional per-stop fee override
+
+  route         TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  students      StudentTransport[]
+}
+
+// Student → Route assignment
+model StudentTransport {
+  id            String         @id @default(uuid())
+  studentId     String         @unique
+  routeId       String
+  stopId        String?
+  academicYear  String
+  isSplClass    Boolean        @default(false) // if true, charge splClassFee extra
+
+  student       Student        @relation(fields: [studentId], references: [id])
+  route         TransportRoute @relation(fields: [routeId], references: [id])
+  stop          TransportStop? @relation(fields: [stopId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }

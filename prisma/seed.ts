@@ -1,4 +1,4 @@
-import { PrismaClient, Role, Gender, Community, AcademicStream } from '@prisma/client';
+import { PrismaClient, Role, Gender, Community, AcademicStream, Standard } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
@@ -27,7 +27,7 @@ async function main() {
   const student = await prisma.student.create({
     data: {
       name: 'Arun Kumar',
-      standard: '10',
+      standard: Standard.STD_10,
       gender: Gender.MALE,
       dob: new Date('2010-05-15'),
       community: Community.BC,
@@ -67,7 +67,7 @@ async function main() {
         create: {
           admissionNo: 'ADM2026001',
           admissionDate: new Date(),
-          standard: '10',
+          standard: Standard.STD_10,
         },
       },
 
