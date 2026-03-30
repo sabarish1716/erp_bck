@@ -335,6 +335,14 @@ model Staff {
   // Link to children studying here (for teacher discount)
   children      Student[] @relation("StaffChildren")
 
+  // HR relations
+  attendances         Attendance[]
+  leaveApplications   LeaveApplication[]
+  permissionRequests  PermissionRequest[]
+  staffStatutory      StaffStatutory?
+  payrollRecords      Payroll[]
+  esslMapping         ESSLStaffMapping?
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
@@ -560,4 +568,259 @@ model StudentTransport {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════
+// ─── HR MODULE ────────────────────────────────
+// ═══════════════════════════════════════════════
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LATE
+  ON_LEAVE
+  HOLIDAY
+  WEEK_OFF
+}
+
+enum PunchMethod {
+  FINGERPRINT
+  FACE
+  CARD
+  PIN
+  MANUAL
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model Attendance {
+  id            String           @id @default(uuid())
+  staffId       String
+  date          DateTime         @db.Date
+  status        AttendanceStatus @default(PRESENT)
+  checkIn       String?
+  checkOut      String?
+  punchMethod   PunchMethod?
+  workingHours  Float?
+  remarks       String?
+  isESSLSync    Boolean          @default(false)
+
+  staff         Staff            @relation(fields: [staffId], references: [id])
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([staffId, date])
+  @@index([date])
+}
+
+model LeaveType {
+  id            String   @id @default(uuid())
+  name          String
+  code          String   @unique
+  maxPerYear    Int      @default(12)
+  carryForward  Boolean  @default(false)
+  isActive      Boolean  @default(true)
+
+  applications  LeaveApplication[]
+  balances      LeaveBalance[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model LeaveBalance {
+  id            String    @id @default(uuid())
+  staffId       String
+  leaveTypeId   String
+  year          String
+  total         Float     @default(0)
+  used          Float     @default(0)
+  remaining     Float     @default(0)
+
+  leaveType     LeaveType @relation(fields: [leaveTypeId], references: [id])
+
+  @@unique([staffId, leaveTypeId, year])
+}
+
+model LeaveApplication {
+  id            String      @id @default(uuid())
+  staffId       String
+  leaveTypeId   String
+  fromDate      DateTime    @db.Date
+  toDate        DateTime    @db.Date
+  days          Float
+  halfDay       Boolean     @default(false)
+  reason        String
+  status        LeaveStatus @default(PENDING)
+  approvedBy    String?
+  rejectedBy    String?
+  rejectionNote String?
+
+  staff         Staff       @relation(fields: [staffId], references: [id])
+  leaveType     LeaveType   @relation(fields: [leaveTypeId], references: [id])
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([staffId])
+  @@index([status])
+}
+
+model PermissionRequest {
+  id            String      @id @default(uuid())
+  staffId       String
+  date          DateTime    @db.Date
+  fromTime      String
+  toTime        String
+  hours         Float
+  reason        String
+  status        LeaveStatus @default(PENDING)
+  approvedBy    String?
+  rejectedBy    String?
+  rejectionNote String?
+
+  staff         Staff       @relation(fields: [staffId], references: [id])
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([staffId])
+  @@index([date])
+}
+
+model StatutorySettings {
+  id              String   @id @default(uuid())
+  pfEnabled       Boolean  @default(true)
+  pfEmployeeRate  Float    @default(12)
+  pfEmployerRate  Float    @default(12)
+  pfWageLimit     Float    @default(15000)
+  pfAdminCharges  Float    @default(0.5)
+  pfEdliCharges   Float    @default(0.5)
+  esiEnabled      Boolean  @default(true)
+  esiEmployeeRate Float    @default(0.75)
+  esiEmployerRate Float    @default(3.25)
+  esiWageLimit    Float    @default(21000)
+  ptEnabled       Boolean  @default(false)
+  ptAmount        Float    @default(200)
+
+  updatedAt       DateTime @updatedAt
+}
+
+model StaffStatutory {
+  id            String   @id @default(uuid())
+  staffId       String   @unique
+  pfNumber      String?
+  uanNumber     String?
+  esiNumber     String?
+  basicSalary   Float?
+  grossSalary   Float?
+  pfEnabled     Boolean  @default(true)
+  esiEnabled    Boolean  @default(true)
+
+  staff         Staff    @relation(fields: [staffId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ESSLDevice {
+  id            String   @id @default(uuid())
+  name          String
+  ipAddress     String
+  port          Int      @default(4370)
+  serialNumber  String?
+  deviceType    String   @default("fingerprint")
+  location      String?
+  isOnline      Boolean  @default(false)
+  lastSyncAt    DateTime?
+
+  punchLogs     ESSLPunchLog[]
+  staffMappings ESSLStaffMapping[]
+  syncHistory   ESSLSyncHistory[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model ESSLPunchLog {
+  id            String       @id @default(uuid())
+  deviceId      String
+  staffId       String?
+  employeeId    String?
+  punchTime     DateTime
+  punchType     String?
+  punchMethod   PunchMethod?
+  verified      Boolean      @default(true)
+
+  device        ESSLDevice   @relation(fields: [deviceId], references: [id])
+
+  createdAt     DateTime     @default(now())
+
+  @@index([deviceId])
+  @@index([punchTime])
+  @@index([staffId])
+}
+
+model ESSLStaffMapping {
+  id            String     @id @default(uuid())
+  staffId       String     @unique
+  deviceId      String
+  deviceUserId  String
+
+  staff         Staff      @relation(fields: [staffId], references: [id])
+  device        ESSLDevice @relation(fields: [deviceId], references: [id])
+
+  createdAt     DateTime   @default(now())
+
+  @@unique([deviceId, deviceUserId])
+}
+
+model ESSLSyncHistory {
+  id            String      @id @default(uuid())
+  deviceId      String?
+  status        String      @default("success")
+  recordsCount  Int         @default(0)
+  error         String?
+  syncedAt      DateTime    @default(now())
+
+  device        ESSLDevice? @relation(fields: [deviceId], references: [id])
+}
+
+model Payroll {
+  id                     String   @id @default(uuid())
+  staffId                String
+  month                  String
+  basicSalary            Float    @default(0)
+  hra                    Float    @default(0)
+  da                     Float    @default(0)
+  otherAllowances        Float    @default(0)
+  grossSalary            Float    @default(0)
+  totalWorkingDays       Int      @default(0)
+  presentDays            Float    @default(0)
+  lopDays                Float    @default(0)
+  lopDeduction           Float    @default(0)
+  permissionHoursUsed    Float    @default(0)
+  permissionLopDays      Float    @default(0)
+  permissionLopDeduction Float    @default(0)
+  pfDeduction            Float    @default(0)
+  esiDeduction           Float    @default(0)
+  ptDeduction            Float    @default(0)
+  totalDeductions        Float    @default(0)
+  netSalary              Float    @default(0)
+  status                 String   @default("generated")
+
+  staff                  Staff    @relation(fields: [staffId], references: [id])
+
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([staffId, month])
+  @@index([month])
 }

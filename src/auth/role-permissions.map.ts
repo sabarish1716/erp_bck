@@ -37,6 +37,23 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.STAFF_READ,
     Permission.STAFF_CREATE,
     Permission.STAFF_UPDATE,
+    // HR
+    Permission.HR_DASHBOARD,
+    Permission.HR_ATTENDANCE_READ,
+    Permission.HR_ATTENDANCE_MANAGE,
+    Permission.HR_LEAVE_READ,
+    Permission.HR_LEAVE_MANAGE,
+    Permission.HR_LEAVE_APPROVE,
+    Permission.HR_PERMISSION_READ,
+    Permission.HR_PERMISSION_MANAGE,
+    Permission.HR_PERMISSION_APPROVE,
+    Permission.HR_STATUTORY_READ,
+    Permission.HR_STATUTORY_MANAGE,
+    Permission.HR_ESSL_READ,
+    Permission.HR_ESSL_MANAGE,
+    Permission.HR_PAYROLL_READ,
+    Permission.HR_PAYROLL_MANAGE,
+    Permission.HR_PAYROLL_APPROVE,
     // Reports
     Permission.REPORTS_READ,
     // Location
@@ -61,6 +78,16 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.TRANSPORT_READ,
     // Staff
     Permission.STAFF_READ,
+    // HR — limited access
+    Permission.HR_DASHBOARD,
+    Permission.HR_ATTENDANCE_READ,
+    Permission.HR_LEAVE_READ,
+    Permission.HR_LEAVE_MANAGE,
+    Permission.HR_PERMISSION_READ,
+    Permission.HR_PERMISSION_MANAGE,
+    Permission.HR_STATUTORY_READ,
+    Permission.HR_ESSL_READ,
+    Permission.HR_PAYROLL_READ,
     // Reports — read only
     Permission.REPORTS_READ,
     // Location

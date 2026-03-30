@@ -397,7 +397,7 @@ async createAdmission(data: CreateAdmissionDto) {
         if (!siblingGroups.has(s.siblingGroupId)) {
           siblingGroups.set(s.siblingGroupId, []);
         }
-        siblingGroups.get(s.siblingGroupId).push({
+        siblingGroups.get(s.siblingGroupId)?.push({
           id: s.id,
           name: s.name,
           standard: s.standard,
@@ -409,7 +409,7 @@ async createAdmission(data: CreateAdmissionDto) {
     return students.map((s) => ({
       ...s,
       siblings: s.siblingGroupId
-        ? siblingGroups.get(s.siblingGroupId).filter((sib) => sib.id !== s.id)
+        ? (siblingGroups.get(s.siblingGroupId) || []).filter((sib) => sib.id !== s.id)
         : [],
     }));
   }
