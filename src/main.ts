@@ -12,7 +12,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableCors();
   app.setGlobalPrefix('erp/api');
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/erp/api/uploads/' });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,        // remove extra fields
