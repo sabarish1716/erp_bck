@@ -5,23 +5,30 @@ import {
   IsOptional,
   IsArray,
   IsInt,
+  IsBoolean,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 class TransportStopDto {
+  @IsOptional() @IsString() id?: string;
   @IsNotEmpty() @IsString() stopName: string;
+  @Type(() => Number)
   @IsNotEmpty() @IsInt() stopOrder: number;
+  @Type(() => Number)
   @IsOptional() @IsNumber() distanceKm?: number;
   @IsOptional() @IsString() pickupTime?: string;
   @IsOptional() @IsString() dropTime?: string;
+  @Type(() => Number)
   @IsOptional() @IsNumber() fee?: number;
 }
 
 export class CreateTransportRouteDto {
   @IsNotEmpty() @IsString() routeName: string;
   @IsOptional() @IsString() routeNo?: string;
+  @Type(() => Number)
   @IsNotEmpty() @IsNumber() baseFee: number;
+  @Type(() => Number)
   @IsOptional() @IsNumber() splClassFee?: number;
   @IsOptional() @IsString() description?: string;
 
@@ -36,6 +43,7 @@ export class AssignStudentTransportDto {
   @IsNotEmpty() @IsString() studentId: string;
   @IsNotEmpty() @IsString() routeId: string;
   @IsOptional() @IsString() stopId?: string;
-  @IsNotEmpty() @IsString() academicYear: string;
-  @IsOptional() isSplClass?: boolean;
+  @IsOptional() @IsString() academicYear?: string;
+  @Type(() => Boolean)
+  @IsOptional() @IsBoolean() isSplClass?: boolean;
 }

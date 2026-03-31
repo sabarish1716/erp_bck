@@ -10,4 +10,8 @@ export class PromoteStudentsDto {
   @IsOptional()
   @IsString()
   academicYear?: string;
+
+  @IsOptional()
+  @IsString()
+  newAcademicYear?: string;
 }

@@ -25,6 +25,10 @@
 
 [Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
 
+## Frontend Integration
+
+Frontend API notes for the latest admission dashboard, transport mapping, and staff employee ID changes are documented in [docs/frontend-integration.md](docs/frontend-integration.md).
+
 ## Project setup
 
 ```bash

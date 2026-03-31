@@ -48,6 +48,36 @@ function getAcademicYearDateRange(academicYear?: string) {
   };
 }
 
+function normalizeAcademicYear(academicYear?: string | null) {
+  if (!academicYear) return null;
+  const match = String(academicYear).trim().match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
+  if (!match) return null;
+
+  const startYear = parseInt(match[1], 10);
+  let endYear = parseInt(match[2], 10);
+  if (endYear < 100) {
+    endYear = Math.floor(startYear / 100) * 100 + endYear;
+  }
+
+  return `${startYear}-${endYear}`;
+}
+
+function getPreviousAcademicYear(academicYear?: string | null) {
+  const normalized = normalizeAcademicYear(academicYear);
+  if (!normalized) return null;
+
+  const [startYear] = normalized.split('-').map((value) => parseInt(value, 10));
+  return `${startYear - 1}-${startYear}`;
+}
+
+function getNextAcademicYear(academicYear?: string | null) {
+  const normalized = normalizeAcademicYear(academicYear);
+  if (!normalized) return null;
+
+  const [, endYear] = normalized.split('-').map((value) => parseInt(value, 10));
+  return `${endYear}-${endYear + 1}`;
+}
+
 @Injectable()
 export class AdmissionService {
   constructor(private prisma: PrismaService) {}
@@ -710,12 +740,27 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     }
 
   async getAdmissionDashboard(academicYear?: string) {
-    const dateRange = getAcademicYearDateRange(academicYear);
+    const settingsRow = await this.prisma.appSetting.findUnique({
+      where: { key: 'admin.settings' },
+      select: { value: true },
+    });
+    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
+    const resolvedAcademicYear =
+      normalizeAcademicYear(academicYear) ||
+      normalizeAcademicYear(String(settings.academicYear || '')) ||
+      academicYear ||
+      null;
+    const previousAcademicYear = getPreviousAcademicYear(resolvedAcademicYear);
+    const dateRange = getAcademicYearDateRange(resolvedAcademicYear || undefined);
+    const previousDateRange = getAcademicYearDateRange(previousAcademicYear || undefined);
     const where = dateRange
       ? { admissionDate: { gte: dateRange.start, lte: dateRange.end } }
       : undefined;
+    const previousWhere = previousDateRange
+      ? { admissionDate: { gte: previousDateRange.start, lte: previousDateRange.end } }
+      : undefined;
 
-    const [total, approved, pending, byStandard, seatsConfigRaw] = await Promise.all([
+    const [total, approved, pending, byStandard, seatsConfigRaw, previousYearTotal] = await Promise.all([
       this.prisma.admission.count({ where }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: true } }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: false } }),
@@ -725,6 +770,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         _count: { _all: true },
       }),
       this.prisma.appSetting.findUnique({ where: { key: 'admission.standardSeats' } }),
+      previousWhere ? this.prisma.admission.count({ where: previousWhere }) : Promise.resolve(0),
     ]);
 
     const approvedByStandardRaw = await this.prisma.admission.groupBy({
@@ -757,14 +803,54 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         };
       });
 
+    const totalSeatCapacity = Object.values(seatMap).reduce((sum, value) => sum + Number(value || 0), 0);
+    const progressBase = totalSeatCapacity > 0 ? totalSeatCapacity : Math.max(total, 1);
+    const progressValue = totalSeatCapacity > 0 ? approved : total;
+    const progressPercent = progressBase > 0
+      ? Number(((progressValue / progressBase) * 100).toFixed(2))
+      : 0;
+    const milestoneThresholds = [25, 50, 75, 100];
+    const milestones = milestoneThresholds.map((threshold) => {
+      const targetCount = Math.max(1, Math.ceil((progressBase * threshold) / 100));
+      const achieved = progressValue >= targetCount;
+      return {
+        label: `${threshold}% admissions milestone`,
+        threshold,
+        targetCount,
+        currentCount: progressValue,
+        remainingCount: Math.max(targetCount - progressValue, 0),
+        achieved,
+      };
+    });
+    const percentageChange = previousYearTotal > 0
+      ? Number((((total - previousYearTotal) / previousYearTotal) * 100).toFixed(2))
+      : total > 0 ? 100 : 0;
+
     return {
-      academicYear: academicYear || null,
+      academicYear: resolvedAcademicYear,
       total,
       approved,
       pending,
       byStandard: byStandard.map((s) => ({ standard: s.standard, count: s._count._all })),
       standardSeats: seatMap,
       seatSummary,
+      yearComparison: {
+        currentAcademicYear: resolvedAcademicYear,
+        previousAcademicYear,
+        currentTotal: total,
+        previousTotal: previousYearTotal,
+        difference: total - previousYearTotal,
+        percentageChange,
+        trend: percentageChange >= 0 ? 'up' : 'down',
+      },
+      admissionProgress: {
+        basis: totalSeatCapacity > 0 ? 'approved_vs_total_seats' : 'total_admissions',
+        totalTarget: progressBase,
+        currentCount: progressValue,
+        progressPercent,
+      },
+      milestones,
+      upcomingMilestones: milestones.filter((milestone) => !milestone.achieved).slice(0, 3),
     };
   }
 
@@ -843,7 +929,12 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
   }
 
-  async promoteStudents(fromStandard: string, toStandard: string, academicYear?: string) {
+  async promoteStudents(
+    fromStandard: string,
+    toStandard: string,
+    academicYear?: string,
+    newAcademicYear?: string,
+  ) {
     const from = toStandardEnum(fromStandard);
     const to = toStandardEnum(toStandard);
 
@@ -863,7 +954,21 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       throw new BadRequestException('Promotion must be to a higher standard');
     }
 
-    const dateRange = getAcademicYearDateRange(academicYear);
+    const settingsRow = await this.prisma.appSetting.findUnique({
+      where: { key: 'admin.settings' },
+      select: { value: true },
+    });
+    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
+    const sourceAcademicYear =
+      normalizeAcademicYear(academicYear) ||
+      normalizeAcademicYear(String(settings.academicYear || '')) ||
+      academicYear ||
+      undefined;
+    const targetAcademicYear =
+      normalizeAcademicYear(newAcademicYear) ||
+      getNextAcademicYear(sourceAcademicYear || String(settings.academicYear || ''));
+
+    const dateRange = getAcademicYearDateRange(sourceAcademicYear);
     const admissionFilter = dateRange
       ? {
           isApproved: true,
@@ -896,12 +1001,131 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       data: { standard: to },
     });
 
+    if (targetAcademicYear) {
+      await this.prisma.appSetting.upsert({
+        where: { key: 'admin.settings' },
+        update: {
+          value: {
+            ...settings,
+            academicYear: targetAcademicYear,
+          },
+        },
+        create: {
+          key: 'admin.settings',
+          value: {
+            ...settings,
+            academicYear: targetAcademicYear,
+          },
+        },
+      });
+    }
+
     return {
       fromStandard: from,
       toStandard: to,
       updatedCount: result.count,
-      academicYear: academicYear || null,
+      academicYear: sourceAcademicYear || null,
+      newAcademicYear: targetAcademicYear || null,
       promotedStudents: studentsToPromote.map(s => ({ id: s.id, name: s.name })),
+    };
+  }
+
+  async demoteStudents(
+    fromStandard: string,
+    toStandard: string,
+    academicYear?: string,
+    newAcademicYear?: string,
+  ) {
+    const from = toStandardEnum(fromStandard);
+    const to = toStandardEnum(toStandard);
+
+    if (from === to) {
+      throw new BadRequestException('From and To standards cannot be the same');
+    }
+
+    const standardOrder = [
+      'LKG', 'UKG',
+      'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6',
+      'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
+    ];
+    const fromIdx = standardOrder.indexOf(from);
+    const toIdx = standardOrder.indexOf(to);
+    if (fromIdx >= 0 && toIdx >= 0 && toIdx >= fromIdx) {
+      throw new BadRequestException('Demotion must be to a lower standard');
+    }
+
+    const settingsRow = await this.prisma.appSetting.findUnique({
+      where: { key: 'admin.settings' },
+      select: { value: true },
+    });
+    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
+    const sourceAcademicYear =
+      normalizeAcademicYear(academicYear) ||
+      normalizeAcademicYear(String(settings.academicYear || '')) ||
+      academicYear ||
+      undefined;
+    const targetAcademicYear =
+      normalizeAcademicYear(newAcademicYear) ||
+      getPreviousAcademicYear(sourceAcademicYear || String(settings.academicYear || ''));
+
+    const dateRange = getAcademicYearDateRange(sourceAcademicYear);
+    const admissionFilter = dateRange
+      ? {
+          isApproved: true,
+          admissionDate: { gte: dateRange.start, lte: dateRange.end },
+        }
+      : { isApproved: true };
+
+    const studentsToDemote = await this.prisma.student.findMany({
+      where: {
+        standard: from,
+        admission: { is: admissionFilter },
+      },
+      select: { id: true, name: true, standard: true },
+    });
+
+    const result = await this.prisma.student.updateMany({
+      where: {
+        standard: from,
+        admission: { is: admissionFilter },
+      },
+      data: { standard: to },
+    });
+
+    await this.prisma.admission.updateMany({
+      where: {
+        standard: from,
+        ...admissionFilter,
+      },
+      data: { standard: to },
+    });
+
+    if (targetAcademicYear) {
+      await this.prisma.appSetting.upsert({
+        where: { key: 'admin.settings' },
+        update: {
+          value: {
+            ...settings,
+            academicYear: targetAcademicYear,
+          },
+        },
+        create: {
+          key: 'admin.settings',
+          value: {
+            ...settings,
+            academicYear: targetAcademicYear,
+          },
+        },
+      });
+    }
+
+    return {
+      fromStandard: from,
+      toStandard: to,
+      updatedCount: result.count,
+      academicYear: sourceAcademicYear || null,
+      newAcademicYear: targetAcademicYear || null,
+      demotedStudents: studentsToDemote.map((s) => ({ id: s.id, name: s.name })),
     };
   }
 

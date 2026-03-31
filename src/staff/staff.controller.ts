@@ -16,6 +16,12 @@ import { Permission } from '../auth/permission.enum';
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
+  @Get('next-employee-id')
+  @Permissions(Permission.STAFF_READ)
+  getNextEmployeeId() {
+    return this.staffService.getNextEmployeeId();
+  }
+
   @Post()
   @Permissions(Permission.STAFF_CREATE)
   create(@Body() data: CreateStaffDto) {

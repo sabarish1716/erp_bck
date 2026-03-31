@@ -37,6 +37,12 @@ export class TransportController {
     return this.transportService.getAllRoutes();
   }
 
+  @Get('academic-years')
+  @Permissions(Permission.TRANSPORT_READ)
+  getAcademicYears() {
+    return this.transportService.getAcademicYears();
+  }
+
   @Get('routes/:id')
   @Permissions(Permission.TRANSPORT_ROUTE_READ)
   getRoute(@Param('id') id: string) {
@@ -57,6 +63,12 @@ export class TransportController {
     return this.transportService.assignStudent(dto);
   }
 
+  @Get('students/pending')
+  @Permissions(Permission.TRANSPORT_READ)
+  getPendingTransportStudents(@Query('academicYear') academicYear?: string) {
+    return this.transportService.getPendingTransportStudents(academicYear);
+  }
+
   @Get('student/:studentId')
   @Permissions(Permission.TRANSPORT_READ)
   getStudentTransport(@Param('studentId') studentId: string) {
@@ -71,7 +83,7 @@ export class TransportController {
 
   @Get('assignments')
   @Permissions(Permission.TRANSPORT_READ)
-  getAllAssignments(@Query('academicYear') academicYear: string) {
+  getAllAssignments(@Query('academicYear') academicYear?: string) {
     return this.transportService.getAllAssignments(academicYear);
   }
 

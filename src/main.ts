@@ -11,6 +11,7 @@ async function bootstrap() {
   ensureUploadDirs();
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.enableCors();
+  app.setGlobalPrefix('erp/api');
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   app.useGlobalPipes(
     new ValidationPipe({
