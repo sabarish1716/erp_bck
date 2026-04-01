@@ -9,6 +9,12 @@ import { Public } from '../auth/public.decorator';
 export class LocationController {
   constructor(private readonly locationService: LocationService) {}
 
+  @Public()
+  @Get('geofence')
+  async getGeofence() {
+    return this.locationService.getGeofenceConfig();
+  }
+
   // POST /location
   @Post()
   @Public()

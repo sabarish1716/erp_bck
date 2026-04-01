@@ -28,10 +28,10 @@ export class LocationService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
-
-  private getGeofenceConfig() {
-    const centerLat = Number(process.env.SCHOOL_GEOFENCE_LAT || 13.0827);
-    const centerLng = Number(process.env.SCHOOL_GEOFENCE_LNG || 80.2707);
+// 13.01496, 80.15369
+  getGeofenceConfig() {
+    const centerLat = Number(process.env.SCHOOL_GEOFENCE_LAT || 13.01496);
+    const centerLng = Number(process.env.SCHOOL_GEOFENCE_LNG || 80.15369);
     const radiusMeters = Number(process.env.SCHOOL_GEOFENCE_RADIUS_M || 250);
 
     return {
@@ -43,6 +43,8 @@ export class LocationService {
 
   private async resolveDriverAndBus(dto: CreateLocationDto) {
     const driverRef = String(dto.driverId || '').trim();
+    console.log(`[LocationService] Resolving locator for: ${driverRef}`);
+    
     if (!driverRef) {
       throw new BadRequestException('driverId is required');
     }
@@ -69,14 +71,17 @@ export class LocationService {
     }
 
     if (!driver) {
+      console.error(`[LocationService] Driver NOT found: ${driverRef}`);
       throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
     }
 
     const busId = dto.busId || driver.busId;
     if (!busId) {
-      throw new BadRequestException('Bus is not mapped for this driver. Provide busId or assign bus to driver.');
+      console.error(`[LocationService] Bus not mapped for driver ${driver.name} (Ref: ${driverRef})`);
+      throw new BadRequestException(`Bus is not mapped for driver ${driver.name}. Use HR management to assign a bus first.`);
     }
 
+    console.log(`[LocationService] Resolved to Driver: ${driver.name}, Bus: ${busId}`);
     return { driver, busId };
   }
 
@@ -131,7 +136,16 @@ export class LocationService {
   async getLiveDriverLocations() {
     const geofence = this.getGeofenceConfig();
 
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
     const latestCandidates = await this.prisma.location.findMany({
+      where: {
+        createdAt: {
+          lte: now, // Ignore future dummy data
+          gt: fiveMinutesAgo, // 🔥 Only show drivers active in the last 5 minutes
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 2000,
       include: {

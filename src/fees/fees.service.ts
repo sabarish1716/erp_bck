@@ -220,6 +220,7 @@ export class FeesService {
     let customItems = data.customItems || [];
     let numberOfTerms = 1;
     let structureTerms: { termNumber: number; termName: string; dueDate: Date | null; amount: number }[] = [];
+    let customStudentTerms = data.terms || [];
 
     // Check if student exists (include staffParent for teacher discount check)
     const student = await this.prisma.student.findUnique({
@@ -359,9 +360,22 @@ export class FeesService {
     discountAmount = Math.min(discountAmount, totalFee);
     const netFee = Math.max(totalFee - discountAmount, 0);
 
-    // Build student term records from structure terms
+    // Build student term records from custom terms if provided, else from structure
     let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null }[] = [];
-    if (structureTerms.length > 0) {
+    if (customStudentTerms.length > 0) {
+      // Validate sum of custom term amounts matches netFee
+      const sumCustomTerms = customStudentTerms.reduce((sum, t) => sum + t.amount, 0);
+      if (Math.abs(sumCustomTerms - netFee) > 0.01) {
+        throw new BadRequestException(`Sum of custom term amounts (${sumCustomTerms}) does not match net fee (${netFee})`);
+      }
+      studentTerms = customStudentTerms.map((t) => ({
+        termNumber: t.termNumber,
+        termName: t.termName,
+        amount: t.amount,
+        dueDate: t.dueDate ? new Date(t.dueDate) : null,
+      }));
+      numberOfTerms = customStudentTerms.length;
+    } else if (structureTerms.length > 0) {
       // Scale term amounts proportionally to netFee
       const structureTotal = structureTerms.reduce((s, t) => s + t.amount, 0);
       const ratio = structureTotal > 0 ? netFee / structureTotal : 1;
@@ -371,6 +385,7 @@ export class FeesService {
         amount: Math.round(t.amount * ratio * 100) / 100,
         dueDate: t.dueDate,
       }));
+      numberOfTerms = structureTerms.length;
     } else if (numberOfTerms > 1) {
       const perTerm = Math.round((netFee / numberOfTerms) * 100) / 100;
       for (let i = 1; i <= numberOfTerms; i++) {
@@ -592,6 +607,63 @@ export class FeesService {
       throw new BadRequestException('Payments can be collected only for approved students');
     }
 
+    // Multi-term payment support
+    if (Array.isArray(data.payments) && data.payments.length > 0) {
+      // Validate total amount
+      const totalSplit = data.payments.reduce((sum, p) => sum + p.amount, 0);
+      if (Math.abs(totalSplit - data.amount) > 0.01) {
+        throw new BadRequestException(`Sum of split term payments (${totalSplit}) does not match total amount (${data.amount})`);
+      }
+      // Validate each term
+      for (const split of data.payments) {
+        const term = studentFee.terms.find((t) => t.termNumber === split.termNumber);
+        if (!term) throw new BadRequestException(`Term ${split.termNumber} not found`);
+        const termPaid = studentFee.payments
+          .filter((p) => p.termNumber === split.termNumber)
+          .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+        const termPending = term.amount - termPaid;
+        if (split.amount > termPending) {
+          throw new BadRequestException(`Payment amount (${split.amount}) exceeds term ${split.termNumber} pending balance (${termPending})`);
+        }
+      }
+      // Create a payment record for each term
+      return this.prisma.$transaction(async (tx) => {
+        const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
+    const createdPayments: any[] = [];
+
+        // data.payments.sort((a, b) => a.termNumber - b.termNumber); // Ensure payments are processed in term order 
+        for (const split of data?.payments ?? []) {
+          let payment = await tx.payment.create({
+            data: {
+              studentFeeId: data.studentFeeId,
+              amount: split.amount,
+              paymentMode: data.paymentMode,
+              paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+              receiptNo,
+              remarks: data.remarks,
+              termNumber: split.termNumber,
+              status: 'SUCCESS',
+              receiptComponents: data.receiptComponents
+                ? (data.receiptComponents as unknown as Prisma.JsonArray)
+                : undefined,
+            },
+            include: {
+              studentFee: {
+                include: {
+                  student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+                  terms: { orderBy: { termNumber: 'asc' } },
+                },
+              },
+            },
+          });
+          createdPayments.push(payment);
+        }
+        await this.recalculateTermStatuses(data.studentFeeId, tx);
+        return createdPayments;
+      });
+    }
+
+    // Legacy: single term or overall payment
     // When terms exist, payment must be collected term-wise.
     if (studentFee.terms.length > 0 && !data.termNumber) {
       throw new BadRequestException('Term number is required for term-wise fee collection');

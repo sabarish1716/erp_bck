@@ -1,3 +1,4 @@
+import { Type } from 'class-transformer';
 import {
   IsString,
   IsNotEmpty,
@@ -7,7 +8,13 @@ import {
   IsInt,
   IsArray,
   IsIn,
+  ValidateNested,
 } from 'class-validator';
+
+class TermPaymentDto {
+  @IsNotEmpty() @IsInt() termNumber: number;
+  @IsNotEmpty() @IsNumber() amount: number;
+}
 
 export class CollectPaymentDto {
   @IsNotEmpty() @IsString() studentFeeId: string;
@@ -16,7 +23,12 @@ export class CollectPaymentDto {
   @IsOptional() @IsDateString() paymentDate?: string;
   @IsOptional() @IsString() receiptNo?: string;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsInt() termNumber?: number; // which term this payment is for
+  @IsOptional() @IsInt() termNumber?: number; // which term this payment is for (legacy)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TermPaymentDto)
+  payments?: TermPaymentDto[];
   @IsOptional()
   @IsArray()
   @IsIn(['transportFee', 'bookFee', 'hostelFee', 'otherFee', 'customItems'], {
