@@ -120,6 +120,10 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() transportMode?: string;
   @IsOptional() @IsBoolean() rte?: boolean;
 
+  // Section & Academic Year
+  @IsOptional() @IsString() section?: string;
+  @IsOptional() @IsString() academicYear?: string;
+
   // 11th & 12th standard: subject stream selection
   // (Part III: BIO_MATHS, CS_MATHS, BIO_CS, COMMERCE)
   @IsOptional() @IsEnum(AcademicStream) academicStream?: AcademicStream;

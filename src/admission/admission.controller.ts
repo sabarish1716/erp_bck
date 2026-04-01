@@ -320,6 +320,12 @@ async update(
     if (parsedBody.documents[key].uploaded === false) {
       parsedBody.documents[key].path = '';
     }
+
+    // 🔥 CASE 4: Preserve hardCopy flag — keep existing if not explicitly set
+    if (parsedBody.documents[key].hardCopy === undefined) {
+      parsedBody.documents[key].hardCopy =
+        existingDocuments[`${key}HardCopy`] ?? false;
+    }
   });
 
   // ✅ DEBUG (optional)
