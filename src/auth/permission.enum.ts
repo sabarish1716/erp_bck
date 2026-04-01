@@ -70,4 +70,26 @@ export enum Permission {
   HR_PAYROLL_READ      = 'hr:payroll:read',
   HR_PAYROLL_MANAGE    = 'hr:payroll:manage',
   HR_PAYROLL_APPROVE   = 'hr:payroll:approve',
+
+
+
+  //POS permissions
+  POS_READ = 'pos:read',
+  POS_MANAGE = 'pos:manage',
+  POS_DASHBOARD = 'pos:dashboard',
+  POS_PURCHASE_CREATE = 'pos:purchase:create',
+  POS_PURCHASE_READ = 'pos:purchase:read',
+  POS_PURCHASE_UPDATE = 'pos:purchase:update',
+  POS_PURCHASE_DELETE = 'pos:purchase:delete',
+  POS_PURCHASE = 'pos:purchase',
+  POS_SALE_CREATE = 'pos:sale:create',
+  POS_SALE_READ = 'pos:sale:read',
+  POS_SELL = 'pos:sell',
+
+  // ─── DOCUMENT ISSUE ────────────────────────
+  DOC_REQUEST_CREATE  = 'doc:request:create',
+  DOC_REQUEST_READ    = 'doc:request:read',
+  DOC_REQUEST_REVIEW  = 'doc:request:review',
+  DOC_REQUEST_ISSUE   = 'doc:request:issue',
+  DOC_REQUEST_DELETE  = 'doc:request:delete',
 }

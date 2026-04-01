@@ -250,6 +250,8 @@ async createAdmission(data: CreateAdmissionDto) {
       transportMode: data.transportMode,
       rte: data.rte || false,
       academicStream: data.academicStream ?? null,
+      section: data.section || null,
+      academicYear: data.academicYear || null,
       staffParentId: data.staffParentId || null,
       siblingGroupId: data.siblingGroupId || null,
 
@@ -300,21 +302,27 @@ async createAdmission(data: CreateAdmissionDto) {
 
                 birthCert: docs.birthCert?.uploaded ?? false,
                 birthCertPath: normalizePath(docs.birthCert?.path),
+                birthCertHardCopy: docs.birthCert?.hardCopy ?? false,
 
                 communityCert: docs.communityCert?.uploaded ?? false,
                 communityCertPath: normalizePath(docs.communityCert?.path),
+                communityCertHardCopy: docs.communityCert?.hardCopy ?? false,
 
                 aadharStudent: docs.aadharStudent?.uploaded ?? false,
                 aadharStudentPath: normalizePath(docs.aadharStudent?.path),
+                aadharStudentHardCopy: docs.aadharStudent?.hardCopy ?? false,
 
                 aadharFather: docs.aadharFather?.uploaded ?? false,
                 aadharFatherPath: normalizePath(docs.aadharFather?.path),
+                aadharFatherHardCopy: docs.aadharFather?.hardCopy ?? false,
 
                 aadharMother: docs.aadharMother?.uploaded ?? false,
                 aadharMotherPath: normalizePath(docs.aadharMother?.path),
+                aadharMotherHardCopy: docs.aadharMother?.hardCopy ?? false,
 
                 transferCert: docs.transferCert?.uploaded ?? false,
                 transferCertPath: normalizePath(docs.transferCert?.path),
+                transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
               },
             ],
           }
@@ -558,6 +566,8 @@ async createAdmission(data: CreateAdmissionDto) {
       transportMode: data.transportMode,
       rte: typeof data.rte === 'boolean' ? data.rte : false,
       academicStream: data.academicStream ?? null,
+      section: data.section ?? undefined,
+      academicYear: data.academicYear ?? undefined,
       staffParentId: data.staffParentId ?? undefined,
       siblingGroupId: data.siblingGroupId ?? undefined,
     };
@@ -630,21 +640,27 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
 
     birthCert: data.documents?.birthCert?.uploaded ?? false,
     birthCertPath: normalizePath(data.documents?.birthCert?.path) || '',
+    birthCertHardCopy: data.documents?.birthCert?.hardCopy ?? false,
 
     communityCert: data.documents?.communityCert?.uploaded ?? false,
     communityCertPath: normalizePath(data.documents?.communityCert?.path) || '',
+    communityCertHardCopy: data.documents?.communityCert?.hardCopy ?? false,
 
     aadharStudent: data.documents?.aadharStudent?.uploaded ?? false,
     aadharStudentPath: normalizePath(data.documents?.aadharStudent?.path) || '',
+    aadharStudentHardCopy: data.documents?.aadharStudent?.hardCopy ?? false,
 
     aadharFather: data.documents?.aadharFather?.uploaded ?? false,
     aadharFatherPath: normalizePath(data.documents?.aadharFather?.path) || '',
+    aadharFatherHardCopy: data.documents?.aadharFather?.hardCopy ?? false,
 
     aadharMother: data.documents?.aadharMother?.uploaded ?? false,
     aadharMotherPath: normalizePath(data.documents?.aadharMother?.path) || '',
+    aadharMotherHardCopy: data.documents?.aadharMother?.hardCopy ?? false,
 
     transferCert: data.documents?.transferCert?.uploaded ?? false,
     transferCertPath: normalizePath(data.documents?.transferCert?.path) || '',
+    transferCertHardCopy: data.documents?.transferCert?.hardCopy ?? false,
   },
 ]
         };

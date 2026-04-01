@@ -58,6 +58,17 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.REPORTS_READ,
     // Location
     Permission.LOCATION_READ,
+    // POS
+    Permission.POS_READ,
+    Permission.POS_MANAGE,
+    Permission.POS_DASHBOARD,
+    Permission.POS_PURCHASE,
+    Permission.POS_SELL,
+    // Document Issue
+    Permission.DOC_REQUEST_CREATE,
+    Permission.DOC_REQUEST_READ,
+    Permission.DOC_REQUEST_REVIEW,
+    Permission.DOC_REQUEST_ISSUE,
   ],
 
   [Role.STAFF]: [
@@ -92,6 +103,13 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.REPORTS_READ,
     // Location
     Permission.LOCATION_READ,
+    // POS — limited
+    Permission.POS_READ,
+    Permission.POS_SELL,
+    Permission.POS_DASHBOARD,
+    // Document Issue
+    Permission.DOC_REQUEST_CREATE,
+    Permission.DOC_REQUEST_READ,
   ],
 
   [Role.STUDENT]: [
@@ -101,6 +119,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.FEES_READ,
     Permission.TRANSPORT_READ,
     Permission.LOCATION_READ,
+    // Document Issue — view own requests
+    Permission.DOC_REQUEST_READ,
   ],
 };
 

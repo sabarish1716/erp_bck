@@ -14,11 +14,13 @@ import { StaffModule } from './staff/staff.module';
 import { SettingsModule } from './settings/settings.module';
 import { PaymentLinkModule } from './payment-link/payment-link.module';
 import { HrModule } from './hr/hr.module';
+import { PosModule } from './pos/pos.module';
+import { DocRequestModule } from './doc-request/doc-request.module';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
 
 @Module({
-  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule],
+  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule],
   providers: [
     PrismaService,
     UserService,

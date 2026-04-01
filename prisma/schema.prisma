@@ -21,6 +21,11 @@ model User {
 
   isActive    Boolean  @default(true)
 
+  // Document issue relations
+  docRequestsMade    DocRequest[] @relation("DocRequestedBy")
+  docRequestsReviewed DocRequest[] @relation("DocReviewedBy")
+  docRequestsIssued  DocRequest[] @relation("DocIssuedBy")
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -100,6 +105,10 @@ model Student {
   transportMode     String? // Local / Van
   rte               Boolean @default(false)
 
+  // Section & Academic Year
+  section           String?  // e.g. "A", "B", "C"
+  academicYear      String?  // e.g. "2026-2027"
+
   // 11th/12th higher secondary stream selection
   academicStream    AcademicStream?
 
@@ -117,6 +126,7 @@ model Student {
   users             User?
   studentFees       StudentFee[]
   studentTransport  StudentTransport?
+  docRequests       DocRequest[]
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   documentsJson     Json?
@@ -202,6 +212,15 @@ model Document {
   aadharMother    Boolean @default(false)
   aadharStudent   Boolean @default(false)
   transferCert    Boolean @default(false)
+
+  // ✅ Hard-copy flags (physical document received, not digitised)
+  photoHardCopy         Boolean @default(false)
+  birthCertHardCopy     Boolean @default(false)
+  communityCertHardCopy Boolean @default(false)
+  aadharFatherHardCopy  Boolean @default(false)
+  aadharMotherHardCopy  Boolean @default(false)
+  aadharStudentHardCopy Boolean @default(false)
+  transferCertHardCopy  Boolean @default(false)
 
   // ✅ Actual uploaded file paths
   photoPath         String?
@@ -342,6 +361,9 @@ model Staff {
   staffStatutory      StaffStatutory?
   payrollRecords      Payroll[]
   esslMapping         ESSLStaffMapping?
+
+  // POS relations
+  teacherFreeItems    TeacherFreeItem[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -823,4 +845,284 @@ model Payroll {
 
   @@unique([staffId, month])
   @@index([month])
+}
+
+// ═══════════════════════════════════════════════
+// POS / STORE MANAGEMENT
+// ═══════════════════════════════════════════════
+
+enum ItemCategory {
+  STATIONERY
+  UNIFORM
+  BOOKS
+  SANITARY
+  FURNITURE
+  ID_CARD
+  ACCESSORIES
+  OTHER
+}
+
+// Store locations (Master Store, Stationery Shop, etc.)
+model Store {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  isMaster    Boolean  @default(false) // only one master store
+
+  stockItems      StoreStock[]
+  outTransfers    StockTransfer[] @relation("TransferFrom")
+  inTransfers     StockTransfer[] @relation("TransferTo")
+  sales           Sale[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Master catalog of items
+model StoreItem {
+  id            String       @id @default(uuid())
+  name          String
+  sku           String?      @unique
+  category      ItemCategory @default(OTHER)
+  description   String?
+  image         String?      // file path or URL
+  unit          String       @default("pcs") // pcs, kg, box, etc.
+  sellingPrice  Float        @default(0)
+  costPrice     Float        @default(0)
+  reorderLevel  Int          @default(5)
+  isFreeEligible Boolean    @default(false) // can be given free to teachers
+  freeLimit     Int          @default(0) // max free qty per teacher per year
+  isActive      Boolean      @default(true)
+
+  stockItems        StoreStock[]
+  purchaseItems     PurchaseItem[]
+  transferItems     StockTransferItem[]
+  saleItems         SaleItem[]
+  teacherFreeItems  TeacherFreeItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// Stock per store per item
+model StoreStock {
+  id        String    @id @default(uuid())
+  storeId   String
+  itemId    String
+  quantity  Int       @default(0)
+
+  store     Store     @relation(fields: [storeId], references: [id])
+  item      StoreItem @relation(fields: [itemId], references: [id])
+
+  updatedAt DateTime  @updatedAt
+
+  @@unique([storeId, itemId])
+}
+
+// Supplier / Vendor
+model Supplier {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String?
+  email       String?
+  address     String?
+  gstNo       String?
+  isActive    Boolean  @default(true)
+
+  purchases   Purchase[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// Purchase from supplier
+model Purchase {
+  id            String   @id @default(uuid())
+  supplierId    String
+  storeId       String   // which store receives the goods
+  invoiceNo     String?
+  invoiceDate   DateTime @default(now())
+  receiptImage  String?  // uploaded receipt file path
+  totalAmount   Float    @default(0)
+  remarks       String?
+
+  supplier      Supplier @relation(fields: [supplierId], references: [id])
+  items         PurchaseItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PurchaseItem {
+  id          String    @id @default(uuid())
+  purchaseId  String
+  itemId      String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+
+  purchase    Purchase  @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item        StoreItem @relation(fields: [itemId], references: [id])
+}
+
+// Stock transfer from one store to another
+model StockTransfer {
+  id            String   @id @default(uuid())
+  fromStoreId   String
+  toStoreId     String
+  transferDate  DateTime @default(now())
+  remarks       String?
+  status        String   @default("COMPLETED") // PENDING / COMPLETED / CANCELLED
+
+  fromStore     Store    @relation("TransferFrom", fields: [fromStoreId], references: [id])
+  toStore       Store    @relation("TransferTo", fields: [toStoreId], references: [id])
+  items         StockTransferItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model StockTransferItem {
+  id            String        @id @default(uuid())
+  transferId    String
+  itemId        String
+  quantity      Int
+
+  transfer      StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  item          StoreItem     @relation(fields: [itemId], references: [id])
+}
+
+// Sales from a store (POS transaction)
+model Sale {
+  id            String   @id @default(uuid())
+  storeId       String
+  invoiceNo     String?
+  saleDate      DateTime @default(now())
+  customerName  String?  // walk-in or student name
+  customerType  String   @default("WALK_IN") // WALK_IN / STUDENT / STAFF
+  paymentMode   String   @default("CASH") // CASH / UPI / CARD
+  totalAmount   Float    @default(0)
+  discount      Float    @default(0)
+  netAmount     Float    @default(0)
+  remarks       String?
+
+  store         Store    @relation(fields: [storeId], references: [id])
+  items         SaleItem[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model SaleItem {
+  id          String    @id @default(uuid())
+  saleId      String
+  itemId      String
+  quantity    Int
+  unitPrice   Float
+  totalPrice  Float
+
+  sale        Sale      @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  item        StoreItem @relation(fields: [itemId], references: [id])
+}
+
+// Free items given to teachers (pencils, erasers, whiteners, etc.)
+model TeacherFreeItem {
+  id            String   @id @default(uuid())
+  staffId       String
+  itemId        String
+  academicYear  String
+  quantityGiven Int      @default(0)
+  quantityReturned Int   @default(0)
+  givenDate     DateTime @default(now())
+  returnedDate  DateTime?
+  status        String   @default("GIVEN") // GIVEN / RETURNED / PARTIAL_RETURNED
+
+  staff         Staff     @relation(fields: [staffId], references: [id])
+  item          StoreItem @relation(fields: [itemId], references: [id])
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([staffId, academicYear])
+}
+
+// POS Expense / Income tracking
+model PosTransaction {
+  id            String   @id @default(uuid())
+  type          String   // INCOME / EXPENSE
+  category      String   // SALE / PURCHASE / MAINTENANCE / OTHER
+  description   String
+  amount        Float
+  date          DateTime @default(now())
+  referenceId   String?  // optional link to a Sale or Purchase id
+  receiptImage  String?
+  remarks       String?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════
+// ─── DOCUMENT ISSUE MODULE (TC, Bonafide, etc.) ─
+// ═══════════════════════════════════════════════
+
+enum DocRequestType {
+  TRANSFER_CERTIFICATE
+  BONAFIDE_CERTIFICATE
+  CONDUCT_CERTIFICATE
+  STUDY_CERTIFICATE
+  FEE_CERTIFICATE
+  OTHER
+}
+
+enum DocRequestStatus {
+  REQUESTED    // Staff/parent raised request
+  IN_REVIEW    // Under admin/principal review
+  APPROVED     // Ready for generation
+  ISSUED       // PDF generated & handed out
+  REJECTED     // Declined with reason
+}
+
+model DocRequest {
+  id              String           @id @default(uuid())
+  ticketNo        String           @unique          // e.g. DOC-2026-00001
+  studentId       String
+  type            DocRequestType
+  status          DocRequestStatus @default(REQUESTED)
+  reason          String?                           // why the document is needed
+  remarks         String?                           // internal staff notes
+  rejectionReason String?
+
+  // Tracking
+  requestedById   Int                               // User.id who raised the request
+  requestedAt     DateTime         @default(now())
+  reviewedById    Int?                              // User.id who reviewed
+  reviewedAt      DateTime?
+  issuedAt        DateTime?
+  issuedById      Int?                              // User.id who issued/generated
+
+  // Generated document
+  pdfPath         String?                           // path to generated PDF
+
+  // For TC: additional fields
+  tcNo            String?                           // serial number for TC
+  tcDate          DateTime?
+  leavingReason   String?                           // reason for leaving (TC)
+  conductRemark   String?          @default("Good") // conduct/character remark
+  qualifiedForPromotion Boolean?                    // promoted to next class?
+  dateOfLeaving   DateTime?
+  lastAttendedDate DateTime?
+
+  student         Student          @relation(fields: [studentId], references: [id])
+  requestedBy     User             @relation("DocRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy      User?            @relation("DocReviewedBy", fields: [reviewedById], references: [id])
+  issuedBy        User?            @relation("DocIssuedBy", fields: [issuedById], references: [id])
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([studentId])
+  @@index([status])
+  @@index([type])
 }
