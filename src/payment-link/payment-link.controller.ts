@@ -33,6 +33,7 @@ export class PaymentLinkController {
    * GET /fees/payment-link/by-fee/:studentFeeId
    */
   @Get('by-fee/:studentFeeId')
+  @Permissions(Permission.FEES_READ)
   async getPaymentLinks(@Param('studentFeeId') studentFeeId: string) {
     return this.paymentLinkService.getPaymentLinksForStudentFee(studentFeeId);
   }
@@ -42,6 +43,7 @@ export class PaymentLinkController {
    * GET /fees/payment-link/status/:merchantTransactionId
    */
   @Get('status/:merchantTransactionId')
+  @Permissions(Permission.FEES_READ)
   async checkStatus(@Param('merchantTransactionId') mTxnId: string) {
     return this.paymentLinkService.checkPaymentStatus(mTxnId);
   }
