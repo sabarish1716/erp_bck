@@ -175,6 +175,8 @@ export class TransportService {
           baseFee: data.baseFee,
           splClassFee: data.splClassFee || 0,
           description: data.description,
+          conductorName: data.conductorName,
+          conductorPhone: data.conductorPhone,
           stops: sanitizedStops.length > 0 ? { create: sanitizedStops } : undefined,
         },
         include: { stops: { orderBy: { stopOrder: 'asc' } } },
@@ -197,6 +199,8 @@ export class TransportService {
           baseFee: data.baseFee,
           splClassFee: data.splClassFee || 0,
           description: data.description,
+          conductorName: data.conductorName,
+          conductorPhone: data.conductorPhone,
           stops: {
             deleteMany: {},
             create: sanitizedStops,
@@ -410,7 +414,7 @@ export class TransportService {
       include: {
         route: true,
         stop: true,
-        student: { select: { id: true, name: true, standard: true } },
+        student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
       },
       orderBy: { student: { name: 'asc' } },
     });

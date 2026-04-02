@@ -6,6 +6,7 @@ import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from '.
 import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
 import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
 import { GeneratePayrollDto, ApprovePayrollDto } from './dto/payroll.dto';
+import { CreateAdvanceRequestDto, ApproveAdvanceDto, RejectAdvanceDto } from './dto/advance.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 
@@ -298,5 +299,53 @@ export class HrController {
   @Permissions(Permission.HR_PAYROLL_READ)
   getLOPReport(@Param('month') month: string) {
     return this.hrService.getLOPReport(month);
+  }
+
+  // ─── SALARY ABSTRACT ──────────────────────
+  @Get('salary-abstract/:month')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getSalaryAbstract(@Param('month') month: string) {
+    return this.hrService.getSalaryAbstract(month);
+  }
+
+  // ─── ADVANCE / LOAN TICKETS ───────────────
+  @Post('advance')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  createAdvanceRequest(@Body() dto: CreateAdvanceRequestDto) {
+    return this.hrService.createAdvanceRequest(dto);
+  }
+
+  @Get('advance')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getAdvanceRequests(
+    @Query('staffId') staffId?: string,
+    @Query('status') status?: string,
+    @Query('type') type?: string,
+  ) {
+    return this.hrService.getAdvanceRequests({ staffId, status, type });
+  }
+
+  @Get('advance/:id')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getAdvanceRequest(@Param('id') id: string) {
+    return this.hrService.getAdvanceRequest(id);
+  }
+
+  @Put('advance/:id/approve')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  approveAdvance(@Param('id') id: string, @Body() dto: ApproveAdvanceDto) {
+    return this.hrService.approveAdvance(id, dto.email);
+  }
+
+  @Put('advance/:id/reject')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  rejectAdvance(@Param('id') id: string, @Body() dto: RejectAdvanceDto) {
+    return this.hrService.rejectAdvance(id, dto.email, dto.reason);
+  }
+
+  @Put('advance/:id/disburse')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  disburseAdvance(@Param('id') id: string) {
+    return this.hrService.disburseAdvance(id);
   }
 }

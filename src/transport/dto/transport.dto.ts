@@ -31,6 +31,8 @@ export class CreateTransportRouteDto {
   @Type(() => Number)
   @IsOptional() @IsNumber() splClassFee?: number;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() conductorName?: string;
+  @IsOptional() @IsString() conductorPhone?: string;
 
   @IsOptional()
   @IsArray()

@@ -70,6 +70,20 @@ export class FeesController {
     return this.feesService.assignFeeToStudent(dto);
   }
 
+  @Post('assign-class')
+  @Permissions(Permission.FEES_ASSIGN)
+  assignFeeToClass(
+    @Body() dto: { standard: string; section?: string; academicYear: string; autoTeacherDiscount?: boolean; autoSiblingDiscount?: boolean; autoRteDiscount?: boolean },
+  ) {
+    return this.feesService.assignFeeToClass(dto);
+  }
+
+  @Get('pending-total/:studentId')
+  @Permissions(Permission.FEES_READ)
+  getStudentPendingTotal(@Param('studentId') studentId: string) {
+    return this.feesService.getStudentPendingTotal(studentId).then((pending) => ({ studentId, pending }));
+  }
+
   @Get('discount-eligibility/:studentId')
   @Permissions(Permission.FEES_READ)
   checkDiscountEligibility(@Param('studentId') studentId: string) {
@@ -174,5 +188,17 @@ export class FeesController {
   @Permissions(Permission.FEES_DASHBOARD)
   getDashboard(@Query('academicYear') academicYear: string) {
     return this.feesService.getFeesDashboard(academicYear);
+  }
+
+  @Get('multi-year-ledger')
+  @Permissions(Permission.FEES_DASHBOARD)
+  getMultiYearLedger() {
+    return this.feesService.getMultiYearLedger();
+  }
+
+  @Get('class-summary')
+  @Permissions(Permission.FEES_DASHBOARD)
+  getClassWiseSummary(@Query('academicYear') academicYear: string) {
+    return this.feesService.getClassWiseSummary(academicYear);
   }
 }

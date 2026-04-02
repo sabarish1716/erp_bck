@@ -649,8 +649,26 @@ export class HrService {
       // PT calculation
       const ptDeduction = settings.ptEnabled ? settings.ptAmount : 0;
 
-      const totalDeductions = Math.round(lopDeduction + permissionLopDeduction + pfDeduction + esiDeduction + ptDeduction);
-      const netSalary = Math.round(grossSalary - totalDeductions);
+      // Advance deductions — auto-deduct from active advances
+      let fixedAdvanceDeduction = 0;
+      let salaryAdvanceDeduction = 0;
+      let otherAdvanceDeduction = 0;
+
+      const activeAdvances = await this.prisma.staffAdvance.findMany({
+        where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
+      });
+
+      for (const adv of activeAdvances) {
+        const deduction = Math.min(adv.monthlyDeduction, adv.balanceRemaining);
+        if (adv.type === 'FIXED_ADVANCE') fixedAdvanceDeduction += deduction;
+        else if (adv.type === 'SALARY_ADVANCE') salaryAdvanceDeduction += deduction;
+        else otherAdvanceDeduction += deduction;
+      }
+
+      const extraAllowance = 0; // Can be overridden manually later
+
+      const totalDeductions = Math.round(lopDeduction + permissionLopDeduction + pfDeduction + esiDeduction + ptDeduction + fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction);
+      const netSalary = Math.round(grossSalary + extraAllowance - totalDeductions);
 
       const payroll = await this.prisma.payroll.upsert({
         where: { staffId_month: { staffId: staff.id, month } },
@@ -658,7 +676,9 @@ export class HrService {
           basicSalary, hra, da, otherAllowances, grossSalary,
           totalWorkingDays, presentDays, lopDays, lopDeduction: Math.round(lopDeduction),
           permissionHoursUsed, permissionLopDays, permissionLopDeduction: Math.round(permissionLopDeduction),
-          pfDeduction, esiDeduction, ptDeduction, totalDeductions, netSalary,
+          pfDeduction, esiDeduction, ptDeduction,
+          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction, extraAllowance,
+          totalDeductions, netSalary,
           status: 'generated',
         },
         create: {
@@ -666,9 +686,28 @@ export class HrService {
           basicSalary, hra, da, otherAllowances, grossSalary,
           totalWorkingDays, presentDays, lopDays, lopDeduction: Math.round(lopDeduction),
           permissionHoursUsed, permissionLopDays, permissionLopDeduction: Math.round(permissionLopDeduction),
-          pfDeduction, esiDeduction, ptDeduction, totalDeductions, netSalary,
+          pfDeduction, esiDeduction, ptDeduction,
+          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction, extraAllowance,
+          totalDeductions, netSalary,
         },
       });
+
+      // Update advance repaid balances
+      for (const adv of activeAdvances) {
+        const deduction = Math.min(adv.monthlyDeduction, adv.balanceRemaining);
+        const newRepaid = adv.totalRepaid + deduction;
+        const newBalance = adv.amount - newRepaid;
+        await this.prisma.staffAdvance.update({
+          where: { id: adv.id },
+          data: {
+            totalRepaid: newRepaid,
+            balanceRemaining: Math.max(0, newBalance),
+            status: newBalance <= 0 ? 'CLOSED' : 'REPAYING',
+            closedAt: newBalance <= 0 ? new Date() : undefined,
+          },
+        });
+      }
+
       results.push(payroll);
     }
 
@@ -682,7 +721,7 @@ export class HrService {
     if (query.status) where.status = query.status;
     return this.prisma.payroll.findMany({
       where,
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true, paymentMode: true } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -690,7 +729,7 @@ export class HrService {
   async getPayroll(id: string) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true } } },
+      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true, paymentMode: true } } },
     });
     if (!payroll) throw new NotFoundException('Payroll record not found');
     return payroll;
@@ -755,6 +794,139 @@ export class HrService {
       pendingLeaves,
       pendingPermissions,
     };
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── ADVANCE / LOAN TICKET SYSTEM ─────────────
+  // ═══════════════════════════════════════════════
+
+  private async getNextAdvanceTicketNo(): Promise<string> {
+    const year = new Date().getFullYear();
+    const lastTicket = await this.prisma.staffAdvance.findFirst({
+      where: { ticketNo: { startsWith: `ADV-${year}` } },
+      orderBy: { ticketNo: 'desc' },
+    });
+    const seq = lastTicket ? parseInt(lastTicket.ticketNo.split('-')[2]) + 1 : 1;
+    return `ADV-${year}-${String(seq).padStart(5, '0')}`;
+  }
+
+  async createAdvanceRequest(data: { staffId: string; type: string; amount: number; reason?: string; monthlyDeduction?: number }) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: data.staffId } });
+    if (!staff) throw new NotFoundException('Staff not found');
+    const ticketNo = await this.getNextAdvanceTicketNo();
+    const monthly = data.monthlyDeduction || data.amount; // default: full repay in one month
+    return this.prisma.staffAdvance.create({
+      data: {
+        ticketNo,
+        staffId: data.staffId,
+        type: data.type,
+        amount: data.amount,
+        reason: data.reason,
+        monthlyDeduction: monthly,
+        balanceRemaining: data.amount,
+        status: 'REQUESTED',
+      },
+    });
+  }
+
+  async getAdvanceRequests(query: { staffId?: string; status?: string; type?: string }) {
+    const where: any = {};
+    if (query.staffId) where.staffId = query.staffId;
+    if (query.status) where.status = query.status;
+    if (query.type) where.type = query.type;
+    return this.prisma.staffAdvance.findMany({
+      where,
+      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, category: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getAdvanceRequest(id: string) {
+    const adv = await this.prisma.staffAdvance.findUnique({
+      where: { id },
+      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, category: true } } },
+    });
+    if (!adv) throw new NotFoundException('Advance request not found');
+    return adv;
+  }
+
+  async approveAdvance(id: string, email: string) {
+    const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
+    if (!adv) throw new NotFoundException('Advance request not found');
+    if (adv.status !== 'REQUESTED') throw new BadRequestException('Can only approve REQUESTED advances');
+    return this.prisma.staffAdvance.update({
+      where: { id },
+      data: { status: 'APPROVED', approvedAt: new Date(), approvedByEmail: email },
+    });
+  }
+
+  async rejectAdvance(id: string, email: string, reason?: string) {
+    const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
+    if (!adv) throw new NotFoundException('Advance request not found');
+    if (adv.status !== 'REQUESTED') throw new BadRequestException('Can only reject REQUESTED advances');
+    return this.prisma.staffAdvance.update({
+      where: { id },
+      data: { status: 'REJECTED', rejectedAt: new Date(), rejectedByEmail: email, rejectionReason: reason },
+    });
+  }
+
+  async disburseAdvance(id: string) {
+    const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
+    if (!adv) throw new NotFoundException('Advance request not found');
+    if (adv.status !== 'APPROVED') throw new BadRequestException('Can only disburse APPROVED advances');
+    return this.prisma.staffAdvance.update({
+      where: { id },
+      data: { status: 'DISBURSED', disbursedAt: new Date() },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── SALARY ABSTRACT REPORT ───────────────────
+  // ═══════════════════════════════════════════════
+
+  async getSalaryAbstract(month: string) {
+    const payrolls = await this.prisma.payroll.findMany({
+      where: { month },
+      include: { staff: { include: { staffStatutory: { select: { pfNumber: true, esiNumber: true, pfEnabled: true, esiEnabled: true } } } } },
+    });
+
+    const categories = ['TEACHING_REGULAR', 'TEACHING_TRAINEE', 'NON_TEACHING_REGULAR', 'NON_TEACHING_TRAINEE'];
+    const rows = categories.map((cat) => {
+      const catPayrolls = payrolls.filter((p) => (p.staff as any).category === cat);
+      return {
+        category: cat,
+        staffCount: catPayrolls.length,
+        grossSalary: catPayrolls.reduce((s, p) => s + p.grossSalary, 0),
+        extraAllowance: catPayrolls.reduce((s, p) => s + p.extraAllowance, 0),
+        totalGross: catPayrolls.reduce((s, p) => s + p.grossSalary + p.extraAllowance, 0),
+        basicSalary: catPayrolls.reduce((s, p) => s + p.basicSalary, 0),
+        pfDeduction: catPayrolls.reduce((s, p) => s + p.pfDeduction, 0),
+        esiDeduction: catPayrolls.reduce((s, p) => s + p.esiDeduction, 0),
+        fixedAdvance: catPayrolls.reduce((s, p) => s + p.fixedAdvanceDeduction, 0),
+        salaryAdvance: catPayrolls.reduce((s, p) => s + p.salaryAdvanceDeduction, 0),
+        otherAdvance: catPayrolls.reduce((s, p) => s + p.otherAdvanceDeduction, 0),
+        totalDeductions: catPayrolls.reduce((s, p) => s + p.totalDeductions, 0),
+        netSalary: catPayrolls.reduce((s, p) => s + p.netSalary, 0),
+      };
+    });
+
+    const grandTotal = {
+      category: 'TOTAL',
+      staffCount: rows.reduce((s, r) => s + r.staffCount, 0),
+      grossSalary: rows.reduce((s, r) => s + r.grossSalary, 0),
+      extraAllowance: rows.reduce((s, r) => s + r.extraAllowance, 0),
+      totalGross: rows.reduce((s, r) => s + r.totalGross, 0),
+      basicSalary: rows.reduce((s, r) => s + r.basicSalary, 0),
+      pfDeduction: rows.reduce((s, r) => s + r.pfDeduction, 0),
+      esiDeduction: rows.reduce((s, r) => s + r.esiDeduction, 0),
+      fixedAdvance: rows.reduce((s, r) => s + r.fixedAdvance, 0),
+      salaryAdvance: rows.reduce((s, r) => s + r.salaryAdvance, 0),
+      otherAdvance: rows.reduce((s, r) => s + r.otherAdvance, 0),
+      totalDeductions: rows.reduce((s, r) => s + r.totalDeductions, 0),
+      netSalary: rows.reduce((s, r) => s + r.netSalary, 0),
+    };
+
+    return { rows, grandTotal, payrolls };
   }
 
   // ═══════════════════════════════════════════════

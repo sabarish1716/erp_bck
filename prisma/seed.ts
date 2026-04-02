@@ -10,6 +10,7 @@ import {
   PunchMethod,
   LeaveStatus,
   ItemCategory,
+  StaffCategory,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -75,6 +76,7 @@ async function resetDatabase() {
   await prisma.attendance.deleteMany();
   await prisma.leaveApplication.deleteMany();
   await prisma.permissionRequest.deleteMany();
+  await prisma.staffAdvance.deleteMany();
   await prisma.payroll.deleteMany();
   await prisma.staffStatutory.deleteMany();
   await prisma.eSSLStaffMapping.deleteMany();
@@ -88,6 +90,7 @@ async function resetDatabase() {
   await prisma.subjectMark.deleteMany();
   await prisma.academicDetail.deleteMany();
   await prisma.document.deleteMany();
+  await prisma.docRequest.deleteMany();
   await prisma.admission.deleteMany();
   await prisma.family.deleteMany();
   await prisma.address.deleteMany();
@@ -159,6 +162,7 @@ async function main() {
   });
 
   const staffRecords = await Promise.all([
+    // ── TEACHING REGULAR (4) ──
     prisma.staff.create({
       data: {
         employeeId: 'EMP0001',
@@ -170,6 +174,12 @@ async function main() {
         qualification: 'M.Sc., B.Ed.',
         joiningDate: new Date('2020-06-10T00:00:00.000Z'),
         salary: 65000,
+        category: StaffCategory.TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Indian Bank',
+        bankAccountNo: '6543210001',
+        bankIfsc: 'IDIB000C001',
+        pfJoiningDate: new Date('2020-06-10T00:00:00.000Z'),
       },
     }),
     prisma.staff.create({
@@ -183,8 +193,102 @@ async function main() {
         qualification: 'M.Sc., B.Ed.',
         joiningDate: new Date('2021-06-15T00:00:00.000Z'),
         salary: 54000,
+        category: StaffCategory.TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'SBI',
+        bankAccountNo: '6543210002',
+        bankIfsc: 'SBIN0001234',
+        pfJoiningDate: new Date('2021-06-15T00:00:00.000Z'),
       },
     }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0004',
+        name: 'Lakshmi Narayanan',
+        email: 'lakshmi.staff@school.com',
+        phone: '9000000004',
+        designation: 'Teacher',
+        department: 'English',
+        qualification: 'M.A., B.Ed.',
+        joiningDate: new Date('2019-06-01T00:00:00.000Z'),
+        salary: 58000,
+        category: StaffCategory.TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'IOB',
+        bankAccountNo: '6543210004',
+        bankIfsc: 'IOBA0000123',
+        pfJoiningDate: new Date('2019-06-01T00:00:00.000Z'),
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0005',
+        name: 'Srinivasan K',
+        email: 'srinivasan.staff@school.com',
+        phone: '9000000005',
+        designation: 'Teacher',
+        department: 'Tamil',
+        qualification: 'M.A., B.Ed.',
+        joiningDate: new Date('2018-07-01T00:00:00.000Z'),
+        salary: 62000,
+        category: StaffCategory.TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Canara Bank',
+        bankAccountNo: '6543210005',
+        bankIfsc: 'CNRB0001234',
+        pfJoiningDate: new Date('2018-07-01T00:00:00.000Z'),
+      },
+    }),
+    // ── TEACHING TRAINEE (3) ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0006',
+        name: 'Priya Dharshini',
+        email: 'priya.staff@school.com',
+        phone: '9000000006',
+        designation: 'Trainee Teacher',
+        department: 'Mathematics',
+        qualification: 'B.Sc., B.Ed.',
+        joiningDate: new Date('2025-06-15T00:00:00.000Z'),
+        salary: 22000,
+        category: StaffCategory.TEACHING_TRAINEE,
+        paymentMode: 'CASH',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0007',
+        name: 'Arun Kumar M',
+        email: 'arun.staff@school.com',
+        phone: '9000000007',
+        designation: 'Trainee Teacher',
+        department: 'Science',
+        qualification: 'B.Sc., B.Ed.',
+        joiningDate: new Date('2025-07-01T00:00:00.000Z'),
+        salary: 20000,
+        category: StaffCategory.TEACHING_TRAINEE,
+        paymentMode: 'CASH',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0008',
+        name: 'Divya S',
+        email: 'divya.staff@school.com',
+        phone: '9000000008',
+        designation: 'Trainee Teacher',
+        department: 'Social Science',
+        qualification: 'B.A., B.Ed.',
+        joiningDate: new Date('2025-09-01T00:00:00.000Z'),
+        salary: 18000,
+        category: StaffCategory.TEACHING_TRAINEE,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'SBI',
+        bankAccountNo: '6543210008',
+        bankIfsc: 'SBIN0005678',
+      },
+    }),
+    // ── NON-TEACHING REGULAR (3) ──
     prisma.staff.create({
       data: {
         employeeId: 'EMP0003',
@@ -196,6 +300,81 @@ async function main() {
         qualification: 'B.Com',
         joiningDate: new Date('2022-01-10T00:00:00.000Z'),
         salary: 32000,
+        category: StaffCategory.NON_TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Indian Bank',
+        bankAccountNo: '6543210003',
+        bankIfsc: 'IDIB000C002',
+        pfJoiningDate: new Date('2022-01-10T00:00:00.000Z'),
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0009',
+        name: 'Murugan P',
+        email: 'murugan.staff@school.com',
+        phone: '9000000009',
+        designation: 'Lab Assistant',
+        department: 'Science',
+        qualification: 'B.Sc.',
+        joiningDate: new Date('2021-08-10T00:00:00.000Z'),
+        salary: 28000,
+        category: StaffCategory.NON_TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'BOB',
+        bankAccountNo: '6543210009',
+        bankIfsc: 'BARB0001234',
+        pfJoiningDate: new Date('2021-08-10T00:00:00.000Z'),
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0010',
+        name: 'Selvi R',
+        email: 'selvi.staff@school.com',
+        phone: '9000000010',
+        designation: 'Office Admin',
+        department: 'Administration',
+        qualification: 'B.Com',
+        joiningDate: new Date('2020-03-01T00:00:00.000Z'),
+        salary: 35000,
+        category: StaffCategory.NON_TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'SBI',
+        bankAccountNo: '6543210010',
+        bankIfsc: 'SBIN0009876',
+        pfJoiningDate: new Date('2020-03-01T00:00:00.000Z'),
+      },
+    }),
+    // ── NON-TEACHING TRAINEE (2) ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0011',
+        name: 'Vignesh K',
+        email: 'vignesh.staff@school.com',
+        phone: '9000000011',
+        designation: 'Trainee Clerk',
+        department: 'Administration',
+        qualification: 'B.Com',
+        joiningDate: new Date('2025-11-01T00:00:00.000Z'),
+        salary: 15000,
+        category: StaffCategory.NON_TEACHING_TRAINEE,
+        paymentMode: 'CASH',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0012',
+        name: 'Nandhini M',
+        email: 'nandhini.staff@school.com',
+        phone: '9000000012',
+        designation: 'Trainee Lab Asst',
+        department: 'Science',
+        qualification: 'B.Sc.',
+        joiningDate: new Date('2026-01-15T00:00:00.000Z'),
+        salary: 14000,
+        category: StaffCategory.NON_TEACHING_TRAINEE,
+        paymentMode: 'CASH',
       },
     }),
   ]);
@@ -241,12 +420,15 @@ async function main() {
   ]);
 
   for (const staff of staffRecords) {
+    const isTrainee = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
     await prisma.staffStatutory.create({
       data: {
         staffId: staff.id,
-        pfNumber: `PF-${staff.employeeId}`,
-        uanNumber: `10001000${staff.employeeId.slice(-2)}`,
-        esiNumber: `ESI-${staff.employeeId}`,
+        pfNumber: isTrainee ? null : `PF-${staff.employeeId}`,
+        uanNumber: isTrainee ? null : `10001000${staff.employeeId.slice(-2)}`,
+        esiNumber: isTrainee ? null : `ESI-${staff.employeeId}`,
+        pfEnabled: !isTrainee,
+        esiEnabled: !isTrainee && (staff.salary || 0) <= 21000,
         basicSalary: (staff.salary || 0) * 0.6,
         grossSalary: staff.salary || 0,
       },
@@ -368,32 +550,268 @@ async function main() {
     },
   });
 
-  for (const staff of staffRecords) {
-    await prisma.payroll.create({
-      data: {
-        staffId: staff.id,
-        month: '2026-08',
-        basicSalary: (staff.salary || 0) * 0.6,
-        hra: (staff.salary || 0) * 0.2,
-        da: (staff.salary || 0) * 0.1,
-        otherAllowances: (staff.salary || 0) * 0.1,
-        grossSalary: staff.salary || 0,
-        totalWorkingDays: 26,
-        presentDays: 24,
-        lopDays: 1,
-        lopDeduction: Math.round((staff.salary || 0) / 26),
-        permissionHoursUsed: 2,
-        permissionLopDays: 0,
-        permissionLopDeduction: 0,
-        pfDeduction: 1800,
-        esiDeduction: 350,
-        ptDeduction: statutorySettings.ptAmount,
-        totalDeductions: 1800 + 350 + statutorySettings.ptAmount + Math.round((staff.salary || 0) / 26),
-        netSalary: (staff.salary || 0) - (1800 + 350 + statutorySettings.ptAmount + Math.round((staff.salary || 0) / 26)),
-        status: 'approved',
-      },
-    });
+  // ═══════════════════════════════════════════════
+  // PAYROLL – March 2026 (approved) + April 2026 (generated — current month)
+  // ═══════════════════════════════════════════════
+  const pfRate = 0.12;
+  const esiEmployeeRate = statutorySettings.esiEmployeeRate / 100;
+  const esiWageLimit = statutorySettings.esiWageLimit;
+  const ptAmt = statutorySettings.ptAmount;
+
+  for (const month of ['2026-03', '2026-04']) {
+    for (const staff of staffRecords) {
+      const sal = staff.salary || 0;
+      const basic = Math.round(sal * 0.6);
+      const hra = Math.round(sal * 0.2);
+      const da = Math.round(sal * 0.1);
+      const others = Math.round(sal * 0.1);
+      const gross = sal;
+      const isTrainee = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
+      const hasPF = !isTrainee && !!staff.pfJoiningDate;
+      const pf = hasPF ? Math.round(basic * pfRate) : 0;
+      const esi = hasPF && gross <= esiWageLimit ? Math.round(gross * esiEmployeeRate) : 0;
+      const pt = hasPF ? ptAmt : 0;
+      const lopDays = month === '2026-04' ? (sal > 50000 ? 0 : 1) : 1;
+      const lopDed = Math.round(gross / 26 * lopDays);
+      const fixedAdv = 0; // will be overridden per-staff below
+      const salAdv = 0;
+      const otherAdv = 0;
+      const extra = isTrainee && month === '2026-04' ? 500 : 0;
+      const totalDed = pf + esi + pt + lopDed + fixedAdv + salAdv + otherAdv;
+      const net = gross + extra - totalDed;
+
+      await prisma.payroll.create({
+        data: {
+          staffId: staff.id,
+          month,
+          basicSalary: basic, hra, da, otherAllowances: others,
+          grossSalary: gross,
+          totalWorkingDays: 26,
+          presentDays: 26 - lopDays,
+          lopDays,
+          lopDeduction: lopDed,
+          permissionHoursUsed: month === '2026-04' ? 3 : 2,
+          permissionLopDays: 0,
+          permissionLopDeduction: 0,
+          pfDeduction: pf,
+          esiDeduction: esi,
+          ptDeduction: pt,
+          fixedAdvanceDeduction: fixedAdv,
+          salaryAdvanceDeduction: salAdv,
+          otherAdvanceDeduction: otherAdv,
+          extraAllowance: extra,
+          totalDeductions: totalDed,
+          netSalary: net,
+          status: month === '2026-03' ? 'approved' : 'generated',
+        },
+      });
+    }
   }
+
+  // ═══════════════════════════════════════════════
+  // ADVANCE / LOAN TICKETS  (various statuses)
+  // ═══════════════════════════════════════════════
+  const advances = [
+    // Raghavan – Fixed advance, fully repaid & CLOSED
+    {
+      ticketNo: 'ADV-2026-00001',
+      staffId: staffRecords[0].id,
+      type: 'FIXED_ADVANCE',
+      amount: 10000,
+      reason: 'Festival advance',
+      monthlyDeduction: 2500,
+      totalRepaid: 10000,
+      balanceRemaining: 0,
+      status: 'CLOSED',
+      requestedAt: new Date('2025-12-01'),
+      approvedByEmail: 'admin@school.com',
+      approvedAt: new Date('2025-12-02'),
+      disbursedAt: new Date('2025-12-03'),
+      closedAt: new Date('2026-03-03'),
+    },
+    // Meena – Salary advance, currently REPAYING
+    {
+      ticketNo: 'ADV-2026-00002',
+      staffId: staffRecords[1].id,
+      type: 'SALARY_ADVANCE',
+      amount: 25000,
+      reason: 'Medical emergency',
+      monthlyDeduction: 5000,
+      totalRepaid: 10000,
+      balanceRemaining: 15000,
+      status: 'REPAYING',
+      requestedAt: new Date('2026-01-10'),
+      approvedByEmail: 'admin@school.com',
+      approvedAt: new Date('2026-01-11'),
+      disbursedAt: new Date('2026-01-12'),
+    },
+    // Lakshmi – Fixed advance, DISBURSED (not yet started deduction)
+    {
+      ticketNo: 'ADV-2026-00003',
+      staffId: staffRecords[2].id,
+      type: 'FIXED_ADVANCE',
+      amount: 8000,
+      reason: 'Personal loan',
+      monthlyDeduction: 2000,
+      totalRepaid: 0,
+      balanceRemaining: 8000,
+      status: 'DISBURSED',
+      requestedAt: new Date('2026-03-20'),
+      approvedByEmail: 'admin@school.com',
+      approvedAt: new Date('2026-03-21'),
+      disbursedAt: new Date('2026-03-28'),
+    },
+    // Karthik (NT Regular) – Other advance, APPROVED (not yet disbursed)
+    {
+      ticketNo: 'ADV-2026-00004',
+      staffId: staffRecords[7].id,
+      type: 'OTHER_ADVANCE',
+      amount: 5000,
+      reason: 'Uniform allowance',
+      monthlyDeduction: 1000,
+      totalRepaid: 0,
+      balanceRemaining: 5000,
+      status: 'APPROVED',
+      requestedAt: new Date('2026-03-25'),
+      approvedByEmail: 'admin@school.com',
+      approvedAt: new Date('2026-03-26'),
+    },
+    // Priya (Teaching Trainee) – Salary advance, REQUESTED (pending approval)
+    {
+      ticketNo: 'ADV-2026-00005',
+      staffId: staffRecords[4].id,
+      type: 'SALARY_ADVANCE',
+      amount: 10000,
+      reason: 'House rent deposit',
+      monthlyDeduction: 2500,
+      totalRepaid: 0,
+      balanceRemaining: 10000,
+      status: 'REQUESTED',
+      requestedAt: new Date('2026-04-01'),
+    },
+    // Srinivasan – Fixed advance, REJECTED
+    {
+      ticketNo: 'ADV-2026-00006',
+      staffId: staffRecords[3].id,
+      type: 'FIXED_ADVANCE',
+      amount: 50000,
+      reason: 'Vehicle purchase',
+      monthlyDeduction: 5000,
+      totalRepaid: 0,
+      balanceRemaining: 50000,
+      status: 'REJECTED',
+      requestedAt: new Date('2026-02-15'),
+      rejectedByEmail: 'admin@school.com',
+      rejectedAt: new Date('2026-02-16'),
+      rejectionReason: 'Amount exceeds policy limit',
+    },
+    // Murugan (NT Regular) – Salary advance, REPAYING
+    {
+      ticketNo: 'ADV-2026-00007',
+      staffId: staffRecords[8].id,
+      type: 'SALARY_ADVANCE',
+      amount: 15000,
+      reason: 'Child school fees',
+      monthlyDeduction: 3000,
+      totalRepaid: 6000,
+      balanceRemaining: 9000,
+      status: 'REPAYING',
+      requestedAt: new Date('2026-01-05'),
+      approvedByEmail: 'admin@school.com',
+      approvedAt: new Date('2026-01-06'),
+      disbursedAt: new Date('2026-01-07'),
+    },
+    // Selvi (NT Regular) – Other advance, REQUESTED
+    {
+      ticketNo: 'ADV-2026-00008',
+      staffId: staffRecords[9].id,
+      type: 'OTHER_ADVANCE',
+      amount: 3000,
+      reason: 'Travel reimbursement advance',
+      monthlyDeduction: 1500,
+      totalRepaid: 0,
+      balanceRemaining: 3000,
+      status: 'REQUESTED',
+      requestedAt: new Date('2026-04-02'),
+    },
+  ];
+
+  for (const adv of advances) {
+    await prisma.staffAdvance.create({ data: adv });
+  }
+
+  // ── More attendance for April 2026 (first 2 days) ──
+  const aprilDates = [new Date('2026-04-01T00:00:00.000Z'), new Date('2026-04-02T00:00:00.000Z')];
+  for (const staff of staffRecords) {
+    for (let d = 0; d < aprilDates.length; d++) {
+      const isLate = staff.designation.includes('Trainee') && d === 0;
+      await prisma.attendance.create({
+        data: {
+          staffId: staff.id,
+          date: aprilDates[d],
+          status: isLate ? AttendanceStatus.LATE : AttendanceStatus.PRESENT,
+          checkIn: isLate ? '09:18' : '08:55',
+          checkOut: '16:40',
+          punchMethod: d === 0 ? PunchMethod.FINGERPRINT : PunchMethod.MANUAL,
+          workingHours: isLate ? 7.0 : 7.75,
+          isESSLSync: d === 0,
+          remarks: isLate ? 'Late arrival' : undefined,
+        },
+      });
+    }
+  }
+
+  // ── Leave applications for April ──
+  await prisma.leaveApplication.create({
+    data: {
+      staffId: staffRecords[4].id, // Priya
+      leaveTypeId: leaveTypes[0].id,
+      fromDate: new Date('2026-04-07T00:00:00.000Z'),
+      toDate: new Date('2026-04-07T00:00:00.000Z'),
+      days: 1,
+      reason: 'Family function',
+      status: LeaveStatus.PENDING,
+    },
+  });
+  await prisma.leaveApplication.create({
+    data: {
+      staffId: staffRecords[8].id, // Murugan
+      leaveTypeId: leaveTypes[1].id,
+      fromDate: new Date('2026-04-03T00:00:00.000Z'),
+      toDate: new Date('2026-04-04T00:00:00.000Z'),
+      days: 2,
+      reason: 'Fever and cold',
+      status: LeaveStatus.APPROVED,
+      approvedBy: principal.email,
+    },
+  });
+
+  // ── Permission requests for April ──
+  await prisma.permissionRequest.create({
+    data: {
+      staffId: staffRecords[3].id, // Srinivasan
+      date: new Date('2026-04-02T00:00:00.000Z'),
+      fromTime: '14:00',
+      toTime: '16:00',
+      hours: 2,
+      reason: 'Bank work',
+      status: LeaveStatus.APPROVED,
+      approvedBy: principal.email,
+    },
+  });
+  await prisma.permissionRequest.create({
+    data: {
+      staffId: staffRecords[5].id, // Arun Kumar
+      date: new Date('2026-04-01T00:00:00.000Z'),
+      fromTime: '10:00',
+      toTime: '11:30',
+      hours: 1.5,
+      reason: 'Apartment maintenance meeting',
+      status: LeaveStatus.PENDING,
+    },
+  });
+
+  console.log('✅ HR module seeded: 12 staff (4 categories), payroll Mar+Apr 2026, 8 advance tickets, attendance, leaves, permissions');
 
   await prisma.eSSLPunchLog.createMany({
     data: [

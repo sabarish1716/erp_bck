@@ -128,6 +128,28 @@ export class DocRequestService {
       throw new BadRequestException('Document has already been issued');
     }
 
+    // TC: Block issuance if student has pending fees
+    if (existing.type === 'TRANSFER_CERTIFICATE') {
+      const studentFees = await this.prisma.studentFee.findMany({
+        where: { studentId: existing.studentId },
+        include: { payments: true },
+      });
+      let totalPending = 0;
+      for (const fee of studentFees) {
+        const effectivePaid = fee.payments.reduce((sum, p) => {
+          if (p.status === 'CANCELLED') return sum;
+          if (p.status === 'REFUNDED') return sum + p.amount - (p.refundAmount || 0);
+          return sum + p.amount;
+        }, 0);
+        totalPending += fee.netFee - effectivePaid;
+      }
+      if (totalPending > 0) {
+        throw new BadRequestException(
+          `Cannot issue Transfer Certificate. Student has pending fees of ₹${totalPending.toFixed(2)}. Clear all dues first.`,
+        );
+      }
+    }
+
     const data: any = {
       status: 'ISSUED',
       issuedAt: new Date(),

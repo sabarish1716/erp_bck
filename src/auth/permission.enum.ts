@@ -92,4 +92,10 @@ export enum Permission {
   DOC_REQUEST_REVIEW  = 'doc:request:review',
   DOC_REQUEST_ISSUE   = 'doc:request:issue',
   DOC_REQUEST_DELETE  = 'doc:request:delete',
+
+  // ─── HOUSE MANAGEMENT ─────────────────────
+  HOUSE_CREATE = 'house:create',
+  HOUSE_READ   = 'house:read',
+  HOUSE_UPDATE = 'house:update',
+  HOUSE_DELETE = 'house:delete',
 }

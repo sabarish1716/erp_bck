@@ -69,6 +69,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.DOC_REQUEST_READ,
     Permission.DOC_REQUEST_REVIEW,
     Permission.DOC_REQUEST_ISSUE,
+    // House
+    Permission.HOUSE_READ,
+    Permission.HOUSE_UPDATE,
   ],
 
   [Role.STAFF]: [
@@ -110,6 +113,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // Document Issue
     Permission.DOC_REQUEST_CREATE,
     Permission.DOC_REQUEST_READ,
+    // House
+    Permission.HOUSE_READ,
   ],
 
   [Role.STUDENT]: [
@@ -121,6 +126,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.LOCATION_READ,
     // Document Issue — view own requests
     Permission.DOC_REQUEST_READ,
+    // House
+    Permission.HOUSE_READ,
   ],
 };
 
