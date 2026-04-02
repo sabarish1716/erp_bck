@@ -75,45 +75,20 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 
   [Role.STAFF]: [
-    // Admission
-    Permission.ADMISSION_CREATE,
-    Permission.ADMISSION_READ,
-    Permission.ADMISSION_UPDATE,
-    // Student
+    // Student — read only
     Permission.STUDENT_READ,
-    Permission.STUDENT_UPDATE,
-    // Fees — read only + collect payments
-    Permission.FEES_STRUCTURE_READ,
-    Permission.FEES_READ,
-    Permission.FEES_COLLECT,
-    Permission.FEES_DASHBOARD,
-    // Transport — read only
-    Permission.TRANSPORT_ROUTE_READ,
-    Permission.TRANSPORT_READ,
-    // Staff
-    Permission.STAFF_READ,
-    // HR — limited access
+    // HR — own attendance, leave, permission, payslip
     Permission.HR_DASHBOARD,
     Permission.HR_ATTENDANCE_READ,
     Permission.HR_LEAVE_READ,
     Permission.HR_LEAVE_MANAGE,
     Permission.HR_PERMISSION_READ,
     Permission.HR_PERMISSION_MANAGE,
-    Permission.HR_STATUTORY_READ,
-    Permission.HR_ESSL_READ,
     Permission.HR_PAYROLL_READ,
-    // Reports — read only
-    Permission.REPORTS_READ,
-    // Location
-    Permission.LOCATION_READ,
-    // POS — limited
-    Permission.POS_READ,
-    Permission.POS_SELL,
-    Permission.POS_DASHBOARD,
-    // Document Issue
+    // Document Issue — create & view own requests
     Permission.DOC_REQUEST_CREATE,
     Permission.DOC_REQUEST_READ,
-    // House
+    // House — read only
     Permission.HOUSE_READ,
   ],
 
