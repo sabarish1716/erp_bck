@@ -21,4 +21,10 @@ export class CreateStaffDto {
   @IsOptional() @IsNumber() salary?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsString() @MinLength(6) password?: string;
+  @IsOptional() @IsString() category?: string;
+  @IsOptional() @IsString() paymentMode?: string;
+  @IsOptional() @IsString() bankName?: string;
+  @IsOptional() @IsString() bankAccountNo?: string;
+  @IsOptional() @IsString() bankIfsc?: string;
+  @IsOptional() @IsDateString() pfJoiningDate?: string;
 }

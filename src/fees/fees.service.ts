@@ -903,7 +903,7 @@ export class FeesService {
     const fees = await this.prisma.studentFee.findMany({
       where: { academicYear },
       include: {
-        student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true, fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } }, admission: { select: { admissionNo: true, isApproved: true } }, docRequests: { where: { type: 'TRANSFER_CERTIFICATE' }, select: { status: true }, take: 1 } } },
         payments: true,
         customItems: true,
         discounts: true,
@@ -1081,6 +1081,271 @@ export class FeesService {
     }
 
     return eligibility;
+  }
+
+  // ═══════════════════════════════════════════════
+  // BULK / WHOLE CLASS FEE ASSIGNMENT
+  // ═══════════════════════════════════════════════
+
+  async assignFeeToClass(data: {
+    standard: string;
+    section?: string;
+    academicYear: string;
+    autoTeacherDiscount?: boolean;
+    autoSiblingDiscount?: boolean;
+    autoRteDiscount?: boolean;
+  }) {
+    const where: any = {
+      standard: toStandardEnum(data.standard),
+      admission: { isApproved: true },
+    };
+    if (data.section) where.section = data.section;
+    if (data.academicYear) where.academicYear = data.academicYear;
+
+    const students = await this.prisma.student.findMany({
+      where,
+      select: { id: true, name: true },
+    });
+
+    if (students.length === 0) {
+      throw new BadRequestException('No approved students found for this class/section');
+    }
+
+    // Check which students already have a fee record for this academic year
+    const existingFees = await this.prisma.studentFee.findMany({
+      where: {
+        academicYear: data.academicYear,
+        studentId: { in: students.map((s) => s.id) },
+      },
+      select: { studentId: true },
+    });
+    const alreadyAssigned = new Set(existingFees.map((f) => f.studentId));
+
+    const toAssign = students.filter((s) => !alreadyAssigned.has(s.id));
+    if (toAssign.length === 0) {
+      return {
+        message: `All ${students.length} student(s) already have fees assigned`,
+        assigned: 0,
+        skipped: students.length,
+      };
+    }
+
+    const results: { studentId: string; name: string; success: boolean; error?: string }[] = [];
+
+    for (const student of toAssign) {
+      try {
+        await this.assignFeeToStudent({
+          studentId: student.id,
+          academicYear: data.academicYear,
+          autoTeacherDiscount: data.autoTeacherDiscount,
+          autoSiblingDiscount: data.autoSiblingDiscount,
+          autoRteDiscount: data.autoRteDiscount,
+        });
+        results.push({ studentId: student.id, name: student.name, success: true });
+      } catch (error: any) {
+        results.push({ studentId: student.id, name: student.name, success: false, error: error.message });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    return {
+      message: `Assigned fees to ${successCount}/${toAssign.length} student(s). ${alreadyAssigned.size} already had fees.`,
+      assigned: successCount,
+      skipped: alreadyAssigned.size,
+      failed: toAssign.length - successCount,
+      details: results,
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // PENDING FEE CHECK (for TC blocking)
+  // ═══════════════════════════════════════════════
+
+  async getStudentPendingTotal(studentId: string): Promise<number> {
+    const fees = await this.prisma.studentFee.findMany({
+      where: { studentId },
+      include: { payments: true },
+    });
+
+    let totalPending = 0;
+    for (const fee of fees) {
+      const paid = this.getTotalEffectivePaid(fee.payments);
+      totalPending += fee.netFee - paid;
+    }
+    return totalPending;
+  }
+
+  // ═══════════════════════════════════════════════
+  // MULTI-YEAR STUDENT FEE LEDGER
+  // ═══════════════════════════════════════════════
+
+  async getMultiYearLedger() {
+    // Get all student fees grouped by student across all years
+    const allFees = await this.prisma.studentFee.findMany({
+      include: {
+        student: {
+          select: {
+            id: true, name: true, standard: true, section: true,
+            admission: { select: { isApproved: true, admissionNo: true } },
+          },
+        },
+        payments: true,
+        discounts: true,
+        customItems: true,
+      },
+      orderBy: [{ student: { name: 'asc' } }, { academicYear: 'asc' }],
+    });
+
+    // Collect all unique academic years
+    const yearsSet = new Set<string>();
+    allFees.forEach((f) => yearsSet.add(f.academicYear));
+    const academicYears = Array.from(yearsSet).sort();
+
+    // Group by student
+    const studentMap = new Map<string, {
+      student: any;
+      yearData: Record<string, { totalFee: number; paid: number; discount: number; balance: number }>;
+      grandTotal: number;
+      grandPaid: number;
+      grandDiscount: number;
+      grandBalance: number;
+    }>();
+
+    for (const fee of allFees) {
+      const sid = fee.studentId;
+      if (!studentMap.has(sid)) {
+        studentMap.set(sid, {
+          student: fee.student,
+          yearData: {},
+          grandTotal: 0,
+          grandPaid: 0,
+          grandDiscount: 0,
+          grandBalance: 0,
+        });
+      }
+      const entry = studentMap.get(sid)!;
+      const paid = this.getTotalEffectivePaid(fee.payments);
+      const discount = fee.discount || 0;
+      const balance = fee.netFee - paid;
+
+      entry.yearData[fee.academicYear] = {
+        totalFee: fee.totalFee,
+        paid,
+        discount,
+        balance: Math.max(balance, 0),
+      };
+      entry.grandTotal += fee.totalFee;
+      entry.grandPaid += paid;
+      entry.grandDiscount += discount;
+      entry.grandBalance += Math.max(balance, 0);
+    }
+
+    return {
+      academicYears,
+      students: Array.from(studentMap.values()),
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // CLASS-WISE FEE SUMMARY
+  // ═══════════════════════════════════════════════
+
+  async getClassWiseSummary(academicYear: string) {
+    const fees = await this.prisma.studentFee.findMany({
+      where: { academicYear },
+      include: {
+        student: { select: { standard: true, section: true } },
+        payments: true,
+        customItems: true,
+        discounts: true,
+        terms: { orderBy: { termNumber: 'asc' } },
+      },
+    });
+
+    // Group by standard
+    const classMap = new Map<string, {
+      standard: string;
+      studentCount: number;
+      tuitionFee: number;
+      transportFee: number;
+      bookFee: number;
+      hostelFee: number;
+      otherFee: number;
+      customItemsTotal: number;
+      totalFee: number;
+      totalDiscount: number;
+      totalPaid: number;
+      netOutstanding: number;
+      termTotals: Record<string, number>;
+    }>();
+
+    for (const fee of fees) {
+      const std = fee.student?.standard || 'UNKNOWN';
+      if (!classMap.has(std)) {
+        classMap.set(std, {
+          standard: std,
+          studentCount: 0,
+          tuitionFee: 0,
+          transportFee: 0,
+          bookFee: 0,
+          hostelFee: 0,
+          otherFee: 0,
+          customItemsTotal: 0,
+          totalFee: 0,
+          totalDiscount: 0,
+          totalPaid: 0,
+          netOutstanding: 0,
+          termTotals: {},
+        });
+      }
+      const entry = classMap.get(std)!;
+      entry.studentCount++;
+      entry.tuitionFee += fee.tuitionFee || 0;
+      entry.transportFee += fee.transportFee || 0;
+      entry.bookFee += fee.bookFee || 0;
+      entry.hostelFee += fee.hostelFee || 0;
+      entry.otherFee += fee.otherFee || 0;
+      entry.customItemsTotal += (fee.customItems || []).reduce((s, ci) => s + (ci.amount || 0), 0);
+      entry.totalFee += fee.totalFee || 0;
+      entry.totalDiscount += fee.discount || 0;
+
+      const paid = this.getTotalEffectivePaid(fee.payments);
+      entry.totalPaid += paid;
+      entry.netOutstanding += Math.max(fee.netFee - paid, 0);
+
+      // Aggregate term totals
+      for (const term of fee.terms || []) {
+        const key = term.termName || `Term ${term.termNumber}`;
+        entry.termTotals[key] = (entry.termTotals[key] || 0) + (term.amount || 0);
+      }
+    }
+
+    // Sort by standard order
+    const stdOrder = ['LKG', 'UKG', 'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6', 'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12'];
+    const rows = Array.from(classMap.values()).sort(
+      (a, b) => stdOrder.indexOf(a.standard) - stdOrder.indexOf(b.standard),
+    );
+
+    // Grand totals
+    const grandTotal = rows.reduce((acc, r) => ({
+      studentCount: acc.studentCount + r.studentCount,
+      tuitionFee: acc.tuitionFee + r.tuitionFee,
+      transportFee: acc.transportFee + r.transportFee,
+      bookFee: acc.bookFee + r.bookFee,
+      hostelFee: acc.hostelFee + r.hostelFee,
+      otherFee: acc.otherFee + r.otherFee,
+      customItemsTotal: acc.customItemsTotal + r.customItemsTotal,
+      totalFee: acc.totalFee + r.totalFee,
+      totalDiscount: acc.totalDiscount + r.totalDiscount,
+      totalPaid: acc.totalPaid + r.totalPaid,
+      netOutstanding: acc.netOutstanding + r.netOutstanding,
+    }), {
+      studentCount: 0, tuitionFee: 0, transportFee: 0, bookFee: 0,
+      hostelFee: 0, otherFee: 0, customItemsTotal: 0, totalFee: 0,
+      totalDiscount: 0, totalPaid: 0, netOutstanding: 0,
+    });
+
+    return { rows, grandTotal };
   }
 }
 

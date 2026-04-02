@@ -78,6 +78,13 @@ enum AcademicStream {
   COMMERCE         // Commerce, Economics, Accountancy, Computer Application
 }
 
+enum StaffCategory {
+  TEACHING_REGULAR
+  TEACHING_TRAINEE
+  NON_TEACHING_REGULAR
+  NON_TEACHING_TRAINEE
+}
+
 enum DiscountType {
   FLAT
   PERCENTAGE
@@ -117,6 +124,10 @@ model Student {
   staffParent       Staff?   @relation("StaffChildren", fields: [staffParentId], references: [id])
   siblingGroupId    String?  // Group ID to link siblings → sibling discount
 
+  // House assignment
+  houseId           String?
+  house             House?   @relation("HouseStudents", fields: [houseId], references: [id])
+
   // Relations
   family            Family?
   address           Address?
@@ -127,6 +138,9 @@ model Student {
   studentFees       StudentFee[]
   studentTransport  StudentTransport?
   docRequests       DocRequest[]
+  houseCaptain      House?   @relation("HouseCaptain")
+  houseViceCaptain  House?   @relation("HouseViceCaptain")
+  houseBandCaptain  House?   @relation("HouseBandCaptain")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   documentsJson     Json?
@@ -351,6 +365,14 @@ model Staff {
   salary        Float?
   isActive      Boolean  @default(true)
 
+  // Category & payment
+  category      StaffCategory @default(TEACHING_REGULAR)
+  paymentMode   String?   // CASH / BANK_TRANSFER
+  bankName      String?
+  bankAccountNo String?
+  bankIfsc      String?
+  pfJoiningDate DateTime? // Date when PF started
+
   // Link to children studying here (for teacher discount)
   children      Student[] @relation("StaffChildren")
 
@@ -361,6 +383,7 @@ model Staff {
   staffStatutory      StaffStatutory?
   payrollRecords      Payroll[]
   esslMapping         ESSLStaffMapping?
+  advances            StaffAdvance[]
 
   // POS relations
   teacherFreeItems    TeacherFreeItem[]
@@ -553,6 +576,10 @@ model TransportRoute {
   splClassFee   Float    @default(0) // additional surcharge for special/spl class
   description   String?
 
+  // Conductor info
+  conductorName  String?
+  conductorPhone String?
+
   stops         TransportStop[]
   students      StudentTransport[]
   buses         Bus[]     @relation("RouteBuses")
@@ -590,6 +617,30 @@ model StudentTransport {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════
+// HOUSE MANAGEMENT
+// ═══════════════════════════════════════════════
+
+model House {
+  id              String   @id @default(uuid())
+  name            String   @unique  // e.g. "Red House", "Blue House"
+  colorCode       String?           // hex color e.g. "#FF0000"
+  motto           String?
+
+  captainId       String?  @unique
+  viceCaptainId   String?  @unique
+  bandCaptainId   String?  @unique
+
+  captain         Student? @relation("HouseCaptain", fields: [captainId], references: [id])
+  viceCaptain     Student? @relation("HouseViceCaptain", fields: [viceCaptainId], references: [id])
+  bandCaptain     Student? @relation("HouseBandCaptain", fields: [bandCaptainId], references: [id])
+
+  students        Student[] @relation("HouseStudents")
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // ═══════════════════════════════════════════════
@@ -834,6 +885,10 @@ model Payroll {
   pfDeduction            Float    @default(0)
   esiDeduction           Float    @default(0)
   ptDeduction            Float    @default(0)
+  fixedAdvanceDeduction  Float    @default(0)
+  salaryAdvanceDeduction Float    @default(0)
+  otherAdvanceDeduction  Float    @default(0)
+  extraAllowance         Float    @default(0)
   totalDeductions        Float    @default(0)
   netSalary              Float    @default(0)
   status                 String   @default("generated")
@@ -845,6 +900,41 @@ model Payroll {
 
   @@unique([staffId, month])
   @@index([month])
+}
+
+// ═══════════════════════════════════════════════
+// STAFF ADVANCE / LOAN TICKET SYSTEM
+// ═══════════════════════════════════════════════
+
+model StaffAdvance {
+  id                String    @id @default(uuid())
+  ticketNo          String    @unique         // e.g. ADV-2026-00001
+  staffId           String
+  type              String                    // FIXED_ADVANCE / SALARY_ADVANCE / OTHER_ADVANCE
+  amount            Float                     // Total advance amount
+  reason            String?
+  monthlyDeduction  Float     @default(0)     // Auto-deduct per payroll
+  totalRepaid       Float     @default(0)
+  balanceRemaining  Float     @default(0)
+
+  // Ticket status workflow
+  status            String    @default("REQUESTED") // REQUESTED → APPROVED → DISBURSED → REPAYING → CLOSED / REJECTED
+  requestedAt       DateTime  @default(now())
+  approvedAt        DateTime?
+  approvedByEmail   String?
+  rejectedAt        DateTime?
+  rejectedByEmail   String?
+  rejectionReason   String?
+  disbursedAt       DateTime?
+  closedAt          DateTime?
+
+  staff             Staff     @relation(fields: [staffId], references: [id])
+
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([staffId])
+  @@index([status])
 }
 
 // ═══════════════════════════════════════════════
