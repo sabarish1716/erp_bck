@@ -51,6 +51,7 @@ enum Community {
   MBC
   BC
   OBC
+  BCM
   OTHERS
 }
 
