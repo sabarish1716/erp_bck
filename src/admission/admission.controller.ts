@@ -41,84 +41,85 @@ export class AdmissionController {
     return this.service.bulkCreateFromCsv(body.rows);
   }
 
-
-
-
-
-  @Post()
-  @Permissions(Permission.ADMISSION_CREATE)
-  @UseInterceptors(
-    FileFieldsInterceptor(
-      [
-        { name: 'profilePhoto', maxCount: 1 },
-        { name: 'birthCert', maxCount: 1 },
-        { name: 'communityCert', maxCount: 1 },
-          { name: 'aadharStudent', maxCount: 1 },
-      ],
-      {
-        storage: diskStorage({
-          destination: './uploads',
-          filename: (req, file, cb) => {
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-            const ext = extname(file.originalname);
-            cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-          },
-        }),
-      },
-    ),
-  )
-  async create(
-    @Body() body: any,
-    @UploadedFiles()
-    files: {
-      profilePhoto?: Express.Multer.File[];
-      birthCert?: Express.Multer.File[];
-      communityCert?: Express.Multer.File[];
-      aadharStudent?: Express.Multer.File[];
+@Post()
+@Permissions(Permission.ADMISSION_CREATE)
+@UseInterceptors(
+  FileFieldsInterceptor(
+    [
+      { name: 'profilePhoto', maxCount: 1 },
+      { name: 'birthCert', maxCount: 1 },
+      { name: 'communityCert', maxCount: 1 },
+      { name: 'aadharStudent', maxCount: 1 },
+    ],
+    {
+      storage: diskStorage({
+        destination: './uploads',
+        filename: (req, file, cb) => {
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
+        },
+      }),
     },
-  ) {
-    let parsedBody = body;
+  ),
+)
+async create(
+  @Body() body: any,
+  @UploadedFiles()
+  files: {
+    profilePhoto?: Express.Multer.File[];
+    birthCert?: Express.Multer.File[];
+    communityCert?: Express.Multer.File[];
+    aadharStudent?: Express.Multer.File[];
+  },
+  @Req() req: any,
+) {
+  let parsedBody = body;
 
-    // ✅ Parse JSON string from form-data
-    if (body.data && typeof body.data === 'string') {
-      try {
-        parsedBody = JSON.parse(body.data);
-      } catch (e) {
-        console.error('JSON parse error:', e);
-      }
+  // ✅ Parse JSON (form-data support)
+  if (body.data && typeof body.data === 'string') {
+    try {
+      parsedBody = JSON.parse(body.data);
+    } catch (e) {
+      console.error('JSON parse error:', e);
     }
-
-    // ✅ Convert documents array → object
-    if (Array.isArray(parsedBody.documents)) {
-      const docObj = {};
-      parsedBody.documents.forEach((doc) => {
-        docObj[doc.key] = doc;
-      });
-      parsedBody.documents = docObj;
-    }
-
-    // ✅ Ensure documents exists
-    if (!parsedBody.documents) {
-      parsedBody.documents = {};
-    }
-
-    // ✅ Attach uploaded file paths
-    if (files) {
-      Object.keys(files).forEach((key) => {
-        const file = files[key][0];
-
-        if (!parsedBody.documents[key]) {
-          parsedBody.documents[key] = {};
-        }
-
-        parsedBody.documents[key].path = file.path.replace(/\\/g, '/');
-        parsedBody.documents[key].uploaded = true;
-      });
-    }
-
-    // ✅ Final save
-    return this.service.createAdmission(parsedBody);
   }
+
+  // ✅ Convert documents array → object
+  if (Array.isArray(parsedBody.documents)) {
+    const docObj = {};
+    parsedBody.documents.forEach((doc) => {
+      docObj[doc.key] = doc;
+    });
+    parsedBody.documents = docObj;
+  }
+
+  if (!parsedBody.documents) {
+    parsedBody.documents = {};
+  }
+
+  // ✅ Attach uploaded files
+  if (files) {
+    Object.keys(files).forEach((key) => {
+      const file = files[key][0];
+
+      if (!parsedBody.documents[key]) {
+        parsedBody.documents[key] = {};
+      }
+
+      parsedBody.documents[key].path = file.path.replace(/\\/g, '/');
+      parsedBody.documents[key].uploaded = true;
+    });
+  }
+
+  // 🔥 FINAL CALL (WITH USER)
+  return this.service.createAdmission(parsedBody, req.user, files);
+}
+
+
+
+  
 
   @Get()
   @Permissions(Permission.ADMISSION_READ)
