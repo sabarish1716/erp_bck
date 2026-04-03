@@ -35,4 +35,6 @@ export class CollectPaymentDto {
     each: true,
   })
   receiptComponents?: string[];
+  @IsOptional()
+  paidComponents?: Record<string, number>;  // { tuition: 17333, transport: 3667, ... }
 }

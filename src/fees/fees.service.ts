@@ -372,7 +372,7 @@ export class FeesService {
     // Build student term records from custom terms if provided, else from structure
     let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number }[] = [];
 
-    // Helper: split fee components proportionally across terms
+    // Helper: split only tuition + transport across terms; book/hostel/other are non-term
     const buildComponentSplit = (nTerms: number): { tuition: number[]; transport: number[]; book: number[]; hostel: number[]; other: number[] } => {
       const splitEvenly = (val: number, n: number) => {
         const perTerm = Math.round((val / n) * 100) / 100;
@@ -381,18 +381,21 @@ export class FeesService {
       return {
         tuition: splitEvenly(tuitionFee, nTerms),
         transport: splitEvenly(transportFee, nTerms),
-        book: splitEvenly(bookFee, nTerms),
-        hostel: splitEvenly(hostelFee, nTerms),
-        other: splitEvenly(otherFee + customTotal, nTerms),
+        book: Array(nTerms).fill(0),
+        hostel: Array(nTerms).fill(0),
+        other: Array(nTerms).fill(0),
       };
     };
 
+    // Term amount = only tuition + transport portion (after discount ratio)
+    const termFeeBasis = tuitionFee + transportFee;
+
     if (customStudentTerms.length > 0) {
-      // Validate sum of custom term amounts matches netFee
+      // Validate sum of custom term amounts matches term fee basis (tuition + transport)
       const sumCustomTerms = customStudentTerms.reduce((sum, t) => sum + t.amount, 0);
-      if (Math.abs(sumCustomTerms - netFee) > 0.01) {
-        throw new BadRequestException(`Sum of custom term amounts (${sumCustomTerms}) does not match net fee (${netFee})`);
-      }
+      const discountRatio = totalFee > 0 ? netFee / totalFee : 1;
+      const discountedTermBasis = Math.round(termFeeBasis * discountRatio * 100) / 100;
+      // Allow custom terms to override amounts, but component split stays tuition+transport only
       const comp = buildComponentSplit(customStudentTerms.length);
       studentTerms = customStudentTerms.map((t, i) => ({
         termNumber: t.termNumber,
@@ -401,41 +404,41 @@ export class FeesService {
         dueDate: t.dueDate ? new Date(t.dueDate) : null,
         tuitionAmount: comp.tuition[i],
         transportAmount: comp.transport[i],
-        bookAmount: comp.book[i],
-        hostelAmount: comp.hostel[i],
-        otherAmount: comp.other[i],
+        bookAmount: 0,
+        hostelAmount: 0,
+        otherAmount: 0,
       }));
       numberOfTerms = customStudentTerms.length;
     } else if (structureTerms.length > 0) {
-      // Scale term amounts proportionally to netFee
-      const structureTotal = structureTerms.reduce((s, t) => s + t.amount, 0);
-      const ratio = structureTotal > 0 ? netFee / structureTotal : 1;
       const comp = buildComponentSplit(structureTerms.length);
-      studentTerms = structureTerms.map((t, i) => ({
-        termNumber: t.termNumber,
-        termName: t.termName,
-        amount: Math.round(t.amount * ratio * 100) / 100,
-        dueDate: t.dueDate,
-        tuitionAmount: comp.tuition[i],
-        transportAmount: comp.transport[i],
-        bookAmount: comp.book[i],
-        hostelAmount: comp.hostel[i],
-        otherAmount: comp.other[i],
-      }));
+      studentTerms = structureTerms.map((t, i) => {
+        const termAmount = comp.tuition[i] + comp.transport[i];
+        return {
+          termNumber: t.termNumber,
+          termName: t.termName,
+          amount: termAmount,
+          dueDate: t.dueDate,
+          tuitionAmount: comp.tuition[i],
+          transportAmount: comp.transport[i],
+          bookAmount: 0,
+          hostelAmount: 0,
+          otherAmount: 0,
+        };
+      });
       numberOfTerms = structureTerms.length;
     } else if (numberOfTerms > 1) {
-      const perTerm = Math.round((netFee / numberOfTerms) * 100) / 100;
       const comp = buildComponentSplit(numberOfTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
+        const termAmount = comp.tuition[i - 1] + comp.transport[i - 1];
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
-          amount: i === numberOfTerms ? netFee - perTerm * (numberOfTerms - 1) : perTerm,
+          amount: termAmount,
           tuitionAmount: comp.tuition[i - 1],
           transportAmount: comp.transport[i - 1],
-          bookAmount: comp.book[i - 1],
-          hostelAmount: comp.hostel[i - 1],
-          otherAmount: comp.other[i - 1],
+          bookAmount: 0,
+          hostelAmount: 0,
+          otherAmount: 0,
         });
       }
     }
@@ -550,6 +553,7 @@ export class FeesService {
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: studentFeeId },
       include: {
+        student: { select: { standard: true } },
         kitIssues: {
           include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } },
           orderBy: { issuedDate: 'desc' },
@@ -558,11 +562,22 @@ export class FeesService {
     });
     if (!studentFee) throw new NotFoundException('Student fee record not found');
 
+    // Get the fee structure's allowed kit items for this standard + year
+    const feeStructure = await this.prisma.feeStructure.findUnique({
+      where: { standard_academicYear: { standard: studentFee.student.standard, academicYear: studentFee.academicYear } },
+      include: {
+        kitItems: {
+          include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } },
+        },
+      },
+    });
+
     return {
       bookFee: studentFee.bookFee,
       kitAmount: studentFee.kitAmount,
       bookBalance: studentFee.bookBalance,
       kitIssues: studentFee.kitIssues,
+      allowedKitItems: feeStructure?.kitItems || [],
     };
   }
 
@@ -663,29 +678,25 @@ export class FeesService {
     const netFee = Math.max(totalFee - discountAmount, 0);
     const numberOfTerms = existing.numberOfTerms;
 
-    // Rebuild student term records with component breakdown
+    // Rebuild student term records — only tuition + transport split across terms
     let studentTerms: { termNumber: number; termName: string; amount: number; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number }[] = [];
     if (numberOfTerms > 1) {
-      const perTerm = Math.round((netFee / numberOfTerms) * 100) / 100;
       const splitEvenly = (val: number, n: number) => {
         const pt = Math.round((val / n) * 100) / 100;
         return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
       };
       const tSplit = splitEvenly(tuitionFee, numberOfTerms);
       const trSplit = splitEvenly(transportFee, numberOfTerms);
-      const bSplit = splitEvenly(bookFee, numberOfTerms);
-      const hSplit = splitEvenly(hostelFee, numberOfTerms);
-      const oSplit = splitEvenly(otherFee + customTotal, numberOfTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
-          amount: i === numberOfTerms ? netFee - perTerm * (numberOfTerms - 1) : perTerm,
+          amount: tSplit[i - 1] + trSplit[i - 1],
           tuitionAmount: tSplit[i - 1],
           transportAmount: trSplit[i - 1],
-          bookAmount: bSplit[i - 1],
-          hostelAmount: hSplit[i - 1],
-          otherAmount: oSplit[i - 1],
+          bookAmount: 0,
+          hostelAmount: 0,
+          otherAmount: 0,
         });
       }
     }
@@ -779,6 +790,7 @@ export class FeesService {
       include: {
         payments: true,
         terms: { orderBy: { termNumber: 'asc' } },
+        customItems: true,
         student: {
           include: {
             admission: {
@@ -834,6 +846,9 @@ export class FeesService {
               receiptComponents: data.receiptComponents
                 ? (data.receiptComponents as unknown as Prisma.JsonArray)
                 : undefined,
+              paidComponents: data.paidComponents
+                ? (data.paidComponents as unknown as Prisma.JsonObject)
+                : undefined,
             },
             include: {
               studentFee: {
@@ -852,9 +867,23 @@ export class FeesService {
     }
 
     // Legacy: single term or overall payment
-    // When terms exist, payment must be collected term-wise.
+    // When terms exist, payment without term number is allowed for non-term fees (book, hostel, other, custom)
     if (studentFee.terms.length > 0 && !data.termNumber) {
-      throw new BadRequestException('Term number is required for term-wise fee collection');
+      // Non-term payment: validate against non-term fee balance (book + hostel + other + custom - non-term paid)
+      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
+        (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
+      const nonTermPaid = studentFee.payments
+        .filter((p) => !p.termNumber)
+        .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+      const nonTermPending = nonTermTotal - nonTermPaid;
+      if (nonTermPending <= 0) {
+        throw new BadRequestException('All non-term fees are already paid. Select a term for tuition/transport payment.');
+      }
+      if (data.amount > nonTermPending) {
+        throw new BadRequestException(
+          `Payment amount (${data.amount}) exceeds non-term fee pending balance (${nonTermPending})`,
+        );
+      }
     }
 
     // If termNumber is specified, validate against term balance
@@ -896,6 +925,9 @@ export class FeesService {
           status: 'SUCCESS',
           receiptComponents: data.receiptComponents
             ? (data.receiptComponents as unknown as Prisma.JsonArray)
+            : undefined,
+          paidComponents: data.paidComponents
+            ? (data.paidComponents as unknown as Prisma.JsonObject)
             : undefined,
         },
         include: {

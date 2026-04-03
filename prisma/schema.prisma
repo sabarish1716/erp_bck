@@ -573,6 +573,7 @@ model Payment {
   statusReason  String?
   refundAmount  Float?
   receiptComponents Json?
+  paidComponents    Json?    // { tuition: 17333, transport: 3667, book: 1667, ... }
 
   studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
 
