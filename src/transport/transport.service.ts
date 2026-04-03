@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTransportRouteDto, AssignStudentTransportDto } from './dto/transport.dto';
+import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
 
 const DEFAULT_ACADEMIC_YEAR = '2026-2027';
 
@@ -302,6 +303,10 @@ export class TransportService {
               stopId: data.stopId || null,
               academicYear,
               isSplClass: data.isSplClass || false,
+              splClassStartDate: data.isSplClass ? new Date() : null,
+              splClassEndDate: null,
+              splClassDaysUsed: null,
+              totalWorkingDays: null,
             },
             include: {
               route: true,
@@ -316,6 +321,7 @@ export class TransportService {
               stopId: data.stopId || null,
               academicYear,
               isSplClass: data.isSplClass || false,
+              splClassStartDate: data.isSplClass ? new Date() : null,
             },
             include: {
               route: true,
@@ -440,10 +446,71 @@ export class TransportService {
       where: { studentId },
       include: { route: true, stop: true },
     });
-    if (!assignment) return { baseFee: 0, splClassFee: 0, totalFee: 0 };
+    if (!assignment) return { baseFee: 0, splClassFee: 0, totalFee: 0, proRataSplClassFee: 0 };
 
     const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-    const splClassFee = assignment.isSplClass ? assignment.route.splClassFee : 0;
-    return { baseFee, splClassFee, totalFee: baseFee + splClassFee };
+    const fullSplClassFee = assignment.isSplClass ? assignment.route.splClassFee : 0;
+
+    // Pro-rata calculation for special class fee
+    let proRataSplClassFee = fullSplClassFee;
+    if (assignment.isSplClass && assignment.splClassDaysUsed != null && assignment.totalWorkingDays != null && assignment.totalWorkingDays > 0) {
+      proRataSplClassFee = Math.round((fullSplClassFee * assignment.splClassDaysUsed / assignment.totalWorkingDays) * 100) / 100;
+    }
+
+    return {
+      baseFee,
+      splClassFee: fullSplClassFee,
+      proRataSplClassFee,
+      totalFee: baseFee + proRataSplClassFee,
+      splClassDaysUsed: assignment.splClassDaysUsed,
+      totalWorkingDays: assignment.totalWorkingDays,
+      splClassStartDate: assignment.splClassStartDate,
+      splClassEndDate: assignment.splClassEndDate,
+    };
+  }
+
+  // Get transport fee with pro-rata special class calculation
+  async getTransportFeeForStudentProRata(studentId: string): Promise<number> {
+    const breakdown = await this.getTransportFeeBreakdown(studentId);
+    return breakdown.totalFee;
+  }
+
+  // Update special class date tracking for pro-rata fee calculation
+  async updateSplClassDates(data: UpdateSplClassDatesDto) {
+    const assignment = await this.prisma.studentTransport.findUnique({
+      where: { studentId: data.studentId },
+    });
+    if (!assignment) throw new NotFoundException('No transport assignment found for this student');
+
+    const updateData: any = {};
+    if (data.splClassStartDate !== undefined) updateData.splClassStartDate = new Date(data.splClassStartDate);
+    if (data.splClassEndDate !== undefined) updateData.splClassEndDate = new Date(data.splClassEndDate);
+    if (data.splClassDaysUsed !== undefined) updateData.splClassDaysUsed = data.splClassDaysUsed;
+    if (data.totalWorkingDays !== undefined) updateData.totalWorkingDays = data.totalWorkingDays;
+
+    return this.prisma.studentTransport.update({
+      where: { studentId: data.studentId },
+      data: updateData,
+      include: { route: true, stop: true, student: { select: { id: true, name: true, standard: true } } },
+    });
+  }
+
+  // Stop special class transport for a student (sets end date)
+  async stopSplClass(studentId: string, daysUsed: number, totalWorkingDays: number) {
+    const assignment = await this.prisma.studentTransport.findUnique({
+      where: { studentId },
+    });
+    if (!assignment) throw new NotFoundException('No transport assignment found');
+    if (!assignment.isSplClass) throw new BadRequestException('Student is not assigned to special class transport');
+
+    return this.prisma.studentTransport.update({
+      where: { studentId },
+      data: {
+        splClassEndDate: new Date(),
+        splClassDaysUsed: daysUsed,
+        totalWorkingDays: totalWorkingDays,
+      },
+      include: { route: true, stop: true, student: { select: { id: true, name: true, standard: true } } },
+    });
   }
 }

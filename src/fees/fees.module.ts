@@ -8,5 +8,6 @@ import { TransportModule } from 'src/transport/transport.module';
   imports: [PrismaModule, TransportModule],
   controllers: [FeesController],
   providers: [FeesService],
+  exports: [FeesService],
 })
 export class FeesModule {}

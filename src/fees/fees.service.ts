@@ -1,10 +1,11 @@
-﻿import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TransportService } from '../transport/transport.service';
 import { CreateFeeStructureDto } from './dto/create-fee-structure.dto';
 import { AssignFeeDto } from './dto/assign-fee.dto';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
 import { CancelPaymentDto, RefundPaymentDto } from './dto/payment-status.dto';
+import { IssueKitItemDto } from './dto/kit-issue.dto';
 import { DiscountType, Prisma, Standard } from '@prisma/client';
 
 // Map frontend standard values to Prisma Standard enum
@@ -85,9 +86,9 @@ export class FeesService {
     }
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // FEE STRUCTURE (template per standard + year)
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async createFeeStructure(data: CreateFeeStructureDto) {
     const numberOfTerms = data.numberOfTerms || 1;
@@ -124,8 +125,12 @@ export class FeesService {
           termsData.length > 0
             ? { create: termsData.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate) : null })) }
             : undefined,
+        kitItems:
+          data.kitItems && data.kitItems.length > 0
+            ? { create: data.kitItems.map((ki) => ({ storeItemId: ki.storeItemId, quantity: ki.quantity || 1, amount: ki.amount || 0 })) }
+            : undefined,
       },
-      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } } },
+      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } }, kitItems: { include: { storeItem: { select: { id: true, name: true, sellingPrice: true, category: true } } } } },
     });
   }
 
@@ -164,14 +169,18 @@ export class FeesService {
           deleteMany: {},
           create: termsData.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate) : null })),
         },
+        kitItems: {
+          deleteMany: {},
+          create: (data.kitItems || []).map((ki) => ({ storeItemId: ki.storeItemId, quantity: ki.quantity || 1, amount: ki.amount || 0 })),
+        },
       },
-      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } } },
+      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } }, kitItems: { include: { storeItem: { select: { id: true, name: true, sellingPrice: true, category: true } } } } },
     });
   }
 
   async getAllFeeStructures() {
     return await this.prisma.feeStructure.findMany({
-      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } } },
+      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } }, kitItems: { include: { storeItem: { select: { id: true, name: true, sellingPrice: true, category: true } } } } },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -179,7 +188,7 @@ export class FeesService {
   async getFeeStructure(id: string) {
     return await this.prisma.feeStructure.findUnique({
       where: { id },
-      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } } },
+      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } }, kitItems: { include: { storeItem: { select: { id: true, name: true, sellingPrice: true, category: true } } } } },
     });
   }
 
@@ -187,7 +196,7 @@ export class FeesService {
     try{
     const structure = await this.prisma.feeStructure.findFirst({
       where: { standard: toStandardEnum(standard), academicYear },
-      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } } },
+      include: { customItems: true, terms: { orderBy: { termNumber: 'asc' } }, kitItems: { include: { storeItem: { select: { id: true, name: true, sellingPrice: true, category: true } } } } },
     });
     console.log('Fetched fee structure:', structure);
     console.log('Standard:', standard, 'Academic Year:', academicYear);
@@ -206,9 +215,9 @@ export class FeesService {
     return await this.prisma.feeStructure.delete({ where: { id } });
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // ASSIGN FEE TO STUDENT
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async assignFeeToStudent(data: AssignFeeDto) {
     // If no individual fees provided, try to load from structure
@@ -241,12 +250,12 @@ export class FeesService {
 
     // Auto-pull transport fee from route assignment
     try {
-      const routeFee = await this.transportService.getTransportFeeForStudent(data.studentId);
+      const routeFee = await this.transportService.getTransportFeeForStudentProRata(data.studentId);
       if (routeFee > 0 && data.transportFee === undefined) {
         transportFee = routeFee;
       }
     } catch {
-      // Student may not have transport assigned â€” that's fine
+      // Student may not have transport assigned — that's fine
     }
 
     // If tuitionFee not explicitly passed, load from FeeStructure template
@@ -352,7 +361,7 @@ export class FeesService {
       if (d.type === DiscountType.FLAT) {
         discountAmount += d.value;
       } else {
-        // PERCENTAGE, TEACHER_DISCOUNT, SIBLING_DISCOUNT, RTE_COMMUNITY â€” all percentage-based
+        // PERCENTAGE, TEACHER_DISCOUNT, SIBLING_DISCOUNT, RTE_COMMUNITY — all percentage-based
         discountAmount += Math.round((totalFee * d.value) / 100 * 100) / 100;
       }
     }
@@ -361,41 +370,88 @@ export class FeesService {
     const netFee = Math.max(totalFee - discountAmount, 0);
 
     // Build student term records from custom terms if provided, else from structure
-    let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null }[] = [];
+    let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number }[] = [];
+
+    // Helper: split fee components proportionally across terms
+    const buildComponentSplit = (nTerms: number): { tuition: number[]; transport: number[]; book: number[]; hostel: number[]; other: number[] } => {
+      const splitEvenly = (val: number, n: number) => {
+        const perTerm = Math.round((val / n) * 100) / 100;
+        return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - perTerm * (n - 1)) * 100) / 100 : perTerm);
+      };
+      return {
+        tuition: splitEvenly(tuitionFee, nTerms),
+        transport: splitEvenly(transportFee, nTerms),
+        book: splitEvenly(bookFee, nTerms),
+        hostel: splitEvenly(hostelFee, nTerms),
+        other: splitEvenly(otherFee + customTotal, nTerms),
+      };
+    };
+
     if (customStudentTerms.length > 0) {
       // Validate sum of custom term amounts matches netFee
       const sumCustomTerms = customStudentTerms.reduce((sum, t) => sum + t.amount, 0);
       if (Math.abs(sumCustomTerms - netFee) > 0.01) {
         throw new BadRequestException(`Sum of custom term amounts (${sumCustomTerms}) does not match net fee (${netFee})`);
       }
-      studentTerms = customStudentTerms.map((t) => ({
+      const comp = buildComponentSplit(customStudentTerms.length);
+      studentTerms = customStudentTerms.map((t, i) => ({
         termNumber: t.termNumber,
         termName: t.termName,
         amount: t.amount,
         dueDate: t.dueDate ? new Date(t.dueDate) : null,
+        tuitionAmount: comp.tuition[i],
+        transportAmount: comp.transport[i],
+        bookAmount: comp.book[i],
+        hostelAmount: comp.hostel[i],
+        otherAmount: comp.other[i],
       }));
       numberOfTerms = customStudentTerms.length;
     } else if (structureTerms.length > 0) {
       // Scale term amounts proportionally to netFee
       const structureTotal = structureTerms.reduce((s, t) => s + t.amount, 0);
       const ratio = structureTotal > 0 ? netFee / structureTotal : 1;
-      studentTerms = structureTerms.map((t) => ({
+      const comp = buildComponentSplit(structureTerms.length);
+      studentTerms = structureTerms.map((t, i) => ({
         termNumber: t.termNumber,
         termName: t.termName,
         amount: Math.round(t.amount * ratio * 100) / 100,
         dueDate: t.dueDate,
+        tuitionAmount: comp.tuition[i],
+        transportAmount: comp.transport[i],
+        bookAmount: comp.book[i],
+        hostelAmount: comp.hostel[i],
+        otherAmount: comp.other[i],
       }));
       numberOfTerms = structureTerms.length;
     } else if (numberOfTerms > 1) {
       const perTerm = Math.round((netFee / numberOfTerms) * 100) / 100;
+      const comp = buildComponentSplit(numberOfTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
           amount: i === numberOfTerms ? netFee - perTerm * (numberOfTerms - 1) : perTerm,
+          tuitionAmount: comp.tuition[i - 1],
+          transportAmount: comp.transport[i - 1],
+          bookAmount: comp.book[i - 1],
+          hostelAmount: comp.hostel[i - 1],
+          otherAmount: comp.other[i - 1],
         });
       }
     }
+
+    // Calculate kit amount from structure kit items (if structure was loaded)
+    let kitAmount = 0;
+    if (data.tuitionFee === undefined) {
+      const structure = await this.prisma.feeStructure.findFirst({
+        where: { standard: student.standard, academicYear: data.academicYear },
+        include: { kitItems: true },
+      });
+      if (structure?.kitItems && structure.kitItems.length > 0) {
+        kitAmount = structure.kitItems.reduce((sum, ki) => sum + ki.amount, 0);
+      }
+    }
+    const bookBalance = Math.max(bookFee - kitAmount, 0);
 
     return await this.prisma.studentFee.create({
       data: {
@@ -410,6 +466,8 @@ export class FeesService {
         discount: discountAmount,
         netFee,
         numberOfTerms,
+        kitAmount,
+        bookBalance,
         customItems:
           customItems.length > 0 ? { create: customItems } : undefined,
         discounts:
@@ -423,8 +481,114 @@ export class FeesService {
         customItems: true,
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
+        kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
         student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // KIT ITEM ISSUE (POS → Fee mapping)
+  // ═══════════════════════════════════════════════
+
+  async issueKitItem(data: IssueKitItemDto) {
+    const studentFee = await this.prisma.studentFee.findUnique({
+      where: { id: data.studentFeeId },
+      include: { kitIssues: true },
+    });
+    if (!studentFee) throw new NotFoundException('Student fee record not found');
+
+    const storeItem = await this.prisma.storeItem.findUnique({ where: { id: data.storeItemId } });
+    if (!storeItem) throw new NotFoundException('Store item not found');
+
+    const quantity = data.quantity || 1;
+    const amount = data.amount ?? (storeItem.sellingPrice * quantity);
+
+    // Check if this would exceed bookFee
+    const currentKitTotal = studentFee.kitIssues.reduce((sum, ki) => sum + ki.amount, 0);
+    const newKitTotal = currentKitTotal + amount;
+    if (newKitTotal > studentFee.bookFee) {
+      throw new BadRequestException(
+        `Kit item total (${newKitTotal}) would exceed book/kit fee (${studentFee.bookFee}). Current kit issued: ${currentKitTotal}`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const issue = await tx.studentKitIssue.create({
+        data: {
+          studentFeeId: data.studentFeeId,
+          storeItemId: data.storeItemId,
+          quantity,
+          amount,
+          issuedDate: data.issuedDate ? new Date(data.issuedDate) : new Date(),
+          saleId: data.saleId || null,
+        },
+        include: {
+          storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } },
+        },
+      });
+
+      // Update kitAmount and bookBalance on the student fee
+      await tx.studentFee.update({
+        where: { id: data.studentFeeId },
+        data: {
+          kitAmount: newKitTotal,
+          bookBalance: Math.max(studentFee.bookFee - newKitTotal, 0),
+        },
+      });
+
+      return {
+        ...issue,
+        kitTotal: newKitTotal,
+        bookBalance: Math.max(studentFee.bookFee - newKitTotal, 0),
+        bookFee: studentFee.bookFee,
+      };
+    });
+  }
+
+  async getStudentKitIssues(studentFeeId: string) {
+    const studentFee = await this.prisma.studentFee.findUnique({
+      where: { id: studentFeeId },
+      include: {
+        kitIssues: {
+          include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } },
+          orderBy: { issuedDate: 'desc' },
+        },
+      },
+    });
+    if (!studentFee) throw new NotFoundException('Student fee record not found');
+
+    return {
+      bookFee: studentFee.bookFee,
+      kitAmount: studentFee.kitAmount,
+      bookBalance: studentFee.bookBalance,
+      kitIssues: studentFee.kitIssues,
+    };
+  }
+
+  async removeKitIssue(kitIssueId: string) {
+    const issue = await this.prisma.studentKitIssue.findUnique({ where: { id: kitIssueId } });
+    if (!issue) throw new NotFoundException('Kit issue record not found');
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.studentKitIssue.delete({ where: { id: kitIssueId } });
+
+      // Recalculate kit totals
+      const remaining = await tx.studentKitIssue.findMany({
+        where: { studentFeeId: issue.studentFeeId },
+      });
+      const newKitTotal = remaining.reduce((sum, ki) => sum + ki.amount, 0);
+
+      const studentFee = await tx.studentFee.findUnique({ where: { id: issue.studentFeeId } });
+      await tx.studentFee.update({
+        where: { id: issue.studentFeeId },
+        data: {
+          kitAmount: newKitTotal,
+          bookBalance: Math.max((studentFee?.bookFee || 0) - newKitTotal, 0),
+        },
+      });
+
+      return { message: 'Kit issue removed', kitTotal: newKitTotal, bookBalance: Math.max((studentFee?.bookFee || 0) - newKitTotal, 0) };
     });
   }
 
@@ -442,7 +606,7 @@ export class FeesService {
     // Auto-pull transport fee if not explicitly set
     if (data.transportFee === undefined) {
       try {
-        const routeFee = await this.transportService.getTransportFeeForStudent(existing.studentId);
+        const routeFee = await this.transportService.getTransportFeeForStudentProRata(existing.studentId);
         if (routeFee > 0) transportFee = routeFee;
       } catch {
         // no transport assigned
@@ -499,18 +663,37 @@ export class FeesService {
     const netFee = Math.max(totalFee - discountAmount, 0);
     const numberOfTerms = existing.numberOfTerms;
 
-    // Rebuild student term records
-    let studentTerms: { termNumber: number; termName: string; amount: number }[] = [];
+    // Rebuild student term records with component breakdown
+    let studentTerms: { termNumber: number; termName: string; amount: number; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number }[] = [];
     if (numberOfTerms > 1) {
       const perTerm = Math.round((netFee / numberOfTerms) * 100) / 100;
+      const splitEvenly = (val: number, n: number) => {
+        const pt = Math.round((val / n) * 100) / 100;
+        return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
+      };
+      const tSplit = splitEvenly(tuitionFee, numberOfTerms);
+      const trSplit = splitEvenly(transportFee, numberOfTerms);
+      const bSplit = splitEvenly(bookFee, numberOfTerms);
+      const hSplit = splitEvenly(hostelFee, numberOfTerms);
+      const oSplit = splitEvenly(otherFee + customTotal, numberOfTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
           amount: i === numberOfTerms ? netFee - perTerm * (numberOfTerms - 1) : perTerm,
+          tuitionAmount: tSplit[i - 1],
+          transportAmount: trSplit[i - 1],
+          bookAmount: bSplit[i - 1],
+          hostelAmount: hSplit[i - 1],
+          otherAmount: oSplit[i - 1],
         });
       }
     }
+
+    // Recalculate bookBalance based on existing kit issues
+    const kitIssues = await this.prisma.studentKitIssue.findMany({ where: { studentFeeId: id } });
+    const kitAmount = kitIssues.reduce((sum, ki) => sum + ki.amount, 0);
+    const bookBalance = Math.max(bookFee - kitAmount, 0);
 
     return await this.prisma.studentFee.update({
       where: { id },
@@ -523,6 +706,8 @@ export class FeesService {
         totalFee,
         discount: discountAmount,
         netFee,
+        kitAmount,
+        bookBalance,
         customItems: {
           deleteMany: {},
           create: customItems,
@@ -541,6 +726,7 @@ export class FeesService {
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
         payments: true,
+        kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
         student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
@@ -555,6 +741,7 @@ export class FeesService {
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
         payments: { orderBy: { paymentDate: 'desc' } },
+        kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } } },
         student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
@@ -572,6 +759,7 @@ export class FeesService {
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
         payments: { orderBy: { paymentDate: 'desc' } },
+        kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } } },
         student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
@@ -581,9 +769,9 @@ export class FeesService {
     return { ...fee, totalPaid, pending: fee.netFee - totalPaid };
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // PAYMENT COLLECTION
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async collectPayment(data: CollectPaymentDto) {
     const studentFee = await this.prisma.studentFee.findUnique({
@@ -803,9 +991,9 @@ export class FeesService {
     return { nextReceiptNo: nextNo };
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // DASHBOARD & REPORTS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async getPendingFees(academicYear: string) {
     const fees = await this.prisma.studentFee.findMany({
@@ -918,9 +1106,9 @@ export class FeesService {
     });
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // TRANSPORT FEE MID-TERM RECALCULATION
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async recalcTransportFee(studentId: string, academicYear: string) {
     const studentFee = await this.prisma.studentFee.findUnique({
@@ -932,7 +1120,7 @@ export class FeesService {
     // Get current transport fee from route assignment
     let newTransportFee = 0;
     try {
-      newTransportFee = await this.transportService.getTransportFeeForStudent(studentId);
+      newTransportFee = await this.transportService.getTransportFeeForStudentProRata(studentId);
     } catch {
       newTransportFee = 0;
     }
@@ -942,7 +1130,7 @@ export class FeesService {
       return { message: 'No transport fee change detected', studentFee };
     }
 
-    // Find which terms are already PAID â€” don't change those
+    // Find which terms are already PAID — don't change those
     const paidTerms = studentFee.terms.filter((t) => t.status === 'PAID');
     const unpaidTerms = studentFee.terms.filter((t) => t.status !== 'PAID');
 
@@ -990,16 +1178,16 @@ export class FeesService {
     ]);
 
     return {
-      message: `Transport fee updated from â‚¹${oldTransportFee} to â‚¹${newTransportFee}. ${unpaidTerms.length} unpaid term(s) adjusted.`,
+      message: `Transport fee updated from ₹${oldTransportFee} to ₹${newTransportFee}. ${unpaidTerms.length} unpaid term(s) adjusted.`,
       oldTransportFee,
       newTransportFee,
       unpaidTermsAdjusted: unpaidTerms.length,
     };
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // ACADEMIC YEARS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async getAcademicYears() {
     const structures = await this.prisma.feeStructure.findMany({
@@ -1018,9 +1206,9 @@ export class FeesService {
     return Array.from(allYears).sort().reverse();
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   // DISCOUNT ELIGIBILITY CHECK
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   async checkDiscountEligibility(studentId: string) {
     const student = await this.prisma.student.findUnique({
@@ -1083,9 +1271,9 @@ export class FeesService {
     return eligibility;
   }
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   // BULK / WHOLE CLASS FEE ASSIGNMENT
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   async assignFeeToClass(data: {
     standard: string;
@@ -1157,9 +1345,9 @@ export class FeesService {
     };
   }
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   // PENDING FEE CHECK (for TC blocking)
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   async getStudentPendingTotal(studentId: string): Promise<number> {
     const fees = await this.prisma.studentFee.findMany({
@@ -1175,9 +1363,9 @@ export class FeesService {
     return totalPending;
   }
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   // MULTI-YEAR STUDENT FEE LEDGER
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   async getMultiYearLedger() {
     // Get all student fees grouped by student across all years
@@ -1246,9 +1434,9 @@ export class FeesService {
     };
   }
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   // CLASS-WISE FEE SUMMARY
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   async getClassWiseSummary(academicYear: string) {
     const fees = await this.prisma.studentFee.findMany({

@@ -14,6 +14,7 @@ import { CreateFeeStructureDto } from './dto/create-fee-structure.dto';
 import { AssignFeeDto } from './dto/assign-fee.dto';
 import { CollectPaymentDto } from './dto/collect-payment.dto';
 import { CancelPaymentDto, RefundPaymentDto } from './dto/payment-status.dto';
+import { IssueKitItemDto } from './dto/kit-issue.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 
@@ -168,6 +169,26 @@ export class FeesController {
     @Query('academicYear') academicYear: string,
   ) {
     return this.feesService.recalcTransportFee(studentId, academicYear);
+  }
+
+  // ─── KIT / BOOK FEE MANAGEMENT ─────────────────
+
+  @Post('kit/issue')
+  @Permissions(Permission.FEES_COLLECT)
+  issueKitItem(@Body() dto: IssueKitItemDto) {
+    return this.feesService.issueKitItem(dto);
+  }
+
+  @Get('kit/:studentFeeId')
+  @Permissions(Permission.FEES_READ)
+  getStudentKitIssues(@Param('studentFeeId') studentFeeId: string) {
+    return this.feesService.getStudentKitIssues(studentFeeId);
+  }
+
+  @Delete('kit/:kitIssueId')
+  @Permissions(Permission.FEES_COLLECT)
+  removeKitIssue(@Param('kitIssueId') kitIssueId: string) {
+    return this.feesService.removeKitIssue(kitIssueId);
   }
 
   // ─── REPORTS / DASHBOARD ──────────────────────

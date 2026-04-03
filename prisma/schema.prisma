@@ -453,11 +453,26 @@ model FeeStructure {
 
   customItems  CustomFeeItem[]
   terms        FeeTermTemplate[]
+  kitItems     FeeKitItem[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@unique([standard, academicYear])
+}
+
+// Kit items mapped from POS to a fee structure's book/kit fee
+model FeeKitItem {
+  id              String       @id @default(uuid())
+  feeStructureId  String
+  storeItemId     String
+  quantity        Int          @default(1)
+  amount          Float        // price for this kit item (qty × unit price)
+
+  feeStructure    FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+  storeItem       StoreItem    @relation(fields: [storeItemId], references: [id])
+
+  createdAt       DateTime     @default(now())
 }
 
 // Term-wise breakdown template (auto-generated from structure)
@@ -489,14 +504,35 @@ model StudentFee {
 
   numberOfTerms Int     @default(1)
 
+  // Kit tracking: kitAmount is total of kit items issued from POS
+  kitAmount     Float   @default(0)
+  bookBalance   Float   @default(0)  // bookFee - kitAmount
+
   student       Student @relation(fields: [studentId], references: [id])
   payments      Payment[]
   discounts     Discount[]
   customItems   StudentCustomFeeItem[]
   terms         StudentFeeTerm[]
   paymentLinks  PaymentLink[]
+  kitIssues     StudentKitIssue[]
 
   @@unique([studentId, academicYear])
+}
+
+// Kit items actually issued to a student against their book/kit fee
+model StudentKitIssue {
+  id            String     @id @default(uuid())
+  studentFeeId  String
+  storeItemId   String
+  quantity      Int        @default(1)
+  amount        Float      // actual amount charged for this item
+  issuedDate    DateTime   @default(now())
+  saleId        String?    // linked POS sale if applicable
+
+  studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
+  storeItem     StoreItem  @relation(fields: [storeItemId], references: [id])
+
+  createdAt     DateTime   @default(now())
 }
 
 // Term-wise breakdown per student
@@ -505,9 +541,16 @@ model StudentFeeTerm {
   studentFeeId  String
   termNumber    Int        // 1, 2, 3
   termName      String     // "Term 1", "Term 2"
-  amount        Float      // how much is due this term
+  amount        Float      // how much is due this term (total)
   dueDate       DateTime?
   status        String     @default("PENDING") // PENDING / PARTIAL / PAID
+
+  // Component-wise breakdown per term
+  tuitionAmount    Float   @default(0)
+  transportAmount  Float   @default(0)
+  bookAmount       Float   @default(0)
+  hostelAmount     Float   @default(0)
+  otherAmount      Float   @default(0)
 
   studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
 }
@@ -611,6 +654,12 @@ model StudentTransport {
   stopId        String?
   academicYear  String
   isSplClass    Boolean        @default(false) // if true, charge splClassFee extra
+
+  // Special class date tracking for pro-rata calculation
+  splClassStartDate  DateTime?   // when student started using spl class transport
+  splClassEndDate    DateTime?   // when student stopped (null = still active)
+  splClassDaysUsed   Int?        // actual number of days student used spl class transport
+  totalWorkingDays   Int?        // total working days in the period for pro-rata calc
 
   student       Student        @relation(fields: [studentId], references: [id])
   route         TransportRoute @relation(fields: [routeId], references: [id])
@@ -991,6 +1040,8 @@ model StoreItem {
   transferItems     StockTransferItem[]
   saleItems         SaleItem[]
   teacherFreeItems  TeacherFreeItem[]
+  feeKitItems       FeeKitItem[]
+  studentKitIssues  StudentKitIssue[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

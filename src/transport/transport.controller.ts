@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { TransportService } from './transport.service';
 import { CreateTransportRouteDto, AssignStudentTransportDto } from './dto/transport.dto';
+import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 
@@ -91,5 +92,22 @@ export class TransportController {
   @Permissions(Permission.TRANSPORT_READ)
   getTransportFee(@Param('studentId') studentId: string) {
     return this.transportService.getTransportFeeBreakdown(studentId);
+  }
+
+  // ─── SPECIAL CLASS PRO-RATA ───────────────────
+
+  @Put('spl-class/dates')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  updateSplClassDates(@Body() dto: UpdateSplClassDatesDto) {
+    return this.transportService.updateSplClassDates(dto);
+  }
+
+  @Post('spl-class/stop/:studentId')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  stopSplClass(
+    @Param('studentId') studentId: string,
+    @Body() body: { daysUsed: number; totalWorkingDays: number },
+  ) {
+    return this.transportService.stopSplClass(studentId, body.daysUsed, body.totalWorkingDays);
   }
 }

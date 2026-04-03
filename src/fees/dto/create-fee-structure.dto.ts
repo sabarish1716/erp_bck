@@ -17,6 +17,12 @@ class CustomFeeItemDto {
   @IsNotEmpty() @IsNumber() amount: number;
 }
 
+class KitItemDto {
+  @IsNotEmpty() @IsString() storeItemId: string;
+  @IsOptional() @IsInt() @Min(1) quantity?: number;
+  @IsOptional() @IsNumber() amount?: number; // override price, else uses sellingPrice × qty
+}
+
 class FeeTermTemplateDto {
   @IsNotEmpty() @IsInt() termNumber: number;
   @IsNotEmpty() @IsString() termName: string;
@@ -47,4 +53,10 @@ export class CreateFeeStructureDto {
   @ValidateNested({ each: true })
   @Type(() => FeeTermTemplateDto)
   terms?: FeeTermTemplateDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => KitItemDto)
+  kitItems?: KitItemDto[];
 }
