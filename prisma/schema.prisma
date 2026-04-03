@@ -163,6 +163,9 @@ model Family {
   motherAadhar String?
   motherOccupation String?
 
+  siblingSchool   String?
+otherSchoolName String?
+
   otherWhatsapp String?
   familyIncome  Float?
   siblings      String?

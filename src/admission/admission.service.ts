@@ -257,38 +257,38 @@ async createAdmission(data: CreateAdmissionDto) {
 
       // ✅ FAMILY
       family: data.family
-        ? {
-            create: {
-              fatherName: data.family.fatherName,
-              fatherPhone: data.family.fatherPhone,
-              fatherWhatsapp: data.family.fatherWhatsapp,
-              fatherAadhar: data.family.fatherAadhar,
-              fatherOccupation: data.family.fatherOccupation,
+  ? {
+      create: {
+        fatherName: data.family.fatherName,
+        fatherPhone: data.family.fatherPhone,
+        fatherWhatsapp: data.family.fatherWhatsapp,
+        fatherAadhar: data.family.fatherAadhar,
+        fatherOccupation: data.family.fatherOccupation,
 
-              motherName: data.family.motherName,
-              motherPhone: data.family.motherPhone,
-              motherWhatsapp: data.family.motherWhatsapp,
-              motherAadhar: data.family.motherAadhar,
-              motherOccupation: data.family.motherOccupation,
+        motherName: data.family.motherName,
+        motherPhone: data.family.motherPhone,
+        motherWhatsapp: data.family.motherWhatsapp,
+        motherAadhar: data.family.motherAadhar,
+        motherOccupation: data.family.motherOccupation,
 
-              familyIncome: data.family.familyIncome
-                ? parseFloat(data.family.familyIncome)
-                : null,
-              siblings: data.family.siblings,
-              hostelRequired: data.family.hostelRequired || false,
-            },
-          }
+        familyIncome: data.family.familyIncome
+          ? parseFloat(data.family.familyIncome)
+          : null,
+        siblings: data.family.siblings,
+        hostelRequired: data.family.hostelRequired || false,
+      },
+    }
         : undefined,
 
       // ✅ ADDRESS
       address: data.address
         ? {
             create: {
-              line1: data.address.line1 || 'Pending',
-              line2: data.address.line2,
-              line3: data.address.line3,
-              pin: data.address.pin || '000000',
-            },
+  line1: data.address.doorNo || data.address.line1 || 'Pending',
+  line2: data.address.street || data.address.line2 || '',
+  line3: `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}` || data.address.line3 || '',
+  pin: data.address.pin || '000000',
+}
           }
         : undefined,
 
@@ -610,23 +610,29 @@ async createAdmission(data: CreateAdmissionDto) {
       };
     }
     if (data.address) {
-      updateData.address = {
-        upsert: {
-          update: {
-            line1: data.address.line1 || 'Pending',
-            line2: data.address.line2,
-            line3: data.address.line3,
-            pin: data.address.pin || '000000',
-          },
-          create: {
-            line1: data.address.line1 || 'Pending',
-            line2: data.address.line2,
-            line3: data.address.line3,
-            pin: data.address.pin || '000000',
-          },
-        },
-      };
-    }
+  updateData.address = {
+    upsert: {
+      update: {
+        line1: data.address.doorNo || data.address.line1 || 'Pending',
+        line2: data.address.street || data.address.line2 || '',
+        line3:
+          `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}`.trim() ||
+          data.address.line3 ||
+          '',
+        pin: data.address.pin || '000000',
+      },
+      create: {
+        line1: data.address.doorNo || data.address.line1 || 'Pending',
+        line2: data.address.street || data.address.line2 || '',
+        line3:
+          `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}`.trim() ||
+          data.address.line3 ||
+          '',
+        pin: data.address.pin || '000000',
+      },
+    },
+  };
+}
     if (data.documents) {
         // Helper to normalize slashes
         const normalizePath = (p: string | undefined | null) =>

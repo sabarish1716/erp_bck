@@ -31,15 +31,26 @@ class FamilyDto {
   @IsOptional() familyIncome?: string;
   @IsOptional() @IsString() siblings?: string;
   @IsOptional() @IsBoolean() hostelRequired?: boolean;
+
+  @IsOptional() @IsString() siblingSchool?: string;
+@IsOptional() @IsString() otherSchoolName?: string;
 }
 
 class AddressDto {
+  // 🔥 keep old (required for DB)
   @IsOptional() @IsString() line1?: string;
   @IsOptional() @IsString() line2?: string;
   @IsOptional() @IsString() line3?: string;
+
+  // 🔥 new UI fields
+  @IsOptional() @IsString() doorNo?: string;
+  @IsOptional() @IsString() street?: string;
+  @IsOptional() @IsString() landmark?: string;
+  @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() state?: string;
+
   @IsOptional() @IsString() pin?: string;
 }
-
 class DocumentsDto {
   @IsOptional() @IsBoolean() photo?: boolean;
   @IsOptional()  photoPath?: string;
