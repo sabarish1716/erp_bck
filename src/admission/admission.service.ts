@@ -224,7 +224,7 @@ export class AdmissionService {
     return { total: rows.length, successCount, errorCount, results };
   }
 
-async createAdmission(data: CreateAdmissionDto) {
+async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
   const normalizePath = (p: string | undefined | null) =>
     typeof p === 'string' ? p.replace(/\\/g, '/') : '';
 
@@ -358,30 +358,29 @@ async createAdmission(data: CreateAdmissionDto) {
           : undefined,
 
       // ✅ ADMISSION (auto-generate admission number if not provided or 'AUTO')
-      admission: data.admission
-        ? {
-            create: {
-              admissionNo: (!data.admission.admissionNo || data.admission.admissionNo === 'AUTO')
-                ? await this.generateAdmissionNo()
-                : data.admission.admissionNo,
-              admissionDate: data.admission.admissionDate
-                ? new Date(data.admission.admissionDate)
-                : new Date(),
-              admissionFrom: data.admission.admissionFrom
-                ? new Date(data.admission.admissionFrom)
-                : undefined,  
-              admissionTo: data.admission.admissionTo
-                ? new Date(data.admission.admissionTo)
-                : undefined,
-              standard: toStandardEnum(data.admission.standard || data.standard),
-              staffSignature:
-                data.admission.staffSignaturePath ||
-                data.admission.staffSignature,
-              principalSignature:
-                data.admission.principalSignaturePath ||
-                data.admission.principalSignature,
-            },
-          }
+     admission: data.admission
+  ? {
+      create: {
+        admissionNo: (!data.admission.admissionNo || data.admission.admissionNo === 'AUTO')
+          ? await this.generateAdmissionNo()
+          : data.admission.admissionNo,
+
+        admissionDate: data.admission.admissionDate
+          ? new Date(data.admission.admissionDate)
+          : new Date(),
+
+        standard: toStandardEnum(data.admission.standard || data.standard),
+
+        // 🔥 ADD THIS LINE
+isApproved: user?.permissions?.includes('admission:approve'),staffSignature:
+          data.admission.staffSignaturePath ||
+          data.admission.staffSignature,
+
+        principalSignature:
+          data.admission.principalSignaturePath ||
+          data.admission.principalSignature,
+      },
+    }
         : undefined,
         users: {
           create: {

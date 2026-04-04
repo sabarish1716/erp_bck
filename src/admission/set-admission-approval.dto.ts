@@ -8,4 +8,8 @@ export class SetAdmissionApprovalDto {
   @IsString()
   @MaxLength(250)
   reason?: string;
+
+   @IsOptional()
+  @IsBoolean()
+  admissionNoAutoGenerate?: boolean;
 }

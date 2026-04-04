@@ -35,4 +35,8 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsBoolean()
   enableStaffModule?: boolean;
+
+  @IsOptional()
+@IsBoolean()
+admissionNoAutoGenerate?: boolean;
 }

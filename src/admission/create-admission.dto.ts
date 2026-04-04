@@ -174,4 +174,9 @@ export class CreateAdmissionDto {
   documents?: Record<string, any>;
 
   @IsOptional() @IsString() email?: string;
+
+  // 🔥 ADD THIS HERE
+  @IsOptional()
+  @IsBoolean()
+  autoApprove?: boolean;
 }
