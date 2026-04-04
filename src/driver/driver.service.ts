@@ -5,9 +5,9 @@ import { PrismaService } from '../prisma/prisma.service';
 export class DriverService {
   constructor(private prisma: PrismaService) {}
 
-  create(name: string, email: string) {
+  create(name: string, email: string, phone: string, busId: string) {
     return this.prisma.driver.create({
-      data: { name, email },
+      data: { name, email, phone, busId },
     });
   }
 
