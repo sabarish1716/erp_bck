@@ -11,6 +11,7 @@ import { SetAdmissionApprovalDto } from './set-admission-approval.dto';
 import { PromoteStudentsDto } from './promote-students.dto';
 import { LinkSiblingsDto } from './link-siblings.dto';
 import { UpdateStandardSeatsDto } from './standard-seats.dto';
+import { DemoteIndividualDto } from './demote-individual.dto';
 
 @Controller('admissions')
 export class AdmissionController {
@@ -182,6 +183,12 @@ async create(
       body.academicYear,
       body.newAcademicYear,
     );
+  }
+
+  @Post('demote-individual')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  demoteIndividualStudents(@Body() body: DemoteIndividualDto) {
+    return this.service.demoteIndividualStudents(body.studentIds, body.reason);
   }
 
   @Post('siblings/link')

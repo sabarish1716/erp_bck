@@ -114,7 +114,7 @@ model Student {
   rte               Boolean @default(false)
 
   // Section & Academic Year
-  section           String?  // e.g. "A", "B", "C"
+  section           String?  @default("A")// e.g. "A", "B", "C"
   academicYear      String?  // e.g. "2026-2027"
 
   // 11th/12th higher secondary stream selection
@@ -156,6 +156,8 @@ model Family {
   fatherWhatsapp String?
   fatherAadhar String?
   fatherOccupation String?
+  preferredPhone String?
+  parentsEmail String?
 
   motherName   String?
   motherPhone  String?
@@ -177,7 +179,11 @@ otherSchoolName String?
 model Address {
   id        String @id @default(uuid())
   studentId String @unique
-
+  doorNo    String?
+  street    String?
+  landmark  String?
+  city      String?
+  state     String?
   line1     String
   line2     String?
   line3     String?

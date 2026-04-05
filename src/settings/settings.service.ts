@@ -17,6 +17,7 @@ const DEFAULT_SETTINGS = {
   enableTransportModule: true,
   enableStaffModule: true,
   admissionNoAutoGenerate: true,
+  enableIndividualDemotion: false,
 };
 
 const DEFAULT_FEE_RECEIPT_FIELDS = {
