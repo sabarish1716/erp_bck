@@ -404,15 +404,21 @@ model Staff {
 
 
 model Driver {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  phone     String?
-  deviceId  String?
-  busId     String?
-  bus       Bus?     @relation(fields: [busId], references: [id])
-  locations Location[]
-  createdAt DateTime @default(now())
+  id         String   @id @default(uuid())
+  name       String
+  email      String?  @unique
+  phone      String?
+  deviceId   String?
+  busId      String?
+  licenseNo  String?
+  address    String?
+  bloodGroup String?
+  status     String   @default("ACTIVE") // ACTIVE | INACTIVE
+  bus        Bus?     @relation(fields: [busId], references: [id])
+  locations  Location[]
+  mileages   Mileage[] @relation("DriverMileages")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt @default(now())
 }
 
 model Bus {
@@ -423,6 +429,7 @@ model Bus {
   capacity    Int?
   drivers     Driver[]
   locations   Location[]
+  mileages    Mileage[] @relation("BusMileages")
   route       TransportRoute? @relation("RouteBuses", fields: [routeId], references: [id])
   createdAt   DateTime @default(now())
 }
@@ -445,6 +452,24 @@ model Location {
 
   // prevent duplicates during retry sync
   @@unique([driverId, createdAt])
+}
+
+model Mileage {
+  id          String   @id @default(uuid())
+  busId       String
+  driverId    String
+  odometer    Float
+  snapshotTime DateTime @default(now())
+
+  bus         Bus      @relation("BusMileages", fields: [busId], references: [id])
+  driver      Driver   @relation("DriverMileages", fields: [driverId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([busId])
+  @@index([driverId])
+  @@index([snapshotTime])
 }
 
 model FeeStructure {

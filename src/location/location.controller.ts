@@ -18,6 +18,11 @@ export class LocationController {
   // POST /location
   @Post()
   @Public()
+  /**
+   * Create a location entry.
+   * Note: The driverId field can be the driver's UUID, phone number, or deviceId. If a phone number is sent, it will be resolved to the correct driver.
+   * If no driver is found, an error is thrown. No driver will be created automatically.
+   */
   async create(@Body() dto: CreateLocationDto) {
     return this.locationService.create(dto);
   }

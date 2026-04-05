@@ -49,3 +49,63 @@ export class AssignStudentTransportDto {
   @Type(() => Boolean)
   @IsOptional() @IsBoolean() isSplClass?: boolean;
 }
+
+// ════════════════════════════════════════════════
+// DRIVER MANAGEMENT
+// ════════════════════════════════════════════════
+
+export class CreateDriverDto {
+  @IsNotEmpty() @IsString() name: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() deviceId?: string;
+  @IsOptional() @IsString() busId?: string;
+  @IsOptional() @IsString() licenseNo?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() bloodGroup?: string;
+  @IsOptional() @IsString() status?: string;
+}
+
+export class UpdateDriverDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() deviceId?: string;
+  @IsOptional() @IsString() busId?: string;
+  @IsOptional() @IsString() licenseNo?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsString() bloodGroup?: string;
+  @IsOptional() @IsString() status?: string;
+}
+
+
+// ════════════════════════════════════════════════
+// VEHICLE DRIVER MANAGEMENT
+// ════════════════════════════════════════════════
+
+export class CreateVehicleDriverDto {
+  @IsNotEmpty() @IsString() plateNo: string;
+  @IsNotEmpty() @IsString() driverName: string;
+  @IsNotEmpty() @IsString() driverPhone: string;
+  @IsNotEmpty() @IsString() licenseNo: string;
+}
+
+// ════════════════════════════════════════════════
+// BUS MANAGEMENT
+// ════════════════════════════════════════════════
+
+export class CreateBusDto {
+  @IsNotEmpty() @IsString() number: string;
+  @IsOptional() @IsString() routeName?: string;
+  @IsOptional() @IsString() routeId?: string;
+  @Type(() => Number)
+  @IsOptional() @IsInt() capacity?: number;
+}
+
+export class UpdateBusDto {
+  @IsOptional() @IsString() number?: string;
+  @IsOptional() @IsString() routeName?: string;
+  @IsOptional() @IsString() routeId?: string;
+  @Type(() => Number)
+  @IsOptional() @IsInt() capacity?: number;
+}

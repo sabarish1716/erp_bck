@@ -1,7 +1,15 @@
+
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateTransportRouteDto, AssignStudentTransportDto } from './dto/transport.dto';
+import {
+  CreateTransportRouteDto,
+  AssignStudentTransportDto,
+  CreateDriverDto,
+  UpdateDriverDto,
+  CreateBusDto,
+  UpdateBusDto,
+} from './dto/transport.dto';
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
 
 const DEFAULT_ACADEMIC_YEAR = '2026-2027';
@@ -512,5 +520,386 @@ export class TransportService {
       },
       include: { route: true, stop: true, student: { select: { id: true, name: true, standard: true } } },
     });
+  }
+
+  // ═══════════════════════════════════════════════
+  // DRIVER CRUD
+  // ═══════════════════════════════════════════════
+
+  async createDriver(data: CreateDriverDto) {
+    // If busId not provided but we have a phone, auto-gen deviceId
+    if (!data.deviceId && data.phone) {
+      data.deviceId = data.phone;
+    }
+
+    try {
+      return await this.prisma.driver.create({
+        data: {
+          name: data.name,
+          email: data.email || null,
+          phone: data.phone || null,
+          deviceId: data.deviceId || null,
+          busId: data.busId || null,
+          licenseNo: data.licenseNo || null,
+          address: data.address || null,
+          bloodGroup: data.bloodGroup || null,
+          status: data.status || 'ACTIVE',
+        },
+        include: { bus: { include: { route: true } } },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A driver with this email already exists');
+      }
+      throw error;
+    }
+  }
+
+  async updateDriver(id: string, data: UpdateDriverDto) {
+    const existing = await this.prisma.driver.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Driver not found');
+
+    // Auto-set deviceId to phone if phone changed and no explicit deviceId
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.email !== undefined) updateData.email = data.email || null;
+    if (data.phone !== undefined) {
+      updateData.phone = data.phone || null;
+      if (!data.deviceId && data.phone && (!existing.deviceId || existing.deviceId === existing.phone)) {
+        updateData.deviceId = data.phone;
+      }
+    }
+    if (data.deviceId !== undefined) updateData.deviceId = data.deviceId || null;
+    if (data.busId !== undefined) updateData.busId = data.busId || null;
+    if (data.licenseNo !== undefined) updateData.licenseNo = data.licenseNo || null;
+    if (data.address !== undefined) updateData.address = data.address || null;
+    if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
+    if (data.status !== undefined) updateData.status = data.status;
+
+    try {
+      return await this.prisma.driver.update({
+        where: { id },
+        data: updateData,
+        include: { bus: { include: { route: true } } },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('A driver with this email already exists');
+      }
+      throw error;
+    }
+  }
+
+  async getAllDrivers() {
+    return this.prisma.driver.findMany({
+      include: {
+        bus: { include: { route: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async getDriver(id: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        bus: { include: { route: true } },
+        locations: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    if (!driver) throw new NotFoundException('Driver not found');
+    return driver;
+  }
+
+  async deleteDriver(id: string) {
+    const existing = await this.prisma.driver.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Driver not found');
+
+    // Delete associated locations first
+    await this.prisma.location.deleteMany({ where: { driverId: id } });
+    return this.prisma.driver.delete({ where: { id } });
+  }
+
+  /** Get driver live status — includes latest location, distance to school, in/out geofence */
+  async getDriverLiveStatus(id: string) {
+    const driver = await this.prisma.driver.findUnique({
+      where: { id },
+      include: {
+        bus: { include: { route: true } },
+        locations: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    const lastLocation = driver.locations[0] || null;
+    let distanceToSchool: number | null = null;
+    let insideGeofence = false;
+
+    if (lastLocation) {
+      const schoolLat = Number(process.env.SCHOOL_GEOFENCE_LAT || 11.4648);
+      const schoolLng = Number(process.env.SCHOOL_GEOFENCE_LNG || 77.9264);
+      const radiusM = Number(process.env.SCHOOL_GEOFENCE_RADIUS_M || 250);
+
+      const R = 6371000;
+      const dLat = ((lastLocation.latitude - schoolLat) * Math.PI) / 180;
+      const dLon = ((lastLocation.longitude - schoolLng) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((schoolLat * Math.PI) / 180) *
+          Math.cos((lastLocation.latitude * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      distanceToSchool = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+      insideGeofence = distanceToSchool <= radiusM;
+    }
+
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const isOnline = lastLocation && new Date(lastLocation.createdAt) > fiveMinAgo;
+
+    return {
+      ...driver,
+      lastLocation,
+      distanceToSchoolMeters: distanceToSchool,
+      insideGeofence,
+      isOnline: !!isOnline,
+      trackingStatus: !isOnline ? 'OFFLINE' : insideGeofence ? 'AT_SCHOOL' : 'ON_ROUTE',
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // BUS CRUD
+  // ═══════════════════════════════════════════════
+
+  async createBus(data: CreateBusDto) {
+    return this.prisma.bus.create({
+      data: {
+        number: data.number,
+        routeName: data.routeName || null,
+        routeId: data.routeId || null,
+        capacity: data.capacity || null,
+      },
+      include: { route: true, drivers: true },
+    });
+  }
+
+  async updateBus(id: string, data: UpdateBusDto) {
+    const existing = await this.prisma.bus.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Bus not found');
+
+    return this.prisma.bus.update({
+      where: { id },
+      data: {
+        number: data.number ?? existing.number,
+        routeName: data.routeName ?? existing.routeName,
+        routeId: data.routeId ?? existing.routeId,
+        capacity: data.capacity ?? existing.capacity,
+      },
+      include: { route: true, drivers: true },
+    });
+  }
+
+  async getAllBuses() {
+    return this.prisma.bus.findMany({
+      include: {
+        route: true,
+        drivers: { select: { id: true, name: true, phone: true, status: true } },
+        _count: { select: { locations: true } },
+      },
+      orderBy: { number: 'asc' },
+    });
+  }
+
+  async getBus(id: string) {
+    const bus = await this.prisma.bus.findUnique({
+      where: { id },
+      include: {
+        route: { include: { stops: { orderBy: { stopOrder: 'asc' } } } },
+        drivers: true,
+      },
+    });
+    if (!bus) throw new NotFoundException('Bus not found');
+    return bus;
+  }
+
+  async deleteBus(id: string) {
+    const existing = await this.prisma.bus.findUnique({
+      where: { id },
+      include: { _count: { select: { drivers: true } } },
+    });
+    if (!existing) throw new NotFoundException('Bus not found');
+    if (existing._count.drivers > 0) {
+      throw new BadRequestException('Cannot delete bus — it has assigned drivers. Remove driver assignments first.');
+    }
+
+    await this.prisma.location.deleteMany({ where: { busId: id } });
+    return this.prisma.bus.delete({ where: { id } });
+  }
+
+  /** Assign a driver to a bus */
+  async assignDriverToBus(driverId: string, busId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    const bus = await this.prisma.bus.findUnique({ where: { id: busId } });
+    if (!bus) throw new NotFoundException('Bus not found');
+
+    return this.prisma.driver.update({
+      where: { id: driverId },
+      data: { busId },
+      include: { bus: { include: { route: true } } },
+    });
+  }
+
+  /** Unassign a driver from their bus */
+  async unassignDriverFromBus(driverId: string) {
+    const driver = await this.prisma.driver.findFirst({ where: { phone:driverId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    return this.prisma.driver.update({
+      where: { id: driverId },
+      data: { busId: null },
+      include: { bus: true },
+    });
+  }
+
+
+
+    // ═══════════════════════════════════════════════
+  // VEHICLE-DRIVER MAPPING
+  // ═══════════════════════════════════════════════
+
+  /** Get all vehicle-driver assignments */
+  async getVehicleDriverMappings() {
+    // TODO: Implement actual logic (join Bus and Driver tables)
+    // Example: return all buses with their assigned drivers
+    return this.prisma.bus.findMany({
+      include: {
+        drivers: { select: { id: true, name: true, phone: true, status: true } },
+      },
+      orderBy: { number: 'asc' },
+    });
+  }
+
+  /** Assign a driver to a bus (vehicle-driver mapping) */
+  async assignVehicleDriver(dto: any) {
+    // Accepts: plateNo, driverName, driverPhone, licenseNo
+    const { plateNo, driverName, driverPhone, licenseNo } = dto;
+    if (!plateNo || !driverName || !driverPhone || !licenseNo) {
+      throw new BadRequestException('plateNo, driverName, driverPhone, and licenseNo are required');
+    }
+
+    // Find or create Bus
+    let bus = await this.prisma.bus.findFirst({ where: { number: plateNo } });
+    if (!bus) {
+      bus = await this.prisma.bus.create({ data: { number: plateNo } });
+    }
+
+    // Find or create Driver
+    let driver = await this.prisma.driver.findFirst({
+      where: {
+        name: driverName,
+        phone: driverPhone,
+        licenseNo: licenseNo,
+      },
+    });
+    if (!driver) {
+      driver = await this.prisma.driver.create({
+        data: {
+          name: driverName,
+          phone: driverPhone,
+          licenseNo: licenseNo,
+          busId: bus.id,
+        },
+      });
+    } else {
+      // Assign driver to bus
+      await this.prisma.driver.update({ where: { id: driver.id }, data: { busId: bus.id } });
+    }
+
+    // Return updated driver with bus info
+    return this.prisma.driver.findUnique({
+      where: { id: driver.id },
+      include: { bus: true },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // MILEAGE APIs
+  // ═══════════════════════════════════════════════
+
+
+  /** Create a mileage snapshot for a bus/driver */
+  async createMileageSnapshot(dto: { busId: string; driverId: string; odometer: number; snapshotTime?: string }) {
+    // Accept driverId or driverPhone
+    const bus = await this.prisma.bus.findFirst({ where: { id: dto.busId } });
+    if (!bus) throw new NotFoundException('Bus not found');
+
+    let driverId = dto.driverId;
+    if (!driverId) {
+      const driver = await this.prisma.driver.findFirst({ where: { phone: dto.driverId || dto.driverId } });
+      if (!driver) throw new NotFoundException(`Driver not found for reference: ${dto.driverId || dto.driverId}`);
+      driverId = driver.id;
+    }
+    if (!driverId) throw new BadRequestException('driverId or driverPhone is required');
+
+    const driver = await this.prisma.driver.findFirst({ where: { id: driverId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    if (dto.odometer === undefined || dto.odometer === null || isNaN(Number(dto.odometer))) {
+      throw new BadRequestException('odometer is required and must be a number');
+    }
+
+    const snapshotTime = dto.snapshotTime ? new Date(dto.snapshotTime) : new Date();
+    const mileage = await this.prisma.mileage.create({
+      data: {
+        busId: dto.busId,
+        driverId: driverId,
+        odometer: Number(dto.odometer),
+        snapshotTime,
+      },
+    });
+    return mileage;
+  }
+
+  /** Get daily mileage for a bus */
+  async getDailyMileage(busId: string, date?: string) {
+    // Default to today if no date provided
+    const targetDate = date ? new Date(date) : new Date();
+    const start = new Date(targetDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(targetDate);
+    end.setHours(23, 59, 59, 999);
+
+    // Get all mileage snapshots for the bus on the given day, ordered by time
+    const snapshots = await this.prisma.mileage.findMany({
+      where: {
+        busId,
+        snapshotTime: {
+          gte: start,
+          lte: end,
+        },
+      },
+      orderBy: { snapshotTime: 'asc' },
+    });
+
+    if (snapshots.length === 0) {
+      return { busId, date: start.toISOString().slice(0, 10), mileage: 0, snapshots: [] };
+    }
+
+    // Calculate mileage as the difference between last and first odometer readings
+    const mileage = snapshots[snapshots.length - 1].odometer - snapshots[0].odometer;
+    return {
+      busId,
+      date: start.toISOString().slice(0, 10),
+      mileage,
+      startOdometer: snapshots[0].odometer,
+      endOdometer: snapshots[snapshots.length - 1].odometer,
+      snapshots,
+    };
   }
 }

@@ -74,10 +74,27 @@ export class PosService {
     });
   }
 
-  async getAllStoreItems(category?: string) {
-    const where: any = {};
-    if (category) where.category = category;
-    return this.prisma.storeItem.findMany({ where, orderBy: { name: 'asc' } });
+  async getAllStoreItems(category?: string, storeId?: string) {
+    if (storeId) {
+      // Find all stock entries for this store, include item details
+      const stockItems = await this.prisma.storeStock.findMany({
+        where: { storeId, item: { isActive: true, category: category ? (category as any) : undefined } },
+        include: { item: true }
+      });
+      // Optionally filter by category
+      return category
+        ? stockItems.filter(s => s.item.category === category)
+        : stockItems;
+    } else {
+      // Fallback: all items, optionally by category, only isActive
+      const where: any = { isActive: true };
+      if (category) where.category = category;
+      return this.prisma.storeItem.findMany({
+        where,
+        orderBy: { name: 'asc' },
+        include: { stockItems: { include: { store: true } } }
+      });
+    }
   }
 
   async getStoreItem(id: string) {
@@ -156,11 +173,25 @@ export class PosService {
         });
       }
 
+      let nextInvoice = data.invoiceNo;
+      if (!nextInvoice) {
+        const lastPurchase = await tx.purchase.findFirst({
+          where: { invoiceNo: { startsWith: 'PO-' } },
+          orderBy: { createdAt: 'desc' },
+          select: { invoiceNo: true },
+        });
+        nextInvoice = 'PO-0001';
+        if (lastPurchase?.invoiceNo) {
+          const match = lastPurchase.invoiceNo.match(/PO-(\d+)/);
+          if (match) nextInvoice = `PO-${String(parseInt(match[1], 10) + 1).padStart(4, '0')}`;
+        }
+      }
+
       const purchase = await tx.purchase.create({
         data: {
           supplierId: data.supplierId,
           storeId: data.storeId,
-          invoiceNo: data.invoiceNo,
+          invoiceNo: nextInvoice,
           invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
           receiptImage: data.receiptImage,
           totalAmount,
@@ -175,7 +206,7 @@ export class PosService {
         data: {
           type: 'EXPENSE',
           category: 'PURCHASE',
-          description: `Purchase from ${supplier.name} — Invoice: ${data.invoiceNo || 'N/A'}`,
+          description: `Purchase from ${supplier.name} — Invoice: ${nextInvoice}`,
           amount: totalAmount,
           date: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
           referenceId: purchase.id,
@@ -574,9 +605,9 @@ export class PosService {
     ]);
 
     return {
-      totalIncome: totalIncome._sum.amount || 0,
-      totalExpense: totalExpense._sum.amount || 0,
-      netProfit: (totalIncome._sum.amount || 0) - (totalExpense._sum.amount || 0),
+      totalSales: totalIncome._sum.amount || 0,
+      totalPurchases: totalExpense._sum.amount || 0,
+      profitLoss: (totalIncome._sum.amount || 0) - (totalExpense._sum.amount || 0),
       recentSales,
       lowStockAlerts: lowStock,
     };

@@ -1,0 +1,17 @@
+model Mileage {
+  id          String   @id @default(uuid())
+  busId       String
+  driverId    String
+  odometer    Float
+  snapshotTime DateTime @default(now())
+
+  bus         Bus      @relation(fields: [busId], references: [id])
+  driver      Driver   @relation(fields: [driverId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([busId])
+  @@index([driverId])
+  @@index([snapshotTime])
+}
