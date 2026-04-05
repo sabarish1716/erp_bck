@@ -1119,6 +1119,80 @@ export class FeesService {
     };
   }
 
+  async getSiblingFees(studentId: string) {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { siblingGroupId: true },
+    });
+    if (!student?.siblingGroupId) return [];
+
+    const siblings = await this.prisma.student.findMany({
+      where: {
+        siblingGroupId: student.siblingGroupId,
+        id: { not: studentId },
+      },
+      select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, admission: { select: { admissionNo: true } } },
+    });
+
+    const siblingFees = await this.prisma.studentFee.findMany({
+      where: { studentId: { in: siblings.map((s) => s.id) } },
+      include: {
+        payments: true,
+        terms: {
+          select:{
+            amount: true,
+            id:true,
+            dueDate:true,
+            termName:true,
+            termNumber:true,
+            tuitionAmount:true,
+
+          }
+        },
+        customItems: true,
+        discounts: true,
+      },
+      orderBy: { academicYear: 'desc' },
+    });
+
+    return Promise.all(siblings.map(async (sib) => {
+      const fees = await Promise.all(
+        siblingFees
+          .filter((f) => f.studentId === sib.id)
+          .map(async (fee) => {
+            let terms = fee.terms;
+            // If no terms, fetch from fee structure
+            if (!terms || terms.length === 0) {
+              const structure = await this.prisma.feeStructure.findFirst({
+                where: { standard: sib.standard, academicYear: fee.academicYear },
+                include: { terms: { orderBy: { termNumber: 'asc' } } },
+              });
+              if (structure && structure.terms && structure.terms.length > 0) {
+                // Map structure terms to the expected studentFeeTerm shape
+                terms = structure.terms.map((t) => ({
+                  id: t.id,
+                  status: 'PENDING',
+                  amount: t.amount,
+                  termNumber: t.termNumber,
+                  termName: t.termName,
+                  dueDate: t.dueDate,
+                  tuitionAmount: 0,
+                  transportAmount: 0,
+                  bookAmount: 0,
+                  hostelAmount: 0,
+                  otherAmount: 0,
+                  studentFeeId: fee.id,
+                }));
+              }
+            }
+            const totalPaid = this.getTotalEffectivePaid(fee.payments);
+            return { ...fee, totalPaid, pending: fee.netFee - totalPaid, terms };
+          })
+      );
+      return { ...sib, fees };
+    }));
+  }
+
   async getAllStudentFees(academicYear: string) {
     const fees = await this.prisma.studentFee.findMany({
       where: { academicYear },
@@ -1222,20 +1296,17 @@ export class FeesService {
   // ═══════════════════════════════════════════════
 
   async getAcademicYears() {
-    const structures = await this.prisma.feeStructure.findMany({
+    // Get all distinct academic years from the student table (ignoring nulls)
+    const students = await this.prisma.student.findMany({
       select: { academicYear: true },
-      distinct: ['academicYear'],
-      orderBy: { academicYear: 'desc' },
-    });
-    const studentFees = await this.prisma.studentFee.findMany({
-      select: { academicYear: true },
+      where: { academicYear: { not: null } },
       distinct: ['academicYear'],
     });
-    const allYears = new Set([
-      ...structures.map((s) => s.academicYear),
-      ...studentFees.map((f) => f.academicYear),
-    ]);
-    return Array.from(allYears).sort().reverse();
+    return students
+      .map((s) => s.academicYear)
+      .filter((y): y is string => !!y)
+      .sort()
+      .reverse();
   }
 
   // ═══════════════════════════════════════════════

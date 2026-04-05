@@ -91,6 +91,12 @@ export class FeesController {
     return this.feesService.checkDiscountEligibility(studentId);
   }
 
+  @Get('sibling-fees/:studentId')
+  @Permissions(Permission.FEES_READ)
+  getSiblingFees(@Param('studentId') studentId: string) {
+    return this.feesService.getSiblingFees(studentId);
+  }
+
   @Put('student-fees/:id')
   @Permissions(Permission.FEES_ASSIGN)
   updateStudentFee(@Param('id') id: string, @Body() dto: AssignFeeDto) {

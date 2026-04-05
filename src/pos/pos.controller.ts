@@ -68,8 +68,8 @@ export class PosController {
 
   @Get('items')
   @Permissions(Permission.POS_READ)
-  getAllStoreItems(@Query('category') category?: string) {
-    return this.posService.getAllStoreItems(category);
+  getAllStoreItems(@Query('category') category?: string, @Query('storeId') storeId?: string) {
+    return this.posService.getAllStoreItems(category, storeId);
   }
 
   @Get('items/:id')

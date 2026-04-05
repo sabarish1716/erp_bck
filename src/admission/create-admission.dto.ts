@@ -179,4 +179,14 @@ export class CreateAdmissionDto {
   @IsOptional()
   @IsBoolean()
   autoApprove?: boolean;
+
+  @IsOptional() @IsString() preferredPhone?: string;
+
+  @IsOptional() @IsString() parentsEmail?: string;
+
+  @IsOptional() @IsString() doorNo?: string;
+  @IsOptional() @IsString() street?: string;
+  @IsOptional() @IsString() landmark?: string;
+  @IsOptional() @IsString() city?: string;
+  @IsOptional() @IsString() state?: string;
 }

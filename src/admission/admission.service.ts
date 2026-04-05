@@ -214,7 +214,7 @@ export class AdmissionService {
 
         results.push({ row: i + 1, status: 'success', admissionNo });
       } catch (err) {
-        results.push({ row: i + 1, status: 'error', error: err.message || 'Unknown error' });
+        results.push({ row: i + 1, status: 'error', error: err?.message || 'Unknown error' });
       }
     }
 
@@ -225,6 +225,11 @@ export class AdmissionService {
   }
 
 async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
+  // Fetch admin settings to check if approval is required
+  const settingsRow = await this.prisma.appSetting.findUnique({ where: { key: 'admin.settings' } });
+  const settings = (settingsRow?.value as Record<string, unknown>) || {};
+  const requireApproval = settings.requireApprovalForAdmission === true || settings.requireApprovalForAdmission === 'true';
+
   const normalizePath = (p: string | undefined | null) =>
     typeof p === 'string' ? p.replace(/\\/g, '/') : '';
 
@@ -264,7 +269,8 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
         fatherWhatsapp: data.family.fatherWhatsapp,
         fatherAadhar: data.family.fatherAadhar,
         fatherOccupation: data.family.fatherOccupation,
-
+preferredPhone: data.preferredPhone,
+parentsEmail: data.parentsEmail,
         motherName: data.family.motherName,
         motherPhone: data.family.motherPhone,
         motherWhatsapp: data.family.motherWhatsapp,
@@ -284,6 +290,11 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
       address: data.address
         ? {
             create: {
+               doorNo: data.address.doorNo || data.address.line1 || 'Pending',
+  street: data.address.street || data.address.line2 || '',
+  landmark: data.address.landmark || '',
+  city: data.address.city || '',
+  state: data.address.state || '',
   line1: data.address.doorNo || data.address.line1 || 'Pending',
   line2: data.address.street || data.address.line2 || '',
   line3: `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}` || data.address.line3 || '',
@@ -371,8 +382,11 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
 
         standard: toStandardEnum(data.admission.standard || data.standard),
 
-        // 🔥 ADD THIS LINE
-isApproved: user?.permissions?.includes('admission:approve'),staffSignature:
+        // Approval logic based on settings
+        isApproved: requireApproval
+          ? (user?.permissions?.includes('admission:approve') || false)
+          : true,
+        staffSignature:
           data.admission.staffSignaturePath ||
           data.admission.staffSignature,
 
@@ -417,7 +431,6 @@ isApproved: user?.permissions?.includes('admission:approve'),staffSignature:
           },
         },
         documents: true,
-
         users: {
           select: {
             id: true,
@@ -425,6 +438,10 @@ isApproved: user?.permissions?.includes('admission:approve'),staffSignature:
           },
         },
       },
+      orderBy: [
+        { standard: 'asc' },
+        { name: 'asc' },
+      ],
     });
 
     // Group siblings based on siblingGroupId
@@ -763,7 +780,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
   async getAdmissionDashboard(academicYear?: string) {
     const settingsRow = await this.prisma.appSetting.findUnique({
       where: { key: 'admin.settings' },
-      select: { value: true },
+      select: { value: true }
     });
     const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
     const resolvedAcademicYear =
@@ -781,7 +798,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       ? { admissionDate: { gte: previousDateRange.start, lte: previousDateRange.end } }
       : undefined;
 
-    const [total, approved, pending, byStandard, seatsConfigRaw, previousYearTotal] = await Promise.all([
+    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal] = await Promise.all([
       this.prisma.admission.count({ where }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: true } }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: false } }),
@@ -793,6 +810,9 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       this.prisma.appSetting.findUnique({ where: { key: 'admission.standardSeats' } }),
       previousWhere ? this.prisma.admission.count({ where: previousWhere }) : Promise.resolve(0),
     ]);
+
+    // Sort byStandard by standard ascending
+    const byStandard = [...byStandardRaw].sort((a, b) => String(a.standard).localeCompare(String(b.standard)));
 
     const approvedByStandardRaw = await this.prisma.admission.groupBy({
       by: ['standard'],
@@ -811,7 +831,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     ]);
 
     const seatSummary = [...standards]
-      .sort()
+      .sort((a, b) => String(a).localeCompare(String(b)))
       .map((standard) => {
         const totalSeats = Number(seatMap[standard] || 0);
         const filledSeats = Number(approvedCountMap.get(standard) || 0);
@@ -1170,5 +1190,58 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     });
 
     return { siblingGroupId: groupId, students };
+  }
+
+  async demoteIndividualStudents(studentIds: string[], reason?: string) {
+    const uniqueIds = [...new Set((studentIds || []).filter(Boolean))];
+    if (uniqueIds.length === 0) throw new BadRequestException('No student IDs provided');
+
+    const standardOrder = [
+      'LKG', 'UKG',
+      'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6',
+      'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
+    ];
+
+    const results: any[] = [];
+    for (const sid of uniqueIds) {
+      const student = await this.prisma.student.findUnique({
+        where: { id: sid },
+        select: { id: true, name: true, standard: true },
+      });
+
+      if (!student) {
+        results.push({ id: sid, status: 'error', message: 'Student not found' });
+        continue;
+      }
+
+      const currentStd = student.standard;
+      const idx = standardOrder.indexOf(currentStd);
+
+      if (idx <= 0) {
+        results.push({ id: sid, name: student.name, status: 'error', message: 'Already at lowest standard' });
+        continue;
+      }
+
+      const prevStd = standardOrder[idx - 1] as Standard;
+
+      await this.prisma.$transaction([
+        this.prisma.student.update({
+          where: { id: sid },
+          data: { standard: prevStd },
+        }),
+        this.prisma.admission.update({
+          where: { studentId: sid },
+          data: { standard: prevStd },
+        }),
+      ]);
+
+      results.push({ id: sid, name: student.name, status: 'success', from: currentStd, to: prevStd });
+    }
+
+    return {
+      total: uniqueIds.length,
+      successCount: results.filter((r) => r.status === 'success').length,
+      results,
+    };
   }
 }
