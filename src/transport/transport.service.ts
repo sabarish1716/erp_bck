@@ -870,7 +870,7 @@ export class TransportService {
   /** Create a mileage snapshot for a bus/driver */
   async createMileageSnapshot(dto: any) {
     if (dto.snapshots && Array.isArray(dto.snapshots)) {
-      const results = [];
+          const results: any[] = [];
       for (const snap of dto.snapshots) {
         if (!snap.plateNo || snap.odometer == null) continue;
         
@@ -889,7 +889,7 @@ export class TransportService {
         });
         if (existing) continue;
         
-        const mileage = await this.prisma.mileage.create({
+        const mileage:any = await this.prisma.mileage.create({
           data: {
             busId: bus.id,
             driverId: driverId,
@@ -897,7 +897,7 @@ export class TransportService {
             snapshotTime: new Date()
           }
         });
-        results.push(mileage);
+            results.push(mileage);
       }
       return { success: true, count: results.length };
     }
