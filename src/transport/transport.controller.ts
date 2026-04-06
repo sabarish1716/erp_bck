@@ -43,12 +43,25 @@ export class TransportController {
     return this.transportService.assignVehicleDriver(dto);
   }
 
+  @Delete('vehicle-drivers/:plateNo')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  removeVehicleDriver(@Param('plateNo') plateNo: string) {
+    return this.transportService.removeVehicleDriver(plateNo);
+  }
+
   // ─── MILEAGE APIs ───────────────────────────────────────
 
   @Post('mileage/snapshot')
   @Permissions(Permission.TRANSPORT_ASSIGN)
   createMileageSnapshot(@Body() dto: any) {
     return this.transportService.createMileageSnapshot(dto);
+  }
+
+  @Post('trip-events')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  pushTripEvents(@Body() dto: any) {
+    // Schema for trip events isn't yet created; simply acknowledge receipt
+    return { success: true, count: dto.events?.length || 0 };
   }
 
   @Get('mileage/daily')
