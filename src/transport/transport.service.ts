@@ -775,14 +775,28 @@ export class TransportService {
 
   /** Get all vehicle-driver assignments */
   async getVehicleDriverMappings() {
-    // TODO: Implement actual logic (join Bus and Driver tables)
-    // Example: return all buses with their assigned drivers
-    return this.prisma.bus.findMany({
+    const buses = await this.prisma.bus.findMany({
       include: {
-        drivers: { select: { id: true, name: true, phone: true, status: true } },
+        drivers: { select: { id: true, name: true, phone: true, licenseNo: true, status: true } },
       },
       orderBy: { number: 'asc' },
     });
+    
+    const mappings: any[] = [];
+    for (const bus of buses) {
+      if (bus.number && bus.drivers && bus.drivers.length > 0) {
+        // Return only active drivers or all assigned drivers
+        for (const driver of bus.drivers) {
+          mappings.push({
+            plateNo: bus.number,
+            driverName: driver.name,
+            driverPhone: driver.phone,
+            licenseNo: driver.licenseNo,
+          });
+        }
+      }
+    }
+    return mappings;
   }
 
   /** Assign a driver to a bus (vehicle-driver mapping) */
@@ -828,14 +842,67 @@ export class TransportService {
     });
   }
 
+  /** Remove driver mapping from a bus (vehicle-driver mapping) */
+  async removeVehicleDriver(plateNo: string) {
+    const bus = await this.prisma.bus.findFirst({
+      where: { number: plateNo },
+      include: { drivers: true },
+    });
+    
+    if (bus && bus.drivers.length > 0) {
+      // Unassign all drivers from this bus
+      const updatePromises = bus.drivers.map(driver => 
+        this.prisma.driver.update({
+          where: { id: driver.id },
+          data: { busId: null }
+        })
+      );
+      await Promise.all(updatePromises);
+    }
+    return { success: true, message: `Driver mappings removed for bus ${plateNo}` };
+  }
+
   // ═══════════════════════════════════════════════
   // MILEAGE APIs
   // ═══════════════════════════════════════════════
 
 
   /** Create a mileage snapshot for a bus/driver */
-  async createMileageSnapshot(dto: { busId: string; driverId: string; odometer: number; snapshotTime?: string }) {
-    // Accept driverId or driverPhone
+  async createMileageSnapshot(dto: any) {
+    if (dto.snapshots && Array.isArray(dto.snapshots)) {
+      const results = [];
+      for (const snap of dto.snapshots) {
+        if (!snap.plateNo || snap.odometer == null) continue;
+        
+        // Find bus by plateNo
+        const bus = await this.prisma.bus.findFirst({
+          where: { number: snap.plateNo },
+          include: { drivers: true }
+        });
+        
+        if (!bus || bus.drivers.length === 0) continue; // driverId is required by schema
+        const driverId = bus.drivers[0].id; // Use currently assigned driver
+        
+        // Prevent duplicate odometer spamming
+        const existing = await this.prisma.mileage.findFirst({
+           where: { busId: bus.id, odometer: Number(snap.odometer) }
+        });
+        if (existing) continue;
+        
+        const mileage = await this.prisma.mileage.create({
+          data: {
+            busId: bus.id,
+            driverId: driverId,
+            odometer: Number(snap.odometer),
+            snapshotTime: new Date()
+          }
+        });
+        results.push(mileage);
+      }
+      return { success: true, count: results.length };
+    }
+
+    // Fallback for single object (legacy)
     const bus = await this.prisma.bus.findFirst({ where: { id: dto.busId } });
     if (!bus) throw new NotFoundException('Bus not found');
 
@@ -846,9 +913,6 @@ export class TransportService {
       driverId = driver.id;
     }
     if (!driverId) throw new BadRequestException('driverId or driverPhone is required');
-
-    const driver = await this.prisma.driver.findFirst({ where: { id: driverId } });
-    if (!driver) throw new NotFoundException('Driver not found');
 
     if (dto.odometer === undefined || dto.odometer === null || isNaN(Number(dto.odometer))) {
       throw new BadRequestException('odometer is required and must be a number');
