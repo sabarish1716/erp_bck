@@ -225,6 +225,7 @@ export class TransportService {
   async getAllRoutes() {
     return this.prisma.transportRoute.findMany({
       include: {
+        buses: true,
         stops: { orderBy: { stopOrder: 'asc' } },
         _count: { select: { students: true } },
       },
@@ -310,6 +311,7 @@ export class TransportService {
               routeId: data.routeId,
               stopId: data.stopId || null,
               academicYear,
+              busno: data.busno || null,
               isSplClass: data.isSplClass || false,
               splClassStartDate: data.isSplClass ? new Date() : null,
               splClassEndDate: null,
@@ -328,6 +330,7 @@ export class TransportService {
               routeId: data.routeId,
               stopId: data.stopId || null,
               academicYear,
+              busno: data.busno || null,
               isSplClass: data.isSplClass || false,
               splClassStartDate: data.isSplClass ? new Date() : null,
             },
@@ -426,7 +429,11 @@ export class TransportService {
     const assignments = await this.prisma.studentTransport.findMany({
       where: { academicYear: resolvedAcademicYear },
       include: {
-        route: true,
+        route: {
+          include: {buses:{
+              include: { route: true }
+          } ,stops: { orderBy: { stopOrder: 'asc' } } },
+        },
         stop: true,
         student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
       },
@@ -575,6 +582,13 @@ export class TransportService {
     if (data.address !== undefined) updateData.address = data.address || null;
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
     if (data.status !== undefined) updateData.status = data.status;
+    if(data.route !== undefined) {
+      const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
+      if (bus) {
+        updateData.busId = bus.id;
+      }
+    }
+
 
     try {
       return await this.prisma.driver.update({
@@ -592,9 +606,7 @@ export class TransportService {
 
   async getAllDrivers() {
     return this.prisma.driver.findMany({
-      include: {
-        bus: { include: { route: true } },
-      },
+      include: { bus: { include: { route: true } }, _count: { select: { locations: true } } },
       orderBy: { name: 'asc' },
     });
   }
@@ -955,8 +967,13 @@ export class TransportService {
       return { busId, date: start.toISOString().slice(0, 10), mileage: 0, snapshots: [] };
     }
 
-    // Calculate mileage as the difference between last and first odometer readings
-    const mileage = snapshots[snapshots.length - 1].odometer - snapshots[0].odometer;
+    // Sum only positive deltas between consecutive readings (ignores odometer resets)
+    let mileage = 0;
+    for (let i = 1; i < snapshots.length; i++) {
+      const delta = snapshots[i].odometer - snapshots[i - 1].odometer;
+      if (delta > 0) mileage += delta;
+    }
+    mileage = Math.round(mileage * 100) / 100;
     return {
       busId,
       date: start.toISOString().slice(0, 10),
@@ -965,5 +982,328 @@ export class TransportService {
       endOdometer: snapshots[snapshots.length - 1].odometer,
       snapshots,
     };
+  }
+
+  // ═══════════════════════════════════════════════
+  // TRIP / IGNITION EVENT LOG
+  // ═══════════════════════════════════════════════
+
+  async pushTripEvents(events: any[]) {
+    if (!events || events.length === 0) return { success: true, count: 0 };
+
+    const data = events.map((e) => ({
+      plateNo: e.plateNo || '',
+      deviceId: e.deviceId || '',
+      event: e.event || 'UNKNOWN',
+      driverName: e.driverName || null,
+      latitude: e.latitude != null ? Number(e.latitude) : null,
+      longitude: e.longitude != null ? Number(e.longitude) : null,
+      speed: e.speed != null ? Number(e.speed) : null,
+      odometer: e.odometer != null ? Number(e.odometer) : null,
+    }));
+
+    const result = await this.prisma.vehicleTripLog.createMany({ data });
+    return { success: true, count: result.count };
+  }
+
+  async getTripEvents(params: {
+    plateNo?: string;
+    deviceId?: string;
+    event?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  }) {
+    const where: any = {};
+    if (params.plateNo) where.plateNo = params.plateNo;
+    if (params.deviceId) where.deviceId = params.deviceId;
+    if (params.event) where.event = params.event;
+    if (params.from || params.to) {
+      where.timestamp = {};
+      if (params.from) where.timestamp.gte = new Date(params.from);
+      if (params.to) where.timestamp.lte = new Date(params.to);
+    }
+
+    return this.prisma.vehicleTripLog.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: params.limit || 200,
+    });
+  }
+
+  async getDailyTripSummary(date?: string) {
+    const targetDate = date || new Date().toISOString().slice(0, 10);
+    const startOfDay = new Date(targetDate + 'T00:00:00.000Z');
+    const endOfDay = new Date(targetDate + 'T23:59:59.999Z');
+
+    const events = await this.prisma.vehicleTripLog.findMany({
+      where: {
+        timestamp: { gte: startOfDay, lte: endOfDay },
+      },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    const byPlate: Record<string, any[]> = {};
+    events.forEach((e) => {
+      if (!byPlate[e.plateNo]) byPlate[e.plateNo] = [];
+      byPlate[e.plateNo].push(e);
+    });
+
+    return Object.entries(byPlate).map(([plateNo, evts]) => {
+      const ignOnCount = evts.filter((e) => e.event === 'IGNITION_ON').length;
+      const ignOffCount = evts.filter((e) => e.event === 'IGNITION_OFF').length;
+      const firstIgnOn = evts.find((e) => e.event === 'IGNITION_ON');
+      const lastIgnOff = [...evts].reverse().find((e) => e.event === 'IGNITION_OFF');
+
+      let totalRunningMs = 0;
+      let lastOnTime: Date | null = null;
+      for (const evt of evts) {
+        if (evt.event === 'IGNITION_ON') {
+          lastOnTime = evt.timestamp;
+        } else if (evt.event === 'IGNITION_OFF' && lastOnTime) {
+          totalRunningMs += new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
+          lastOnTime = null;
+        }
+      }
+
+      const startOdometer = firstIgnOn?.odometer ?? null;
+      const endOdometer = lastIgnOff?.odometer ?? evts[evts.length - 1]?.odometer ?? null;
+      const distanceKm = startOdometer != null && endOdometer != null && endOdometer >= startOdometer
+        ? Math.round((endOdometer - startOdometer) * 100) / 100
+        : null;
+
+      return {
+        plateNo,
+        date: targetDate,
+        ignitionOnCount: ignOnCount,
+        ignitionOffCount: ignOffCount,
+        firstStartTime: firstIgnOn?.timestamp || null,
+        lastStopTime: lastIgnOff?.timestamp || null,
+        totalRunningMinutes: Math.round(totalRunningMs / 60000),
+        distanceKm,
+        startOdometer,
+        endOdometer,
+        driverName: firstIgnOn?.driverName || evts[0]?.driverName || null,
+        totalEvents: evts.length,
+        events: evts,
+      };
+    });
+  }
+
+  async getBusReport(plateNo: string, date?: string) {
+    const targetDate = date || new Date().toISOString().slice(0, 10);
+    const startOfDay = new Date(targetDate + 'T00:00:00.000Z');
+    const endOfDay = new Date(targetDate + 'T23:59:59.999Z');
+
+    // Get trip events for the bus
+    const tripEvents = await this.prisma.vehicleTripLog.findMany({
+      where: {
+        plateNo,
+        timestamp: { gte: startOfDay, lte: endOfDay },
+      },
+      orderBy: { timestamp: 'asc' },
+    });
+
+    // Get mileage snapshots for the bus
+    const bus = await this.prisma.bus.findFirst({
+      where: { number: plateNo },
+      include: { drivers: true, route: true },
+    });
+
+    let mileageData: { dailyKm: number; startOdometer: number; endOdometer: number; snapshotCount: number } | null = null;
+    if (bus) {
+      const snapshots = await this.prisma.mileage.findMany({
+        where: {
+          busId: bus.id,
+          snapshotTime: { gte: startOfDay, lte: endOfDay },
+        },
+        orderBy: { snapshotTime: 'asc' },
+      });
+      if (snapshots.length > 0) {
+        // Sum only positive deltas between consecutive readings (ignores odometer resets)
+        let dailyKm = 0;
+        for (let i = 1; i < snapshots.length; i++) {
+          const delta = snapshots[i].odometer - snapshots[i - 1].odometer;
+          if (delta > 0) dailyKm += delta;
+        }
+        mileageData = {
+          dailyKm: Math.round(dailyKm * 100) / 100,
+          startOdometer: snapshots[0].odometer,
+          endOdometer: snapshots[snapshots.length - 1].odometer,
+          snapshotCount: snapshots.length,
+        };
+      }
+    }
+
+    // Compute ignition summary
+    const ignOnEvents = tripEvents.filter(e => e.event === 'IGNITION_ON');
+    const ignOffEvents = tripEvents.filter(e => e.event === 'IGNITION_OFF');
+
+    let totalRunningMs = 0;
+    let lastOnTime: Date | null = null;
+    for (const evt of tripEvents) {
+      if (evt.event === 'IGNITION_ON') lastOnTime = evt.timestamp;
+      else if (evt.event === 'IGNITION_OFF' && lastOnTime) {
+        totalRunningMs += new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
+        lastOnTime = null;
+      }
+    }
+
+    // Driver location history for the selected date
+    let driverLocationHistory: any[] = [];
+    const assignedDriver = bus?.drivers?.[0];
+    if (assignedDriver) {
+      const driverLocations = await this.prisma.location.findMany({
+        where: {
+          driverId: assignedDriver.id,
+          createdAt: { gte: startOfDay, lte: endOfDay },
+        },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          latitude: true,
+          longitude: true,
+          createdAt: true,
+        },
+      });
+      driverLocationHistory = driverLocations;
+    }
+
+    return {
+      plateNo,
+      date: targetDate,
+      bus: bus ? { id: bus.id, number: bus.number, routeName: bus.routeName, capacity: bus.capacity } : null,
+      driver: assignedDriver ? { id: assignedDriver.id, name: assignedDriver.name, phone: assignedDriver.phone } : null,
+      route: bus?.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+      mileage: mileageData,
+      ignitionSummary: {
+        onCount: ignOnEvents.length,
+        offCount: ignOffEvents.length,
+        firstStart: ignOnEvents[0]?.timestamp || null,
+        lastStop: ignOffEvents[ignOffEvents.length - 1]?.timestamp || null,
+        totalRunningMinutes: Math.round(totalRunningMs / 60000),
+      },
+      tripEvents,
+      driverLocationHistory,
+    };
+  }
+
+  // ═══════════════════════════════════════════════
+  // FUEL LOG APIs
+  // ═══════════════════════════════════════════════
+
+  /** Create fuel log from ERP dashboard (authenticated) */
+  async createFuelLog(dto: any) {
+    if (!dto.driverId) throw new BadRequestException('driverId is required');
+    if (dto.odometer == null || isNaN(Number(dto.odometer))) throw new BadRequestException('odometer is required');
+    if (dto.litres == null || isNaN(Number(dto.litres))) throw new BadRequestException('litres is required');
+
+    const driver = await this.prisma.driver.findUnique({
+      where: { id: dto.driverId },
+      include: { bus: true },
+    });
+    if (!driver) throw new NotFoundException('Driver not found');
+
+    return this.prisma.fuelLog.create({
+      data: {
+        driverId: driver.id,
+        busId: driver.busId || dto.busId || null,
+        plateNo: driver.bus?.number || dto.plateNo || null,
+        odometer: Number(dto.odometer),
+        litres: Number(dto.litres),
+        fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
+        totalCost: dto.totalCost != null ? Number(dto.totalCost) : null,
+        note: dto.note || null,
+      },
+    });
+  }
+
+  /** Create fuel log from Flutter driver app (public, resolves driver by phone) */
+  async createFuelLogFromDriver(dto: any) {
+    const driverRef = String(dto.driverId || '').trim();
+    if (!driverRef) throw new BadRequestException('driverId (phone number) is required');
+    if (dto.odometer == null || isNaN(Number(dto.odometer))) throw new BadRequestException('odometer is required');
+    if (dto.litres == null || isNaN(Number(dto.litres))) throw new BadRequestException('litres is required');
+
+    // Find all matching drivers and prefer the one with a bus assigned
+    const candidates = await this.prisma.driver.findMany({
+      where: {
+        OR: [{ id: driverRef }, { phone: driverRef }, { deviceId: driverRef }],
+      },
+      include: { bus: true },
+    });
+    let driver = candidates.find((d) => d.busId) || candidates[0] || null;
+
+    if (!driver) {
+      const refDigits = driverRef.replace(/\D/g, '');
+      if (refDigits.length >= 10) {
+        const allDrivers = await this.prisma.driver.findMany({
+          where: { phone: { not: null } },
+          include: { bus: true },
+        });
+        const target = refDigits.slice(-10);
+        const phoneMatches = allDrivers.filter((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target);
+        driver = phoneMatches.find((d) => d.busId) || phoneMatches[0] || null;
+      }
+    }
+
+    if (!driver) throw new NotFoundException(`Driver not found for: ${driverRef}`);
+
+    return this.prisma.fuelLog.create({
+      data: {
+        driverId: driver.id,
+        busId: driver.busId || null,
+        plateNo: driver.bus?.number || null,
+        odometer: Number(dto.odometer),
+        litres: Number(dto.litres),
+        fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
+        totalCost: dto.totalCost != null ? Number(dto.totalCost) : null,
+        note: dto.note || null,
+        imageUrl: dto.imageUrl || null,
+      },
+    });
+  }
+
+  /** Get fuel logs with optional filters */
+  async getFuelLogs(params: {
+    plateNo?: string;
+    busId?: string;
+    driverId?: string;
+    from?: string;
+    to?: string;
+  }) {
+    const where: any = {};
+    if (params.plateNo) where.plateNo = params.plateNo;
+    if (params.busId) where.busId = params.busId;
+    if (params.driverId) where.driverId = params.driverId;
+    if (params.from || params.to) {
+      where.timestamp = {};
+      if (params.from) where.timestamp.gte = new Date(params.from);
+      if (params.to) where.timestamp.lte = new Date(params.to);
+    }
+
+    const logs = await this.prisma.fuelLog.findMany({
+      where,
+      orderBy: { timestamp: 'desc' },
+      take: 200,
+      include: {
+        driver: { select: { id: true, name: true, phone: true } },
+        bus: { select: { id: true, number: true, routeName: true } },
+      },
+    });
+
+    // Calculate km/litre between consecutive fuel entries for the same bus
+    const enriched = logs.map((log, idx) => {
+      let kmPerLitre: number | null = null;
+      if (log.plateNo) {
+        const prevLog = logs.slice(idx + 1).find((l) => l.plateNo === log.plateNo);
+        if (prevLog && log.odometer > prevLog.odometer && log.litres > 0) {
+          kmPerLitre = Math.round(((log.odometer - prevLog.odometer) / log.litres) * 100) / 100;
+        }
+      }
+      return { ...log, kmPerLitre };
+    });
+
+    return enriched;
   }
 }

@@ -1,7 +1,7 @@
 import { Body, Controller, Get, Post, Response } from '@nestjs/common';
 import { DriverService } from './driver.service';
 
-@Controller('transport')
+@Controller('transports')
 export class DriverController {
     constructor(private readonly driverService: DriverService) {}
 
@@ -11,10 +11,10 @@ export class DriverController {
     // This controller is currently empty, but can be used for driver-related endpoints in the future.  
 
     // get all drivers
-    @Get('drivers')
-    getAllDrivers() {
-        return  this.driverService.findAll();
-    }
+    // @Get('drivers')
+    // getAllDrivers() {
+    //     return  this.driverService.findAll();
+    // }
     @Post('drivers')
     createDriver(@Response() res: any, @Body() createDriverDto: any) {
 
