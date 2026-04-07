@@ -45,6 +45,7 @@ export class AssignStudentTransportDto {
   @IsNotEmpty() @IsString() studentId: string;
   @IsNotEmpty() @IsString() routeId: string;
   @IsOptional() @IsString() stopId?: string;
+  @IsOptional() @IsString() busno?: string; // optional override if student is on a different bus than the route's main bus
   @IsOptional() @IsString() academicYear?: string;
   @Type(() => Boolean)
   @IsOptional() @IsBoolean() isSplClass?: boolean;
@@ -64,6 +65,7 @@ export class CreateDriverDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() bloodGroup?: string;
   @IsOptional() @IsString() status?: string;
+  @IsOptional()  @IsString()  route?: string; // For assigning a route to the driver
 }
 
 export class UpdateDriverDto {
@@ -76,6 +78,7 @@ export class UpdateDriverDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() bloodGroup?: string;
   @IsOptional() @IsString() status?: string;
+  @IsOptional()  @IsString()  route?: string; // For assigning a route to the driver
 }
 
 

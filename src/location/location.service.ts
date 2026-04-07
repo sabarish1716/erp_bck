@@ -49,12 +49,14 @@ export class LocationService {
       throw new BadRequestException('driverId is required');
     }
 
-    let driver = await this.prisma.driver.findFirst({
+    // Find all matching drivers and prefer the one with a bus assigned
+    const candidates = await this.prisma.driver.findMany({
       where: {
         OR: [{ id: driverRef }, { phone: driverRef }, { deviceId: driverRef }],
       },
       include: { bus: true },
     });
+    let driver = candidates.find((d) => d.busId) || candidates[0] || null;
 
     if (!driver) {
       const refDigits = driverRef.replace(/\D/g, '');
@@ -64,11 +66,9 @@ export class LocationService {
           include: { bus: true },
         });
         const target = refDigits.slice(-10);
-        driver =
-          allDrivers.find((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target) ||
-          null;
+        const phoneMatches = allDrivers.filter((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target);
+        driver = phoneMatches.find((d) => d.busId) || phoneMatches[0] || null;
         if (!driver) {
-          // Log all driver phone numbers and their last 10 digits for troubleshooting
           console.error('[LocationService] No driver matched. Debug phone numbers:');
           allDrivers.forEach((d) => {
             const phone = d.phone || '';
@@ -177,25 +177,7 @@ export class LocationService {
       },
     });
 
-    // Get latest bus locations for all buses assigned to these drivers
-    const busIds = Array.from(new Set(latestCandidates.map(item => item.busId).filter(Boolean)));
-    const latestBusLocationsRaw = await this.prisma.location.findMany({
-      where: {
-        busId: { in: busIds },
-        createdAt: { lte: now, gt: fiveMinutesAgo },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 2000,
-    });
-    // Only keep the latest per bus
-    const seenBus = new Set<string>();
-    const latestBusLocations: Record<string, typeof latestBusLocationsRaw[0]> = {};
-    for (const loc of latestBusLocationsRaw) {
-      if (!loc.busId || seenBus.has(loc.busId)) continue;
-      seenBus.add(loc.busId);
-      latestBusLocations[loc.busId] = loc;
-    }
-
+    // Get latest per driver only
     const seen = new Set<string>();
     const latestPerDriver = [] as typeof latestCandidates;
     for (const item of latestCandidates) {
@@ -203,8 +185,6 @@ export class LocationService {
       seen.add(item.driverId);
       latestPerDriver.push(item);
     }
-
-    const IN_BUS_RADIUS_METERS = 50; // configurable threshold
 
     const drivers = latestPerDriver.map((item) => {
       const distanceToSchool = this.haversineDistanceMeters(
@@ -214,23 +194,9 @@ export class LocationService {
         item.longitude,
       );
 
-      let busLocation: { latitude: number; longitude: number; createdAt: Date } | null = null;
-      let distanceToBus: number | null = null;
-      let inBusStatus: string | null = null;
-      if (item.busId && latestBusLocations[item.busId]) {
-        busLocation = {
-          latitude: latestBusLocations[item.busId].latitude,
-          longitude: latestBusLocations[item.busId].longitude,
-          createdAt: latestBusLocations[item.busId].createdAt,
-        };
-        distanceToBus = this.haversineDistanceMeters(
-          item.latitude,
-          item.longitude,
-          busLocation.latitude,
-          busLocation.longitude,
-        );
-        inBusStatus = distanceToBus <= IN_BUS_RADIUS_METERS ? 'in-bus' : 'outside';
-      }
+      // NOTE: Bus GPS comes from APM hardware tracker (external API), not from
+      // the Location table. The Location table only stores driver app pings.
+      // Bus proximity is calculated on the frontend using live APM data.
 
       return {
         id: item.id,
@@ -242,9 +208,9 @@ export class LocationService {
         driver: item.driver,
         distanceToSchoolMeters: Math.round(distanceToSchool),
         insideSchoolGeofence: distanceToSchool <= geofence.radiusMeters,
-        busLocation,
-        distanceToBusMeters: distanceToBus != null ? Math.round(distanceToBus) : null,
-        driverBusStatus: inBusStatus,
+        busLocation: null,
+        distanceToBusMeters: null,
+        driverBusStatus: null,
       };
     });
 

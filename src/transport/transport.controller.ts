@@ -10,6 +10,8 @@ import {
   Body,
   Param,
   Query,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { TransportService } from './transport.service';
 import {
@@ -23,6 +25,10 @@ import {
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
+import { Public } from '../auth/public.decorator';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @Controller('transport')
 export class TransportController {
@@ -30,7 +36,11 @@ export class TransportController {
 
   // ─── ROUTES ───────────────────────────────────
   // ─── VEHICLE-DRIVER MAPPING ─────────────────────────────
-
+  @Get('drivers')
+  @Permissions(Permission.TRANSPORT_READ)
+  getAllDrivers() {
+    return this.transportService.getAllDrivers();
+  }
   @Get('vehicle-drivers')
   @Permissions(Permission.TRANSPORT_READ)
   getVehicleDriverMappings() {
@@ -60,8 +70,83 @@ export class TransportController {
   @Post('trip-events')
   @Permissions(Permission.TRANSPORT_ASSIGN)
   pushTripEvents(@Body() dto: any) {
-    // Schema for trip events isn't yet created; simply acknowledge receipt
-    return { success: true, count: dto.events?.length || 0 };
+    return this.transportService.pushTripEvents(dto.events || []);
+  }
+
+  @Get('trip-events')
+  @Permissions(Permission.TRANSPORT_READ)
+  getTripEvents(
+    @Query('plateNo') plateNo?: string,
+    @Query('deviceId') deviceId?: string,
+    @Query('event') event?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.transportService.getTripEvents({ plateNo, deviceId, event, from, to, limit: limit ? parseInt(limit) : undefined });
+  }
+
+  @Get('trip-summary')
+  @Permissions(Permission.TRANSPORT_READ)
+  getDailyTripSummary(@Query('date') date?: string) {
+    return this.transportService.getDailyTripSummary(date);
+  }
+
+  @Get('bus-report')
+  @Permissions(Permission.TRANSPORT_READ)
+  getBusReport(@Query('plateNo') plateNo: string, @Query('date') date?: string) {
+    return this.transportService.getBusReport(plateNo, date);
+  }
+
+  // ─── FUEL LOG APIs ──────────────────────────────────────
+
+  @Post('fuel-log')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  createFuelLog(@Body() dto: any) {
+    return this.transportService.createFuelLog(dto);
+  }
+
+  @Get('fuel-logs')
+  @Permissions(Permission.TRANSPORT_READ)
+  getFuelLogs(
+    @Query('plateNo') plateNo?: string,
+    @Query('busId') busId?: string,
+    @Query('driverId') driverId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.transportService.getFuelLogs({ plateNo, busId, driverId, from, to });
+  }
+
+  // Public endpoint for Flutter driver app (no auth token)
+  @Public()
+  @Post('fuel-log/driver')
+  @UseInterceptors(
+    FileInterceptor('image', {
+      storage: diskStorage({
+        destination: './uploads/fuel-logs',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const ext = extname(file.originalname);
+          cb(null, `fuel-${uniqueSuffix}${ext}`);
+        },
+      }),
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+      fileFilter: (req, file, cb) => {
+        if (/^image\/(jpeg|png|jpg|webp)$/.test(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(null, false);
+        }
+      },
+    }),
+  )
+  createFuelLogFromDriver(
+    @Body() dto: any,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : null;
+    return this.transportService.createFuelLogFromDriver({ ...dto, imageUrl });
   }
 
   @Get('mileage/daily')
@@ -176,11 +261,7 @@ export class TransportController {
     return this.transportService.updateDriver(id, dto);
   }
 
-  @Get('drivers')
-  @Permissions(Permission.TRANSPORT_READ)
-  getAllDrivers() {
-    return this.transportService.getAllDrivers();
-  }
+
 
   @Get('drivers/:id')
   @Permissions(Permission.TRANSPORT_READ)
