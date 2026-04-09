@@ -17,11 +17,12 @@ import { HrModule } from './hr/hr.module';
 import { PosModule } from './pos/pos.module';
 import { DocRequestModule } from './doc-request/doc-request.module';
 import { HouseModule } from './house/house.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
 
 @Module({
-  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule],
+  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule, DashboardModule],
   providers: [
     PrismaService,
     UserService,
