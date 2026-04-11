@@ -192,7 +192,8 @@ export class TransportController {
     @Body() dto: any,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : null;
+    // Use uploaded file path if present, otherwise use imageUrl from body (Supabase Storage URL)
+    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : (dto.imageUrl || null);
     return this.transportService.createFuelLogFromDriver({ ...dto, imageUrl });
   }
 
