@@ -2,6 +2,7 @@
 import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { SupabaseService } from '../supabase/supabase.service';
 import {
   CreateTransportRouteDto,
   AssignStudentTransportDto,
@@ -127,7 +128,10 @@ type FuelMileageEntry = FuelLogWithRelations & {
 
 @Injectable()
 export class TransportService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private supabase: SupabaseService,
+  ) {}
 
   private async buildWorkbookBuffer(workbook: ExcelJS.Workbook) {
     const buffer = await workbook.xlsx.writeBuffer();
@@ -1035,26 +1039,94 @@ export class TransportService {
   async assignDriverToBus(driverId: string, busId: string) {
     const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
     if (!driver) throw new NotFoundException('Driver not found');
-    const bus = await this.prisma.bus.findUnique({ where: { id: busId } });
+    const bus = await this.prisma.bus.findUnique({ where: { id: busId }, include: { route: true } });
     if (!bus) throw new NotFoundException('Bus not found');
 
-    return this.prisma.driver.update({
+    const updated = await this.prisma.driver.update({
       where: { id: driverId },
       data: { busId },
       include: { bus: { include: { route: true } } },
     });
+
+    // Sync driver status to Supabase
+    if (this.supabase) {
+      this.supabase.syncDriverStatus({
+        driverId: driver.id,
+        name: driver.name,
+        phone: driver.phone || undefined,
+        busId,
+        status: driver.status,
+      });
+    }
+
+    return updated;
+  }
+
+  /** Assign a driver to a route — auto-assigns the route's bus */
+  async assignDriverToRoute(driverId: string, routeId: string) {
+    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    if (!driver) throw new NotFoundException('Driver not found');
+    
+    const route = await this.prisma.transportRoute.findUnique({
+      where: { id: routeId },
+      include: { buses: true },
+    });
+    if (!route) throw new NotFoundException('Route not found');
+    
+    if (!route.buses || route.buses.length === 0) {
+      throw new BadRequestException(`Route "${route.routeName}" has no buses assigned. Create a bus for this route first.`);
+    }
+
+    // Assign driver to the first available bus on the route
+    const targetBus = route.buses[0];
+    
+    const updated = await this.prisma.driver.update({
+      where: { id: driverId },
+      data: { busId: targetBus.id },
+      include: { bus: { include: { route: true } } },
+    });
+
+    // Sync to Supabase
+    if (this.supabase) {
+      this.supabase.syncDriverStatus({
+        driverId: driver.id,
+        name: driver.name,
+        phone: driver.phone || undefined,
+        busId: targetBus.id,
+        status: driver.status,
+      });
+    }
+
+    return updated;
   }
 
   /** Unassign a driver from their bus */
   async unassignDriverFromBus(driverId: string) {
-    const driver = await this.prisma.driver.findFirst({ where: { phone:driverId } });
+    // Try finding by ID first, then by phone
+    let driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    if (!driver) {
+      driver = await this.prisma.driver.findFirst({ where: { phone: driverId } });
+    }
     if (!driver) throw new NotFoundException('Driver not found');
 
-    return this.prisma.driver.update({
-      where: { id: driverId },
+    const updated = await this.prisma.driver.update({
+      where: { id: driver.id },
       data: { busId: null },
       include: { bus: true },
     });
+
+    // Sync to Supabase — driver removed from bus
+    if (this.supabase) {
+      this.supabase.syncDriverStatus({
+        driverId: driver.id,
+        name: driver.name,
+        phone: driver.phone || undefined,
+        busId: undefined,
+        status: driver.status,
+      });
+    }
+
+    return updated;
   }
 
 

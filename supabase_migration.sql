@@ -1,0 +1,69 @@
+-- =====================================================
+-- Supabase Tables for Driver Tracker
+-- Run this in your Supabase SQL Editor
+-- =====================================================
+
+-- 1. Driver Locations — stores real-time GPS pings from driver app
+CREATE TABLE IF NOT EXISTS driver_locations (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  driver_id TEXT NOT NULL,
+  bus_id TEXT,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  speed DOUBLE PRECISION,
+  mileage_km DOUBLE PRECISION DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_driver_locations_driver ON driver_locations (driver_id);
+CREATE INDEX idx_driver_locations_created ON driver_locations (created_at DESC);
+CREATE INDEX idx_driver_locations_bus ON driver_locations (bus_id);
+
+-- 2. Driver Mileage — daily accumulated GPS mileage per driver
+CREATE TABLE IF NOT EXISTS driver_mileage (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  driver_id TEXT NOT NULL,
+  bus_id TEXT,
+  total_km DOUBLE PRECISION NOT NULL DEFAULT 0,
+  date DATE NOT NULL,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (driver_id, date)
+);
+
+CREATE INDEX idx_driver_mileage_driver ON driver_mileage (driver_id);
+CREATE INDEX idx_driver_mileage_date ON driver_mileage (date);
+
+-- 3. Drivers — synced driver status for real-time dashboard
+CREATE TABLE IF NOT EXISTS drivers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  driver_id TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  phone TEXT,
+  bus_id TEXT,
+  status TEXT DEFAULT 'ACTIVE',
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_drivers_driver_id ON drivers (driver_id);
+CREATE INDEX idx_drivers_phone ON drivers (phone);
+
+-- 4. Enable Row Level Security (RLS) — allow public inserts from Flutter app
+ALTER TABLE driver_locations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE driver_mileage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drivers ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow inserts from anon/authenticated users
+CREATE POLICY "Allow insert driver_locations" ON driver_locations FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow select driver_locations" ON driver_locations FOR SELECT USING (true);
+
+CREATE POLICY "Allow insert driver_mileage" ON driver_mileage FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update driver_mileage" ON driver_mileage FOR UPDATE USING (true);
+CREATE POLICY "Allow select driver_mileage" ON driver_mileage FOR SELECT USING (true);
+
+CREATE POLICY "Allow insert drivers" ON drivers FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow update drivers" ON drivers FOR UPDATE USING (true);
+CREATE POLICY "Allow select drivers" ON drivers FOR SELECT USING (true);
+
+-- 5. Enable Realtime on location table for live tracking
+ALTER PUBLICATION supabase_realtime ADD TABLE driver_locations;
+ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
