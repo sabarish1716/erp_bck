@@ -256,7 +256,109 @@ Payload:
   "designation": "Teacher",
   "password": "secret123"
 }
+
+## Transport manager frontend scope
+
+This repository only contains the backend. Frontend menu and route guard code must be implemented in the frontend app.
+
+Use `GET /erp/api/auth/me` and the returned `role` plus `permissions` to restrict the UI for `TRANSPORT_MANAGER`.
+
+Expected frontend behavior for `TRANSPORT_MANAGER`:
+
+- Show only `Dashboard` and `Transport` in the main menu.
+- Hide Admission, Fees, Staff, HR, POS, Settings, House, and other module menus.
+- Allow routes only when the user has `transport:dashboard`, `transport:read`, `transport:assign`, `transport:route:create`, `transport:route:update`, `transport:route:delete`, or `location:read` as needed.
+- Redirect any blocked route to the transport dashboard.
+
+Recommended route mapping:
+
+- `Dashboard` -> `GET /erp/api/transport/dashboard`
+- `Transport` -> transport routes, buses, drivers, assignments, fuel, mileage
+
+## Transport managers list
+
+Endpoint:
+
+```http
+GET /erp/api/staff/transport-managers
 ```
+
+Response shape:
+
+```json
+[
+  {
+    "id": "staff-id",
+    "employeeId": "EMP0010",
+    "name": "Transport Lead",
+    "email": "transport.manager@example.com",
+    "designation": "Transport Manager",
+    "isActive": true,
+    "user": {
+      "id": 12,
+      "email": "transport.manager@example.com",
+      "role": "TRANSPORT_MANAGER",
+      "isActive": true
+    }
+  }
+]
+```
+
+## Individual bus fuel report
+
+Endpoint:
+
+```http
+GET /erp/api/transport/buses/:id/fuel-report?from=2026-04-01&to=2026-04-10
+```
+
+Notes:
+
+- `from` and `to` are optional.
+- If omitted, the backend defaults to the current day.
+- Response includes bus details, summary totals, and detailed fuel logs for that bus only.
+
+Export endpoints:
+
+```http
+GET /erp/api/transport/buses/:id/fuel-report/export/excel?from=2026-04-01&to=2026-04-10
+GET /erp/api/transport/buses/:id/fuel-report/export/pdf?from=2026-04-01&to=2026-04-10
+```
+
+Notes:
+
+- Both endpoints return downloadable files.
+- Excel export returns `.xlsx`.
+- PDF export returns `.pdf`.
+- Frontend should call these URLs directly for download or open them in a new tab.
+
+## Individual bus mileage report
+
+Endpoint:
+
+```http
+GET /erp/api/transport/buses/:id/mileage-report?from=2026-04-01&to=2026-04-10
+```
+
+Notes:
+
+- `from` and `to` are optional.
+- If omitted, the backend defaults to the current day.
+- Response includes bus details, total distance, odometer start and end values, daily breakdown, and mileage snapshots for that bus only.
+
+Export endpoints:
+
+```http
+GET /erp/api/transport/buses/:id/mileage-report/export/excel?from=2026-04-01&to=2026-04-10
+GET /erp/api/transport/buses/:id/mileage-report/export/pdf?from=2026-04-01&to=2026-04-10
+```
+
+Notes:
+
+- Both endpoints return downloadable files.
+- Excel export returns `.xlsx`.
+- PDF export returns `.pdf`.
+- Frontend should call these URLs directly for download or open them in a new tab.
 
 Notes:
 

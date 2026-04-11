@@ -7,6 +7,7 @@ import { Permission } from './permission.enum';
  * ADMIN        – full access to everything
  * PRINCIPAL    – read everything + approve admissions/fee actions; no user management
  * STAFF        – manage admissions, read fees/reports; cannot create fee structures or delete
+ * TRANSPORT_MANAGER – transport-only access, including transport dashboard
  * STUDENT      – read-only access to their own data (admission, fees, transport)
  */
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -30,6 +31,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.FEES_READ,
     Permission.FEES_DASHBOARD,
     // Transport
+    Permission.TRANSPORT_DASHBOARD,
     Permission.TRANSPORT_ROUTE_READ,
     Permission.TRANSPORT_ASSIGN,
     Permission.TRANSPORT_READ,
@@ -90,6 +92,35 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.DOC_REQUEST_READ,
     // House — read only
     Permission.HOUSE_READ,
+  ],
+
+  [Role.TEACHER]: [
+    // Student — read only
+    Permission.STUDENT_READ,
+    // HR — own attendance, leave, permission, payslip
+    Permission.HR_DASHBOARD,
+    Permission.HR_ATTENDANCE_READ,
+    Permission.HR_LEAVE_READ,
+    Permission.HR_LEAVE_MANAGE,
+    Permission.HR_PERMISSION_READ,
+    Permission.HR_PERMISSION_MANAGE,
+    Permission.HR_PAYROLL_READ,
+    // Document Issue — create & view own requests
+    Permission.DOC_REQUEST_CREATE,
+    Permission.DOC_REQUEST_READ,
+    // House — read only
+    Permission.HOUSE_READ,
+  ],
+
+  [Role.TRANSPORT_MANAGER]: [
+    Permission.TRANSPORT_DASHBOARD,
+    Permission.TRANSPORT_ROUTE_CREATE,
+    Permission.TRANSPORT_ROUTE_READ,
+    Permission.TRANSPORT_ROUTE_UPDATE,
+    Permission.TRANSPORT_ROUTE_DELETE,
+    Permission.TRANSPORT_ASSIGN,
+    Permission.TRANSPORT_READ,
+    Permission.LOCATION_READ,
   ],
 
   [Role.STUDENT]: [

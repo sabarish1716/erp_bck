@@ -8,6 +8,20 @@ import { Prisma, Role } from '@prisma/client';
 export class StaffService {
   constructor(private prisma: PrismaService) {}
 
+  private resolveStaffUserRole(role?: Role) {
+    if (!role || role === Role.STAFF) {
+      return Role.STAFF;
+    }
+
+    if (role === Role.TRANSPORT_MANAGER) {
+      return Role.TRANSPORT_MANAGER;
+    }
+
+    throw new BadRequestException(
+      'Staff users can only be created with STAFF or TRANSPORT_MANAGER role',
+    );
+  }
+
   private async generateEmployeeId(client: Prisma.TransactionClient | PrismaService = this.prisma) {
     const staffMembers = await client.staff.findMany({
       select: { employeeId: true },
@@ -54,6 +68,7 @@ export class StaffService {
 
     const hashedPassword = await bcrypt.hash(data.password, 10);
     const isActive = data.isActive ?? true;
+    const userRole = this.resolveStaffUserRole(data.role);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -86,7 +101,8 @@ export class StaffService {
             name: data.name,
             email: data.email,
             password: hashedPassword,
-            role: Role.STAFF,
+            role: userRole,
+            staffId: staff.id,
             isActive,
           },
         });
@@ -105,6 +121,53 @@ export class StaffService {
     });
   }
 
+  async findTransportManagers() {
+    const transportManagerUsers = await this.prisma.user.findMany({
+      where: {
+        role: Role.TRANSPORT_MANAGER,
+        staffId: { not: null },
+      },
+      select: {
+        id: true,
+        staffId: true,
+        role: true,
+        isActive: true,
+        email: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const staffIds = transportManagerUsers
+      .map((user) => user.staffId)
+      .filter((staffId): staffId is string => Boolean(staffId));
+
+    if (staffIds.length === 0) {
+      return [];
+    }
+
+    const staffMembers = await this.prisma.staff.findMany({
+      where: { id: { in: staffIds } },
+      include: { children: { select: { id: true, name: true, standard: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const usersByStaffId = new Map(
+      transportManagerUsers.map((user) => [user.staffId, user]),
+    );
+
+    return staffMembers.map((staff) => ({
+      ...staff,
+      user: usersByStaffId.get(staff.id)
+        ? {
+            id: usersByStaffId.get(staff.id)!.id,
+            email: usersByStaffId.get(staff.id)!.email,
+            role: usersByStaffId.get(staff.id)!.role,
+            isActive: usersByStaffId.get(staff.id)!.isActive,
+          }
+        : null,
+    }));
+  }
+
   async findOne(id: string) {
     const staff = await this.prisma.staff.findUnique({
       where: { id },
@@ -121,6 +184,7 @@ export class StaffService {
     const hashedPassword = data.password
       ? await bcrypt.hash(data.password, 10)
       : undefined;
+    const userRole = this.resolveStaffUserRole(data.role);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -155,6 +219,8 @@ export class StaffService {
             data: {
               name: data.name,
               email: data.email,
+              role: userRole,
+              staffId: staff.id,
               isActive: data.isActive,
               ...(hashedPassword ? { password: hashedPassword } : {}),
             },
@@ -165,7 +231,8 @@ export class StaffService {
               name: data.name,
               email: data.email,
               password: hashedPassword ?? (await bcrypt.hash('changeme123', 10)),
-              role: Role.STAFF,
+              role: userRole,
+              staffId: staff.id,
               isActive: data.isActive ?? true,
             },
           });
