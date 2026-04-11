@@ -64,6 +64,33 @@ CREATE POLICY "Allow insert drivers" ON drivers FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow update drivers" ON drivers FOR UPDATE USING (true);
 CREATE POLICY "Allow select drivers" ON drivers FOR SELECT USING (true);
 
--- 5. Enable Realtime on location table for live tracking
+-- 5. Fuel Logs — synced from driver app and backend
+CREATE TABLE IF NOT EXISTS fuel_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  driver_id TEXT NOT NULL,
+  bus_id TEXT,
+  plate_no TEXT,
+  odometer DOUBLE PRECISION NOT NULL,
+  litres DOUBLE PRECISION NOT NULL,
+  fuel_cost_per_litre DOUBLE PRECISION,
+  total_cost DOUBLE PRECISION,
+  note TEXT,
+  image_url TEXT,
+  timestamp TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_fuel_logs_driver ON fuel_logs (driver_id);
+CREATE INDEX idx_fuel_logs_bus ON fuel_logs (bus_id);
+CREATE INDEX idx_fuel_logs_timestamp ON fuel_logs (timestamp DESC);
+
+ALTER TABLE fuel_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow insert fuel_logs" ON fuel_logs FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow select fuel_logs" ON fuel_logs FOR SELECT USING (true);
+CREATE POLICY "Allow update fuel_logs" ON fuel_logs FOR UPDATE USING (true);
+
+-- 6. Enable Realtime on location table for live tracking
 ALTER PUBLICATION supabase_realtime ADD TABLE driver_locations;
 ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
+ALTER PUBLICATION supabase_realtime ADD TABLE fuel_logs;

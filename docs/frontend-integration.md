@@ -55,6 +55,21 @@ UI mapping:
 - Use `upcomingMilestones` for the upcoming milestone cards.
 - `admissionProgress.progressPercent` is ready for a progress ring or progress bar.
 
+## Supabase Sync Admin
+
+Admin monitoring endpoints for the queued Supabase worker:
+
+```http
+GET /erp/api/supabase-sync/dashboard?limit=10
+GET /erp/api/supabase-sync/jobs?status=FAILED&type=LOCATION&limit=50&cursor=<jobId>
+```
+
+`dashboard` returns queue depth, counts by status and job type, whether the Supabase client is configured, the oldest pending job, and recent failures.
+
+`jobs` returns a cursor-paged list of sync jobs with payload, attempts, last error, and timestamps. Both endpoints require `settings:read`.
+
+Succeeded sync jobs are automatically purged by a cron cleanup task. Retention defaults to 7 days and can be overridden with `SUPABASE_SYNC_SUCCESS_RETENTION_DAYS`.
+
 ## Promotion
 
 Endpoint:

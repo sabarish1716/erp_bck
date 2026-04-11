@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaService } from './prisma/prisma.service';
 import { UserModule } from './user/user.module';
 import { UserService } from './user/user.service';
@@ -22,7 +23,7 @@ import { JwtAuthGuard } from './auth/jwt.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
 
 @Module({
-  imports: [SupabaseModule, UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule],
+  imports: [ScheduleModule.forRoot(), SupabaseModule, UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule],
   providers: [
     PrismaService,
     UserService,

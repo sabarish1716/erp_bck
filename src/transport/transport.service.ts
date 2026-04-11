@@ -1048,9 +1048,9 @@ export class TransportService {
       include: { bus: { include: { route: true } } },
     });
 
-    // Sync driver status to Supabase
+    // Queue driver status sync for the background worker.
     if (this.supabase) {
-      this.supabase.syncDriverStatus({
+      await this.supabase.enqueueDriverStatusSync({
         driverId: driver.id,
         name: driver.name,
         phone: driver.phone || undefined,
@@ -1086,9 +1086,9 @@ export class TransportService {
       include: { bus: { include: { route: true } } },
     });
 
-    // Sync to Supabase
+    // Queue driver status sync for the background worker.
     if (this.supabase) {
-      this.supabase.syncDriverStatus({
+      await this.supabase.enqueueDriverStatusSync({
         driverId: driver.id,
         name: driver.name,
         phone: driver.phone || undefined,
@@ -1115,9 +1115,9 @@ export class TransportService {
       include: { bus: true },
     });
 
-    // Sync to Supabase — driver removed from bus
+    // Queue driver status sync for the background worker.
     if (this.supabase) {
-      this.supabase.syncDriverStatus({
+      await this.supabase.enqueueDriverStatusSync({
         driverId: driver.id,
         name: driver.name,
         phone: driver.phone || undefined,
@@ -1673,7 +1673,7 @@ export class TransportService {
 
     if (!driver) throw new NotFoundException(`Driver not found for: ${driverRef}`);
 
-    return this.prisma.fuelLog.create({
+    const fuelLog = await this.prisma.fuelLog.create({
       data: {
         driverId: driver.id,
         busId: driver.busId || null,
@@ -1686,6 +1686,23 @@ export class TransportService {
         imageUrl: dto.imageUrl || null,
       },
     });
+
+    // Queue fuel-log sync for the background worker.
+    await this.supabase.enqueueFuelLogSync({
+      fuelLogId: fuelLog.id,
+      driverId: driver.id,
+      busId: driver.busId || undefined,
+      plateNo: driver.bus?.number || undefined,
+      odometer: Number(dto.odometer),
+      litres: Number(dto.litres),
+      fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : undefined,
+      totalCost: dto.totalCost != null ? Number(dto.totalCost) : undefined,
+      note: dto.note || undefined,
+      imageUrl: dto.imageUrl || undefined,
+      timestamp: fuelLog.timestamp.toISOString(),
+    });
+
+    return fuelLog;
   }
 
   /** Get fuel logs with optional filters */

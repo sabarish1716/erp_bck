@@ -121,6 +121,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.TRANSPORT_ASSIGN,
     Permission.TRANSPORT_READ,
     Permission.LOCATION_READ,
+    Permission.ADMISSION_READ
   ],
 
   [Role.STUDENT]: [

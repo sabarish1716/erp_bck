@@ -110,12 +110,14 @@ export class LocationService {
       },
     });
 
-    // Sync to Supabase (non-blocking)
-    this.supabase.syncLocation({
+    // Queue Supabase sync for the background worker.
+    await this.supabase.enqueueLocationSync({
+      locationId: location.id,
       driverId: driver.id,
       busId,
       latitude: dto.latitude,
       longitude: dto.longitude,
+      createdAt: location.createdAt.toISOString(),
     });
 
     return location;
@@ -148,8 +150,8 @@ export class LocationService {
       throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
     }
 
-    // Sync mileage to Supabase
-    this.supabase.syncMileage({
+    // Queue mileage sync for the background worker.
+    await this.supabase.enqueueMileageSync({
       driverId: driver.id,
       busId: driver.busId || undefined,
       totalKm: data.distanceKm,
@@ -158,21 +160,11 @@ export class LocationService {
 
     // If driver has a bus, create a mileage record in local DB too
     if (driver.busId) {
-      // Check if there's an existing snapshot for today
       const today = new Date(data.date);
       const start = new Date(today);
       start.setHours(0, 0, 0, 0);
       const end = new Date(today);
       end.setHours(23, 59, 59, 999);
-
-      const existing = await this.prisma.mileage.findFirst({
-        where: {
-          busId: driver.busId,
-          driverId: driver.id,
-          snapshotTime: { gte: start, lte: end },
-        },
-        orderBy: { snapshotTime: 'desc' },
-      });
 
       // Store as GPS-based mileage snapshot (odometer = accumulated GPS km)
       await this.prisma.mileage.create({
