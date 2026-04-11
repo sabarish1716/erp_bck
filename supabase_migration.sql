@@ -90,7 +90,22 @@ CREATE POLICY "Allow insert fuel_logs" ON fuel_logs FOR INSERT WITH CHECK (true)
 CREATE POLICY "Allow select fuel_logs" ON fuel_logs FOR SELECT USING (true);
 CREATE POLICY "Allow update fuel_logs" ON fuel_logs FOR UPDATE USING (true);
 
--- 6. Enable Realtime on location table for live tracking
+-- 6. Storage bucket for fuel receipt images
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('fuel-receipts', 'fuel-receipts', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Allow anyone to upload to the fuel-receipts bucket
+CREATE POLICY "Allow public upload fuel-receipts"
+ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'fuel-receipts');
+
+-- Allow anyone to read from the fuel-receipts bucket
+CREATE POLICY "Allow public read fuel-receipts"
+ON storage.objects FOR SELECT
+USING (bucket_id = 'fuel-receipts');
+
+-- 7. Enable Realtime on location table for live tracking
 ALTER PUBLICATION supabase_realtime ADD TABLE driver_locations;
 ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
 ALTER PUBLICATION supabase_realtime ADD TABLE fuel_logs;

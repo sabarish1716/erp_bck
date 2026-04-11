@@ -4,6 +4,33 @@ import { Prisma, SyncJobStatus, SyncJobType } from '@prisma/client';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { PrismaService } from '../prisma/prisma.service';
 
+const FUEL_LOG_IMPORT_STATE_KEY = 'supabase.fuelLogImportState';
+
+type FuelLogImportState = {
+  cursorTimestamp?: string;
+  lastRunAt?: string;
+  lastImportedAt?: string;
+  lastImportedCount?: number;
+  lastSkippedCount?: number;
+  lastRepairedCount?: number;
+  lastError?: string | null;
+};
+
+type RemoteFuelLogRow = {
+  id: string;
+  driver_id: string;
+  bus_id: string | null;
+  plate_no: string | null;
+  odometer: number;
+  litres: number;
+  fuel_cost_per_litre: number | null;
+  total_cost: number | null;
+  note: string | null;
+  image_url: string | null;
+  timestamp: string;
+  created_at: string | null;
+};
+
 @Injectable()
 export class SupabaseService implements OnModuleInit {
   private client: SupabaseClient | null = null;
@@ -38,6 +65,302 @@ export class SupabaseService implements OnModuleInit {
     }
 
     return Math.floor(parsed);
+  }
+
+  private getReverseImportLookbackHours(): number {
+    const rawValue = process.env.SUPABASE_FUEL_IMPORT_LOOKBACK_HOURS;
+    const parsed = Number(rawValue);
+
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 72;
+    }
+
+    return Math.floor(parsed);
+  }
+
+  private async getFuelLogImportState(): Promise<FuelLogImportState> {
+    const row = await this.prisma.appSetting.findUnique({
+      where: { key: FUEL_LOG_IMPORT_STATE_KEY },
+      select: { value: true },
+    });
+
+    if (!row || !row.value || typeof row.value !== 'object' || Array.isArray(row.value)) {
+      return {};
+    }
+
+    return row.value as FuelLogImportState;
+  }
+
+  private async updateFuelLogImportState(state: FuelLogImportState) {
+    await this.prisma.appSetting.upsert({
+      where: { key: FUEL_LOG_IMPORT_STATE_KEY },
+      update: { value: state },
+      create: {
+        key: FUEL_LOG_IMPORT_STATE_KEY,
+        value: state,
+      },
+    });
+  }
+
+  private async resolveDriverForImportedFuelLog(driverRef: string) {
+    const trimmedRef = String(driverRef || '').trim();
+    if (!trimmedRef) {
+      return null;
+    }
+
+    let driver = await this.prisma.driver.findFirst({
+      where: {
+        OR: [{ id: trimmedRef }, { phone: trimmedRef }, { deviceId: trimmedRef }],
+      },
+      include: { bus: true },
+    });
+
+    if (!driver) {
+      const refDigits = trimmedRef.replace(/\D/g, '');
+      if (refDigits.length >= 10) {
+        const allDrivers = await this.prisma.driver.findMany({
+          where: { phone: { not: null } },
+          include: { bus: true },
+        });
+        const target = refDigits.slice(-10);
+        const matches = allDrivers.filter(
+          (candidate) => (candidate.phone || '').replace(/\D/g, '').slice(-10) === target,
+        );
+        driver = matches.find((candidate) => candidate.busId) || matches[0] || null;
+      }
+    }
+
+    return driver;
+  }
+
+  private async resolveBusForImportedFuelLog(
+    busId?: string | null,
+    plateNo?: string | null,
+    driver?: { busId?: string | null; bus?: { id: string; number: string } | null } | null,
+    localDriverId?: string,
+  ) {
+    if (busId) {
+      const busById = await this.prisma.bus.findUnique({
+        where: { id: busId },
+        select: { id: true, number: true },
+      });
+      if (busById) {
+        return busById;
+      }
+    }
+
+    if (plateNo) {
+      const busByNumber = await this.prisma.bus.findFirst({
+        where: { number: plateNo },
+        select: { id: true, number: true },
+      });
+      if (busByNumber) {
+        return busByNumber;
+      }
+    }
+
+    if (driver?.busId && driver.bus) {
+      return {
+        id: driver.bus.id,
+        number: driver.bus.number,
+      };
+    }
+
+    if (localDriverId) {
+      const lastMappedLog = await this.prisma.fuelLog.findFirst({
+        where: {
+          driverId: localDriverId,
+          busId: { not: null },
+          plateNo: { not: null },
+        },
+        orderBy: { timestamp: 'desc' },
+        select: { busId: true, plateNo: true },
+      });
+
+      if (lastMappedLog?.busId && lastMappedLog.plateNo) {
+        return {
+          id: lastMappedLog.busId,
+          number: lastMappedLog.plateNo,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private async importRemoteFuelLog(row: RemoteFuelLogRow) {
+    const driver = await this.resolveDriverForImportedFuelLog(row.driver_id);
+    if (!driver) {
+      return { imported: false, skipped: true, reason: 'driver-not-found' };
+    }
+
+    const needsRemoteRepair = !row.bus_id || !row.plate_no;
+
+    const bus = await this.resolveBusForImportedFuelLog(
+      row.bus_id,
+      row.plate_no,
+      driver,
+      driver.id,
+    );
+
+    if (bus && needsRemoteRepair) {
+      const { error } = await this.client!
+        .from('fuel_logs')
+        .update({
+          bus_id: bus.id,
+          plate_no: bus.number,
+        })
+        .eq('id', row.id);
+
+      if (!error) {
+        row = {
+          ...row,
+          bus_id: bus.id,
+          plate_no: bus.number,
+        };
+      }
+    }
+
+    const existingBySourceFingerprint = await this.prisma.fuelLog.findFirst({
+      where: {
+        driverId: row.driver_id,
+        busId: row.bus_id,
+        plateNo: row.plate_no,
+        odometer: row.odometer,
+        litres: row.litres,
+        timestamp: new Date(row.timestamp),
+      },
+      select: { id: true },
+    });
+
+    if (existingBySourceFingerprint) {
+      return {
+        imported: false,
+        skipped: true,
+        repaired: Boolean(bus && needsRemoteRepair),
+        reason: 'already-present-source-fingerprint',
+      };
+    }
+
+    const existingLocal = await this.prisma.fuelLog.findFirst({
+      where: {
+        driverId: driver.id,
+        busId: bus?.id || null,
+        plateNo: bus?.number || row.plate_no || null,
+        odometer: row.odometer,
+        litres: row.litres,
+        timestamp: new Date(row.timestamp),
+      },
+      select: { id: true },
+    });
+
+    if (existingLocal) {
+      return {
+        imported: false,
+        skipped: true,
+        repaired: Boolean(bus && needsRemoteRepair),
+        reason: 'already-present-local-fingerprint',
+      };
+    }
+
+    await this.prisma.fuelLog.create({
+      data: {
+        driverId: driver.id,
+        busId: bus?.id || null,
+        plateNo: bus?.number || row.plate_no || null,
+        odometer: row.odometer,
+        litres: row.litres,
+        fuelCostPerLitre: row.fuel_cost_per_litre,
+        totalCost: row.total_cost,
+        note: row.note,
+        imageUrl: row.image_url,
+        timestamp: new Date(row.timestamp),
+        createdAt: row.created_at ? new Date(row.created_at) : new Date(row.timestamp),
+      },
+    });
+
+    return {
+      imported: true,
+      skipped: false,
+      repaired: Boolean(bus && needsRemoteRepair),
+      reason: null,
+    };
+  }
+
+  async importFuelLogsFromSupabase() {
+    if (!this.client) {
+      return {
+        importedCount: 0,
+        skippedCount: 0,
+        fetchedCount: 0,
+        cursorTimestamp: null,
+        reason: 'client-unavailable',
+      };
+    }
+
+    const previousState = await this.getFuelLogImportState();
+    const defaultCursor = new Date(
+      Date.now() - this.getReverseImportLookbackHours() * 60 * 60 * 1000,
+    ).toISOString();
+    const cursorTimestamp = previousState.cursorTimestamp || defaultCursor;
+
+    const response = await this.client
+      .from('fuel_logs')
+      .select(
+        'id,driver_id,bus_id,plate_no,odometer,litres,fuel_cost_per_litre,total_cost,note,image_url,timestamp,created_at',
+      )
+      .gte('timestamp', cursorTimestamp)
+      .order('timestamp', { ascending: true })
+      .limit(200);
+
+    if (response.error) {
+      const nextState: FuelLogImportState = {
+        ...previousState,
+        lastRunAt: new Date().toISOString(),
+        lastError: response.error.message,
+      };
+      await this.updateFuelLogImportState(nextState);
+      throw new Error(response.error.message);
+    }
+
+    const rows = (response.data || []) as RemoteFuelLogRow[];
+    let importedCount = 0;
+    let skippedCount = 0;
+    let repairedCount = 0;
+
+    for (const row of rows) {
+      const result = await this.importRemoteFuelLog(row);
+      if (result.imported) {
+        importedCount += 1;
+      }
+      if (result.skipped) {
+        skippedCount += 1;
+      }
+      if (result.repaired) {
+        repairedCount += 1;
+      }
+    }
+
+    const nextCursor = rows.length > 0 ? rows[rows.length - 1].timestamp : cursorTimestamp;
+    const nextState: FuelLogImportState = {
+      cursorTimestamp: nextCursor,
+      lastRunAt: new Date().toISOString(),
+      lastImportedAt: importedCount > 0 ? new Date().toISOString() : previousState.lastImportedAt,
+      lastImportedCount: importedCount,
+      lastSkippedCount: skippedCount,
+      lastRepairedCount: repairedCount,
+      lastError: null,
+    };
+    await this.updateFuelLogImportState(nextState);
+
+    return {
+      importedCount,
+      skippedCount,
+      repairedCount,
+      fetchedCount: rows.length,
+      cursorTimestamp: nextCursor,
+      reason: null,
+    };
   }
 
   async getSyncDashboard(limit = 10) {
@@ -111,6 +434,7 @@ export class SupabaseService implements OnModuleInit {
     return {
       clientReady: Boolean(this.client),
       retentionDays: this.getSucceededRetentionDays(),
+      fuelLogImportState: await this.getFuelLogImportState(),
       queueDepth: countsByStatus.PENDING + countsByStatus.FAILED + countsByStatus.PROCESSING,
       countsByStatus,
       countsByType,
@@ -333,6 +657,21 @@ export class SupabaseService implements OnModuleInit {
       this.logger.log(
         `Purged ${result.deletedCount} succeeded sync job(s) older than ${result.retentionDays} day(s)`,
       );
+    }
+  }
+
+  @Cron('15 */2 * * * *')
+  async importFuelLogsFromSupabaseCron() {
+    try {
+      const result = await this.importFuelLogsFromSupabase();
+      if (result.importedCount > 0) {
+        this.logger.log(
+          `Imported ${result.importedCount} fuel log(s) from Supabase into PostgreSQL`,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Fuel log reverse import failed: ${message}`);
     }
   }
 

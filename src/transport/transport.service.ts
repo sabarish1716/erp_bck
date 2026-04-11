@@ -1628,7 +1628,7 @@ export class TransportService {
     });
     if (!driver) throw new NotFoundException('Driver not found');
 
-    return this.prisma.fuelLog.create({
+    const fuelLog = await this.prisma.fuelLog.create({
       data: {
         driverId: driver.id,
         busId: driver.busId || dto.busId || null,
@@ -1638,8 +1638,25 @@ export class TransportService {
         fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
         totalCost: dto.totalCost != null ? Number(dto.totalCost) : null,
         note: dto.note || null,
+        imageUrl: dto.imageUrl || null,
       },
     });
+
+    await this.supabase.enqueueFuelLogSync({
+      fuelLogId: fuelLog.id,
+      driverId: driver.id,
+      busId: fuelLog.busId || undefined,
+      plateNo: fuelLog.plateNo || undefined,
+      odometer: fuelLog.odometer,
+      litres: fuelLog.litres,
+      fuelCostPerLitre: fuelLog.fuelCostPerLitre ?? undefined,
+      totalCost: fuelLog.totalCost ?? undefined,
+      note: fuelLog.note || undefined,
+      imageUrl: fuelLog.imageUrl || undefined,
+      timestamp: fuelLog.timestamp.toISOString(),
+    });
+
+    return fuelLog;
   }
 
   /** Create fuel log from Flutter driver app (public, resolves driver by phone) */
@@ -1673,11 +1690,25 @@ export class TransportService {
 
     if (!driver) throw new NotFoundException(`Driver not found for: ${driverRef}`);
 
+    let resolvedBusId = driver.busId || dto.busId || null;
+    let resolvedPlateNo = driver.bus?.number || dto.plateNo || null;
+
+    if (!resolvedBusId && resolvedPlateNo) {
+      const matchedBus = await this.prisma.bus.findFirst({
+        where: { number: resolvedPlateNo },
+        select: { id: true, number: true },
+      });
+      if (matchedBus) {
+        resolvedBusId = matchedBus.id;
+        resolvedPlateNo = matchedBus.number;
+      }
+    }
+
     const fuelLog = await this.prisma.fuelLog.create({
       data: {
         driverId: driver.id,
-        busId: driver.busId || null,
-        plateNo: driver.bus?.number || null,
+        busId: resolvedBusId,
+        plateNo: resolvedPlateNo,
         odometer: Number(dto.odometer),
         litres: Number(dto.litres),
         fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
@@ -1691,8 +1722,8 @@ export class TransportService {
     await this.supabase.enqueueFuelLogSync({
       fuelLogId: fuelLog.id,
       driverId: driver.id,
-      busId: driver.busId || undefined,
-      plateNo: driver.bus?.number || undefined,
+      busId: resolvedBusId || undefined,
+      plateNo: resolvedPlateNo || undefined,
       odometer: Number(dto.odometer),
       litres: Number(dto.litres),
       fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : undefined,
