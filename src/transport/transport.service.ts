@@ -11,8 +11,16 @@ import {
   UpdateBusDto,
 } from './dto/transport.dto';
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
+import * as ExcelJS from 'exceljs';
+import PDFDocument = require('pdfkit');
 
 const DEFAULT_ACADEMIC_YEAR = '2026-2027';
+
+type ExportFile = {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+};
 
 function normalizeAcademicYear(academicYear?: string | null) {
   if (!academicYear) return null;
@@ -61,9 +69,138 @@ function formatStandardLabel(standard?: string | null) {
   return `${ordinal(standardNo)} Standard`;
 }
 
+function getReportDateRange(from?: string, to?: string) {
+  const endBase = to ? new Date(to) : from ? new Date(from) : new Date();
+  const startBase = from ? new Date(from) : new Date(endBase);
+
+  const start = new Date(startBase);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(endBase);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+}
+
+function formatReportDate(value: Date | string | null | undefined) {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toISOString().slice(0, 10);
+}
+
+function formatReportDateTime(value: Date | string | null | undefined) {
+  if (!value) return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return date.toISOString().replace('T', ' ').slice(0, 16);
+}
+
+function formatCurrency(value: number | null | undefined) {
+  return value == null ? '-' : `Rs. ${Number(value).toFixed(2)}`;
+}
+
+function safeFileToken(value: string | null | undefined) {
+  return String(value || 'report')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+}
+
+type FuelLogWithRelations = {
+  id: string;
+  busId: string | null;
+  odometer: number;
+  litres: number;
+  totalCost: number | null;
+  timestamp: Date;
+  note?: string | null;
+  driver?: { id: string; name: string; phone: string | null } | null;
+  bus?: { id: string; number: string; routeName: string | null } | null;
+};
+
+type FuelMileageEntry = FuelLogWithRelations & {
+  previousOdometer: number | null;
+  distanceSincePreviousFill: number | null;
+  kmPerLitre: number | null;
+};
+
 @Injectable()
 export class TransportService {
   constructor(private prisma: PrismaService) {}
+
+  private async buildWorkbookBuffer(workbook: ExcelJS.Workbook) {
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
+  }
+
+  private async buildPdfBuffer(render: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 40, size: 'A4' });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer | Uint8Array) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      render(doc);
+      doc.end();
+    });
+  }
+
+  private writePdfSummarySection(
+    doc: PDFKit.PDFDocument,
+    title: string,
+    summary: Array<{ label: string; value: string | number | null }>,
+  ) {
+    doc.fontSize(12).font('Helvetica-Bold').text(title);
+    doc.moveDown(0.4);
+    doc.fontSize(10).font('Helvetica');
+    summary.forEach((item) => {
+      doc.text(`${item.label}: ${item.value ?? '-'}`);
+    });
+    doc.moveDown();
+  }
+
+  private addPdfTable(
+    doc: PDFKit.PDFDocument,
+    title: string,
+    headers: string[],
+    rows: string[][],
+  ) {
+    doc.fontSize(12).font('Helvetica-Bold').text(title);
+    doc.moveDown(0.4);
+    doc.fontSize(9).font('Helvetica-Bold').text(headers.join(' | '));
+    doc.moveDown(0.2);
+    doc.font('Helvetica');
+
+    rows.forEach((row) => {
+      if (doc.y > 760) {
+        doc.addPage();
+      }
+      doc.text(row.join(' | '));
+    });
+
+    doc.moveDown();
+  }
+
+  private async getBusOrThrow(busId: string) {
+    const bus = await this.prisma.bus.findUnique({
+      where: { id: busId },
+      include: {
+        route: true,
+        drivers: { select: { id: true, name: true, phone: true, status: true } },
+      },
+    });
+
+    if (!bus) {
+      throw new NotFoundException('Bus not found');
+    }
+
+    return bus;
+  }
 
   private async getConfiguredAcademicYear() {
     const settingsRow = await this.prisma.appSetting.findUnique({
@@ -72,6 +209,52 @@ export class TransportService {
     });
     const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
     return normalizeAcademicYear(String(settings.academicYear || '')) || DEFAULT_ACADEMIC_YEAR;
+  }
+
+  private buildFuelMileageEntries(logs: FuelLogWithRelations[]): FuelMileageEntry[] {
+    return logs.map((log, index) => {
+      const previousLog = index > 0 ? logs[index - 1] : null;
+      const distanceSincePreviousFill =
+        previousLog && log.odometer > previousLog.odometer
+          ? Math.round((log.odometer - previousLog.odometer) * 100) / 100
+          : null;
+      const kmPerLitre =
+        distanceSincePreviousFill != null && log.litres > 0
+          ? Math.round((distanceSincePreviousFill / log.litres) * 100) / 100
+          : null;
+
+      return {
+        ...log,
+        previousOdometer: previousLog?.odometer ?? null,
+        distanceSincePreviousFill,
+        kmPerLitre,
+      };
+    });
+  }
+
+  private buildFuelMileageSummary(entries: FuelMileageEntry[]) {
+    const totalDistanceKm = Math.round(
+      entries.reduce((sum, entry) => sum + (entry.distanceSincePreviousFill || 0), 0) * 100,
+    ) / 100;
+    const totalFuelConsumedLitres = Math.round(
+      entries.reduce(
+        (sum, entry) => sum + (entry.distanceSincePreviousFill != null ? entry.litres : 0),
+        0,
+      ) * 100,
+    ) / 100;
+    const averageKmPerLitre =
+      totalDistanceKm > 0 && totalFuelConsumedLitres > 0
+        ? Math.round((totalDistanceKm / totalFuelConsumedLitres) * 100) / 100
+        : null;
+
+    return {
+      totalDistanceKm,
+      totalFuelConsumedLitres,
+      averageKmPerLitre,
+      mileageSegments: entries.filter((entry) => entry.distanceSincePreviousFill != null).length,
+      startOdometer: entries[0]?.odometer ?? null,
+      endOdometer: entries[entries.length - 1]?.odometer ?? null,
+    };
   }
 
   private resolveStudentSummary<T extends { standard?: unknown } & Record<string, any>>(student: T) {
@@ -166,6 +349,101 @@ export class TransportService {
     ]);
 
     return Array.from(academicYears).filter(Boolean).sort().reverse();
+  }
+
+  async getDashboard(academicYear?: string) {
+    const resolvedAcademicYear =
+      normalizeAcademicYear(academicYear) || (await this.getConfiguredAcademicYear());
+    const now = new Date();
+    const startOfDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+    );
+    const endOfDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
+    );
+    const onlineWindowStart = new Date(now.getTime() - 15 * 60 * 1000);
+
+    const [
+      pendingStudents,
+      totalRoutes,
+      totalBuses,
+      totalDrivers,
+      activeDrivers,
+      assignedStudents,
+      onlineBusRows,
+      fuelSummary,
+      tripEventsCount,
+      mileageSnapshotsCount,
+      routes,
+    ] = await Promise.all([
+      this.getPendingTransportStudents(resolvedAcademicYear),
+      this.prisma.transportRoute.count(),
+      this.prisma.bus.count(),
+      this.prisma.driver.count(),
+      this.prisma.driver.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.studentTransport.count({
+        where: { academicYear: resolvedAcademicYear },
+      }),
+      this.prisma.location.findMany({
+        where: { createdAt: { gte: onlineWindowStart } },
+        distinct: ['busId'],
+        select: { busId: true },
+      }),
+      this.prisma.fuelLog.aggregate({
+        where: { timestamp: { gte: startOfDay, lte: endOfDay } },
+        _count: { _all: true },
+        _sum: { litres: true, totalCost: true },
+      }),
+      this.prisma.vehicleTripLog.count({
+        where: { timestamp: { gte: startOfDay, lte: endOfDay } },
+      }),
+      this.prisma.mileage.count({
+        where: { snapshotTime: { gte: startOfDay, lte: endOfDay } },
+      }),
+      this.prisma.transportRoute.findMany({
+        select: {
+          id: true,
+          routeName: true,
+          routeNo: true,
+          _count: {
+            select: {
+              stops: true,
+              buses: true,
+              students: true,
+            },
+          },
+        },
+        orderBy: { routeName: 'asc' },
+      }),
+    ]);
+
+    return {
+      academicYear: resolvedAcademicYear,
+      overview: {
+        totalRoutes,
+        totalBuses,
+        totalDrivers,
+        activeDrivers,
+        assignedStudents,
+        pendingStudents: pendingStudents.total,
+        onlineBuses: onlineBusRows.length,
+      },
+      today: {
+        fuelLogs: fuelSummary._count._all,
+        fuelLitres: fuelSummary._sum.litres ?? 0,
+        fuelCost: fuelSummary._sum.totalCost ?? 0,
+        tripEvents: tripEventsCount,
+        mileageSnapshots: mileageSnapshotsCount,
+      },
+      routes: routes.map((route) => ({
+        id: route.id,
+        routeName: route.routeName,
+        routeNo: route.routeNo,
+        stopsCount: route._count.stops,
+        busesCount: route._count.buses,
+        studentsCount: route._count.students,
+      })),
+    };
   }
 
   // ═══════════════════════════════════════════════
@@ -984,6 +1262,80 @@ export class TransportService {
     };
   }
 
+  async getBusMileageReport(busId: string, from?: string, to?: string) {
+    const bus = await this.getBusOrThrow(busId);
+    const { start, end } = getReportDateRange(from, to);
+
+    const logs = await this.prisma.fuelLog.findMany({
+      where: {
+        busId,
+        timestamp: {
+          gte: start,
+          lte: end,
+        },
+      },
+      orderBy: { timestamp: 'asc' },
+      include: {
+        driver: { select: { id: true, name: true, phone: true } },
+        bus: { select: { id: true, number: true, routeName: true } },
+      },
+    });
+
+    const entries = this.buildFuelMileageEntries(logs);
+    const summaryMetrics = this.buildFuelMileageSummary(entries);
+    const dailyBreakdown = new Map<string, number>();
+    const dailyFuelBreakdown = new Map<string, number>();
+
+    entries.forEach((entry) => {
+      if (entry.distanceSincePreviousFill == null) return;
+
+      const dayKey = entry.timestamp.toISOString().slice(0, 10);
+      dailyBreakdown.set(
+        dayKey,
+        Math.round(((dailyBreakdown.get(dayKey) || 0) + entry.distanceSincePreviousFill) * 100) / 100,
+      );
+      dailyFuelBreakdown.set(
+        dayKey,
+        Math.round(((dailyFuelBreakdown.get(dayKey) || 0) + entry.litres) * 100) / 100,
+      );
+    });
+
+    return {
+      period: {
+        from: start.toISOString(),
+        to: end.toISOString(),
+      },
+      bus: {
+        id: bus.id,
+        number: bus.number,
+        routeName: bus.routeName,
+        capacity: bus.capacity,
+        route: bus.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+        drivers: bus.drivers,
+      },
+      summary: {
+        fuelEntries: entries.length,
+        mileageSegments: summaryMetrics.mileageSegments,
+        totalDistanceKm: summaryMetrics.totalDistanceKm,
+        totalFuelConsumedLitres: summaryMetrics.totalFuelConsumedLitres,
+        averageKmPerLitre: summaryMetrics.averageKmPerLitre,
+        startOdometer: summaryMetrics.startOdometer,
+        endOdometer: summaryMetrics.endOdometer,
+      },
+      dailyBreakdown: Array.from(dailyBreakdown.entries()).map(([date, distanceKm]) => {
+        const litres = dailyFuelBreakdown.get(date) || 0;
+        return {
+          date,
+          distanceKm,
+          litres,
+          averageKmPerLitre:
+            distanceKm > 0 && litres > 0 ? Math.round((distanceKm / litres) * 100) / 100 : null,
+        };
+      }),
+      entries,
+    };
+  }
+
   // ═══════════════════════════════════════════════
   // TRIP / IGNITION EVENT LOG
   // ═══════════════════════════════════════════════
@@ -1305,5 +1657,277 @@ export class TransportService {
     });
 
     return enriched;
+  }
+
+  async getBusFuelReport(busId: string, from?: string, to?: string) {
+    const bus = await this.getBusOrThrow(busId);
+    const { start, end } = getReportDateRange(from, to);
+
+    const logs = await this.prisma.fuelLog.findMany({
+      where: {
+        busId,
+        timestamp: {
+          gte: start,
+          lte: end,
+        },
+      },
+      orderBy: { timestamp: 'asc' },
+      include: {
+        driver: { select: { id: true, name: true, phone: true } },
+        bus: { select: { id: true, number: true, routeName: true } },
+      },
+    });
+
+    const enrichedLogs = this.buildFuelMileageEntries(logs);
+
+    const totalLitres = enrichedLogs.reduce((sum, log) => sum + log.litres, 0);
+    const totalCost = enrichedLogs.reduce((sum, log) => sum + (log.totalCost || 0), 0);
+    const summaryMetrics = this.buildFuelMileageSummary(enrichedLogs);
+
+    return {
+      period: {
+        from: start.toISOString(),
+        to: end.toISOString(),
+      },
+      bus: {
+        id: bus.id,
+        number: bus.number,
+        routeName: bus.routeName,
+        capacity: bus.capacity,
+        route: bus.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+        drivers: bus.drivers,
+      },
+      summary: {
+        fuelEntries: enrichedLogs.length,
+        totalLitres: Math.round(totalLitres * 100) / 100,
+        totalCost: Math.round(totalCost * 100) / 100,
+        totalDistanceKm: summaryMetrics.totalDistanceKm,
+        totalFuelConsumedLitres: summaryMetrics.totalFuelConsumedLitres,
+        averageKmPerLitre: summaryMetrics.averageKmPerLitre,
+        lastOdometer: enrichedLogs[enrichedLogs.length - 1]?.odometer ?? null,
+      },
+      logs: enrichedLogs,
+    };
+  }
+
+  async exportBusFuelReportExcel(busId: string, from?: string, to?: string): Promise<ExportFile> {
+    const report = await this.getBusFuelReport(busId, from, to);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'GitHub Copilot';
+    workbook.created = new Date();
+
+    const summarySheet = workbook.addWorksheet('Summary');
+    summarySheet.columns = [
+      { header: 'Field', key: 'field', width: 28 },
+      { header: 'Value', key: 'value', width: 40 },
+    ];
+    summarySheet.addRows([
+      { field: 'Bus Number', value: report.bus.number },
+      { field: 'Route Name', value: report.bus.routeName || '-' },
+      { field: 'Period From', value: formatReportDateTime(report.period.from) },
+      { field: 'Period To', value: formatReportDateTime(report.period.to) },
+      { field: 'Fuel Entries', value: report.summary.fuelEntries },
+      { field: 'Total Litres', value: report.summary.totalLitres },
+      { field: 'Total Cost', value: report.summary.totalCost },
+      { field: 'Total Distance Km', value: report.summary.totalDistanceKm },
+      { field: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+      { field: 'Last Odometer', value: report.summary.lastOdometer ?? '-' },
+    ]);
+
+    const logsSheet = workbook.addWorksheet('Fuel Logs');
+    logsSheet.columns = [
+      { header: 'Date', key: 'date', width: 22 },
+      { header: 'Driver', key: 'driver', width: 24 },
+      { header: 'Odometer', key: 'odometer', width: 14 },
+      { header: 'Litres', key: 'litres', width: 12 },
+      { header: 'Total Cost', key: 'totalCost', width: 14 },
+      { header: 'Distance Since Previous Fill', key: 'distance', width: 24 },
+      { header: 'Km Per Litre', key: 'kmPerLitre', width: 16 },
+      { header: 'Note', key: 'note', width: 30 },
+    ];
+    logsSheet.addRows(
+      report.logs.map((log) => ({
+        date: formatReportDateTime(log.timestamp),
+        driver: log.driver?.name || '-',
+        odometer: log.odometer,
+        litres: log.litres,
+        totalCost: log.totalCost ?? '-',
+        distance: log.distanceSincePreviousFill ?? '-',
+        kmPerLitre: log.kmPerLitre ?? '-',
+        note: log.note || '-',
+      })),
+    );
+
+    const filename = `${safeFileToken(report.bus.number)}-fuel-report.xlsx`;
+    return {
+      filename,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      content: await this.buildWorkbookBuffer(workbook),
+    };
+  }
+
+  async exportBusFuelReportPdf(busId: string, from?: string, to?: string): Promise<ExportFile> {
+    const report = await this.getBusFuelReport(busId, from, to);
+    const content = await this.buildPdfBuffer((doc) => {
+      doc.fontSize(18).font('Helvetica-Bold').text('Bus Fuel Report');
+      doc.moveDown(0.4);
+      doc.fontSize(10).font('Helvetica').text(`Bus: ${report.bus.number}`);
+      doc.text(`Route: ${report.bus.routeName || '-'}`);
+      doc.text(
+        `Period: ${formatReportDateTime(report.period.from)} to ${formatReportDateTime(report.period.to)}`,
+      );
+      doc.moveDown();
+
+      this.writePdfSummarySection(doc, 'Summary', [
+        { label: 'Fuel Entries', value: report.summary.fuelEntries },
+        { label: 'Total Litres', value: report.summary.totalLitres },
+        { label: 'Total Cost', value: formatCurrency(report.summary.totalCost) },
+        { label: 'Total Distance', value: `${report.summary.totalDistanceKm} km` },
+        { label: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+        { label: 'Last Odometer', value: report.summary.lastOdometer ?? '-' },
+      ]);
+
+      this.addPdfTable(
+        doc,
+        'Fuel Logs',
+        ['Date', 'Driver', 'Odometer', 'Litres', 'Cost', 'Km/L'],
+        report.logs.map((log) => [
+          formatReportDateTime(log.timestamp),
+          log.driver?.name || '-',
+          String(log.odometer),
+          String(log.litres),
+          formatCurrency(log.totalCost),
+          log.kmPerLitre == null ? '-' : String(log.kmPerLitre),
+        ]),
+      );
+    });
+
+    return {
+      filename: `${safeFileToken(report.bus.number)}-fuel-report.pdf`,
+      contentType: 'application/pdf',
+      content,
+    };
+  }
+
+  async exportBusMileageReportExcel(busId: string, from?: string, to?: string): Promise<ExportFile> {
+    const report = await this.getBusMileageReport(busId, from, to);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'GitHub Copilot';
+    workbook.created = new Date();
+
+    const summarySheet = workbook.addWorksheet('Summary');
+    summarySheet.columns = [
+      { header: 'Field', key: 'field', width: 28 },
+      { header: 'Value', key: 'value', width: 40 },
+    ];
+    summarySheet.addRows([
+      { field: 'Bus Number', value: report.bus.number },
+      { field: 'Route Name', value: report.bus.routeName || '-' },
+      { field: 'Period From', value: formatReportDateTime(report.period.from) },
+      { field: 'Period To', value: formatReportDateTime(report.period.to) },
+      { field: 'Fuel Entries', value: report.summary.fuelEntries },
+      { field: 'Mileage Segments', value: report.summary.mileageSegments },
+      { field: 'Total Distance Km', value: report.summary.totalDistanceKm },
+      { field: 'Fuel Used For Mileage', value: report.summary.totalFuelConsumedLitres },
+      { field: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+      { field: 'Start Odometer', value: report.summary.startOdometer ?? '-' },
+      { field: 'End Odometer', value: report.summary.endOdometer ?? '-' },
+    ]);
+
+    const dailySheet = workbook.addWorksheet('Daily Breakdown');
+    dailySheet.columns = [
+      { header: 'Date', key: 'date', width: 18 },
+      { header: 'Distance Km', key: 'distanceKm', width: 16 },
+      { header: 'Litres', key: 'litres', width: 14 },
+      { header: 'Average Km Per Litre', key: 'averageKmPerLitre', width: 20 },
+    ];
+    dailySheet.addRows(report.dailyBreakdown);
+
+    const entriesSheet = workbook.addWorksheet('Fuel Mileage');
+    entriesSheet.columns = [
+      { header: 'Date', key: 'date', width: 22 },
+      { header: 'Driver', key: 'driver', width: 24 },
+      { header: 'Previous Odometer', key: 'previousOdometer', width: 18 },
+      { header: 'Current Odometer', key: 'odometer', width: 18 },
+      { header: 'Distance Km', key: 'distanceKm', width: 14 },
+      { header: 'Litres', key: 'litres', width: 12 },
+      { header: 'Average Km Per Litre', key: 'averageKmPerLitre', width: 20 },
+    ];
+    entriesSheet.addRows(
+      report.entries.map((entry) => ({
+        date: formatReportDateTime(entry.timestamp),
+        driver: entry.driver?.name || '-',
+        previousOdometer: entry.previousOdometer ?? '-',
+        odometer: entry.odometer,
+        distanceKm: entry.distanceSincePreviousFill ?? '-',
+        litres: entry.litres,
+        averageKmPerLitre: entry.kmPerLitre ?? '-',
+      })),
+    );
+
+    return {
+      filename: `${safeFileToken(report.bus.number)}-mileage-report.xlsx`,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      content: await this.buildWorkbookBuffer(workbook),
+    };
+  }
+
+  async exportBusMileageReportPdf(busId: string, from?: string, to?: string): Promise<ExportFile> {
+    const report = await this.getBusMileageReport(busId, from, to);
+    const content = await this.buildPdfBuffer((doc) => {
+      doc.fontSize(18).font('Helvetica-Bold').text('Bus Mileage Report');
+      doc.moveDown(0.4);
+      doc.fontSize(10).font('Helvetica').text(`Bus: ${report.bus.number}`);
+      doc.text(`Route: ${report.bus.routeName || '-'}`);
+      doc.text(
+        `Period: ${formatReportDateTime(report.period.from)} to ${formatReportDateTime(report.period.to)}`,
+      );
+      doc.moveDown();
+
+      this.writePdfSummarySection(doc, 'Summary', [
+        { label: 'Fuel Entries', value: report.summary.fuelEntries },
+        { label: 'Mileage Segments', value: report.summary.mileageSegments },
+        { label: 'Total Distance', value: `${report.summary.totalDistanceKm} km` },
+        { label: 'Fuel Used For Mileage', value: `${report.summary.totalFuelConsumedLitres} L` },
+        { label: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+        { label: 'Start Odometer', value: report.summary.startOdometer ?? '-' },
+        { label: 'End Odometer', value: report.summary.endOdometer ?? '-' },
+      ]);
+
+      this.addPdfTable(
+        doc,
+        'Daily Breakdown',
+        ['Date', 'Distance Km', 'Litres', 'Km/L'],
+        report.dailyBreakdown.map((entry) => [
+          entry.date,
+          String(entry.distanceKm),
+          String(entry.litres),
+          entry.averageKmPerLitre == null ? '-' : String(entry.averageKmPerLitre),
+        ]),
+      );
+
+      this.addPdfTable(
+        doc,
+        'Fuel Mileage Entries',
+        ['Date', 'Driver', 'Prev Odo', 'Odo', 'Distance', 'Litres', 'Km/L'],
+        report.entries.map((entry) => [
+          formatReportDateTime(entry.timestamp),
+          entry.driver?.name || '-',
+          entry.previousOdometer == null ? '-' : String(entry.previousOdometer),
+          String(entry.odometer),
+          entry.distanceSincePreviousFill == null ? '-' : String(entry.distanceSincePreviousFill),
+          String(entry.litres),
+          entry.kmPerLitre == null ? '-' : String(entry.kmPerLitre),
+        ]),
+      );
+    });
+
+    return {
+      filename: `${safeFileToken(report.bus.number)}-mileage-report.pdf`,
+      contentType: 'application/pdf',
+      content,
+    };
   }
 }

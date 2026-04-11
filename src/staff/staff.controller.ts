@@ -34,6 +34,12 @@ export class StaffController {
     return this.staffService.findAll();
   }
 
+  @Get('transport-managers')
+  @Permissions(Permission.STAFF_READ)
+  findTransportManagers() {
+    return this.staffService.findTransportManagers();
+  }
+
   @Get(':id')
   @Permissions(Permission.STAFF_READ)
   findOne(@Param('id') id: string) {

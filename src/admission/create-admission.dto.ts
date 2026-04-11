@@ -32,6 +32,25 @@ class FamilyDto {
   @IsOptional() @IsString() siblings?: string;
   @IsOptional() @IsBoolean() hostelRequired?: boolean;
 
+  // Single parent & guardian
+  @IsOptional() @IsBoolean() isSingleParent?: boolean;
+  @IsOptional() @IsString() guardianName?: string;
+  @IsOptional() @IsString() guardianPhone?: string;
+  @IsOptional() @IsString() guardianWhatsapp?: string;
+  @IsOptional() @IsString() guardianAadhar?: string;
+  @IsOptional() @IsString() guardianOccupation?: string;
+  @IsOptional() @IsString() guardianRelation?: string;
+
+  // Sibling 1 details
+  @IsOptional() @IsString() sibling1Name?: string;
+  @IsOptional() @IsString() sibling1Standard?: string;
+  @IsOptional() @IsString() sibling1School?: string;
+
+  // Sibling 2 details
+  @IsOptional() @IsString() sibling2Name?: string;
+  @IsOptional() @IsString() sibling2Standard?: string;
+  @IsOptional() @IsString() sibling2School?: string;
+
   @IsOptional() @IsString() siblingSchool?: string;
 @IsOptional() @IsString() otherSchoolName?: string;
 }
@@ -72,6 +91,9 @@ class DocumentsDto {
 
   @IsOptional() @IsBoolean() transferCert?: boolean;
   @IsOptional() @IsString() transferCertPath?: string;
+
+  // 3 photos received hard copy checkbox
+  @IsOptional() @IsBoolean() photosReceived?: boolean;
 }
 
 class SubjectMarkDto {
@@ -83,6 +105,7 @@ class SubjectMarkDto {
 
 class AcademicDto {
   @IsOptional() @IsString() examName?: string;       // SSLC / MATRIC / CBSE
+  @IsOptional() @IsString() boardName?: string;       // "State Board" (default) or custom board name
   @IsOptional() @IsString() registerNo?: string;
   @IsOptional() @IsString() monthYear?: string;       // e.g. "March 2024"
   // TOTAL row fields from the qualifying examination table
