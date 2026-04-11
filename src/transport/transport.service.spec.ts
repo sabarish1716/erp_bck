@@ -49,7 +49,7 @@ describe('TransportService', () => {
       },
     };
 
-    service = new TransportService(prisma);
+    service = new TransportService(prisma, { syncLocation: jest.fn(), syncMileage: jest.fn(), syncDriverStatus: jest.fn(), getClient: jest.fn() } as any);
   });
 
   it('returns pending transport students with formatted standard labels', async () => {

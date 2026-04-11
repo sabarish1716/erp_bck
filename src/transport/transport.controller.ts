@@ -409,6 +409,15 @@ export class TransportController {
     return this.transportService.assignDriverToBus(driverId, busId);
   }
 
+  @Patch('drivers/:driverId/assign-route/:routeId')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  assignDriverToRoute(
+    @Param('driverId') driverId: string,
+    @Param('routeId') routeId: string,
+  ) {
+    return this.transportService.assignDriverToRoute(driverId, routeId);
+  }
+
   @Patch('drivers/:driverId/unassign-bus')
   @Permissions(Permission.TRANSPORT_ASSIGN)
   unassignDriverFromBus(@Param('driverId') driverId: string) {

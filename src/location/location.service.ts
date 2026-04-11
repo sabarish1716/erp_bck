@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLocationDto } from './dto/create-location.dto';
+import { SupabaseService } from '../supabase/supabase.service';
 
 @Injectable()
 export class LocationService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private supabase: SupabaseService,
+  ) {}
 
   private toRad(value: number) {
     return (value * Math.PI) / 180;
@@ -96,7 +100,7 @@ export class LocationService {
 
   async create(dto: CreateLocationDto) {
     const { driver, busId } = await this.resolveDriverAndBus(dto);
-    return this.prisma.location.create({
+    const location = await this.prisma.location.create({
       data: {
         latitude: dto.latitude,
         longitude: dto.longitude,
@@ -105,6 +109,83 @@ export class LocationService {
         createdAt: new Date(),
       },
     });
+
+    // Sync to Supabase (non-blocking)
+    this.supabase.syncLocation({
+      driverId: driver.id,
+      busId,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+    });
+
+    return location;
+  }
+
+  async saveMileageFromDriver(data: { driverId: string; distanceKm: number; date: string }) {
+    const driverRef = String(data.driverId || '').trim();
+    
+    // Resolve driver
+    let driver = await this.prisma.driver.findFirst({
+      where: {
+        OR: [{ id: driverRef }, { phone: driverRef }, { deviceId: driverRef }],
+      },
+      include: { bus: true },
+    });
+
+    if (!driver) {
+      const refDigits = driverRef.replace(/\D/g, '');
+      if (refDigits.length >= 10) {
+        const allDrivers = await this.prisma.driver.findMany({
+          where: { phone: { not: null } },
+          include: { bus: true },
+        });
+        const target = refDigits.slice(-10);
+        driver = allDrivers.find((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target) || null;
+      }
+    }
+
+    if (!driver) {
+      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+    }
+
+    // Sync mileage to Supabase
+    this.supabase.syncMileage({
+      driverId: driver.id,
+      busId: driver.busId || undefined,
+      totalKm: data.distanceKm,
+      date: data.date,
+    });
+
+    // If driver has a bus, create a mileage record in local DB too
+    if (driver.busId) {
+      // Check if there's an existing snapshot for today
+      const today = new Date(data.date);
+      const start = new Date(today);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(today);
+      end.setHours(23, 59, 59, 999);
+
+      const existing = await this.prisma.mileage.findFirst({
+        where: {
+          busId: driver.busId,
+          driverId: driver.id,
+          snapshotTime: { gte: start, lte: end },
+        },
+        orderBy: { snapshotTime: 'desc' },
+      });
+
+      // Store as GPS-based mileage snapshot (odometer = accumulated GPS km)
+      await this.prisma.mileage.create({
+        data: {
+          busId: driver.busId,
+          driverId: driver.id,
+          odometer: data.distanceKm,
+          snapshotTime: new Date(),
+        },
+      });
+    }
+
+    return { success: true, driverId: driver.id, distanceKm: data.distanceKm };
   }
 
   async getLatestLocation(driverRef: string) {
