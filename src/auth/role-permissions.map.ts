@@ -121,7 +121,15 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.TRANSPORT_ASSIGN,
     Permission.TRANSPORT_READ,
     Permission.LOCATION_READ,
-    Permission.ADMISSION_READ
+    Permission.ADMISSION_READ,
+    // POS-INCOME-EXPENCE
+    Permission.POS_DASHBOARD,
+    Permission.POS_PURCHASE_READ,
+    Permission.POS_SALE_READ,
+    Permission.POS_SELL,
+    Permission.POS_MANAGE,
+    Permission.POS_READ,
+  
   ],
 
   [Role.STUDENT]: [

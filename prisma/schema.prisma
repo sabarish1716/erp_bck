@@ -103,6 +103,18 @@ enum StaffCategory {
   NON_TEACHING_TRAINEE
 }
 
+enum StaffDocumentType {
+  EXPERIENCE_CERTIFICATE
+  RELIEVING_LETTER
+  APPOINTMENT_LETTER
+  SALARY_SLIP
+  EDUCATION_CERTIFICATE
+  ID_PROOF
+  ADDRESS_PROOF
+  MEDICAL_CERTIFICATE
+  OTHER
+}
+
 enum DiscountType {
   FLAT
   PERCENTAGE
@@ -422,6 +434,11 @@ model Staff {
   bankAccountNo String?
   bankIfsc      String?
   pfJoiningDate DateTime? // Date when PF started
+  city          String?
+  area String?
+  pincode String?
+  doorno String?
+  state String?
 
   // Link to children studying here (for teacher discount)
   children      Student[] @relation("StaffChildren")
@@ -438,8 +455,35 @@ model Staff {
   // POS relations
   teacherFreeItems    TeacherFreeItem[]
 
+  // Staff document records
+  documents           StaffDocument[]
+
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+model StaffDocument {
+  id              String            @id @default(uuid())
+  staffId         String
+  type            StaffDocumentType @default(OTHER)
+  title           String
+  filePath        String
+  originalName    String
+  mimeType        String
+  sizeBytes       Int
+  description     String?
+  documentNumber  String?
+  issuedDate      DateTime?
+  expiryDate      DateTime?
+  isVerified      Boolean           @default(false)
+  uploadedAt      DateTime          @default(now())
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  staff           Staff             @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId, type])
+  @@index([uploadedAt])
 }
 
 

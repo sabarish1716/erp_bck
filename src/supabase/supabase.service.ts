@@ -56,6 +56,54 @@ export class SupabaseService implements OnModuleInit {
     return this.client || null;
   }
 
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  private isTransientFetchFailure(error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    const causeCode =
+      typeof error === 'object' && error !== null && 'cause' in error
+        ? String((error as { cause?: { code?: unknown } }).cause?.code || '')
+        : '';
+
+    const haystack = `${message} ${causeCode}`.toLowerCase();
+    return (
+      haystack.includes('fetch failed') ||
+      haystack.includes('econnreset') ||
+      haystack.includes('etimedout') ||
+      haystack.includes('enotfound') ||
+      haystack.includes('eai_again') ||
+      haystack.includes('network')
+    );
+  }
+
+  private async withSupabaseRetry<T>(
+    action: () => PromiseLike<T> | T,
+    context: string,
+    maxAttempts = 3,
+  ): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await action();
+      } catch (error) {
+        lastError = error;
+        const shouldRetry = this.isTransientFetchFailure(error) && attempt < maxAttempts;
+        if (!shouldRetry) {
+          throw error;
+        }
+
+        this.logger.warn(
+          `${context} attempt ${attempt} failed due to transient fetch error; retrying`,
+        );
+        await this.sleep(attempt * 500);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
   private getSucceededRetentionDays(): number {
     const rawValue = process.env.SUPABASE_SYNC_SUCCESS_RETENTION_DAYS;
     const parsed = Number(rawValue);
@@ -204,15 +252,19 @@ export class SupabaseService implements OnModuleInit {
     );
 
     if (bus && needsRemoteRepair) {
-      const { error } = await this.client!
-        .from('fuel_logs')
-        .update({
-          bus_id: bus.id,
-          plate_no: bus.number,
-        })
-        .eq('id', row.id);
+      const updateResponse = await this.withSupabaseRetry(
+        () =>
+          this.client!
+            .from('fuel_logs')
+            .update({
+              bus_id: bus.id,
+              plate_no: bus.number,
+            })
+            .eq('id', row.id),
+        'Fuel log reverse import remote repair',
+      );
 
-      if (!error) {
+      if (!updateResponse.error) {
         row = {
           ...row,
           bus_id: bus.id,
@@ -304,14 +356,18 @@ export class SupabaseService implements OnModuleInit {
     ).toISOString();
     const cursorTimestamp = previousState.cursorTimestamp || defaultCursor;
 
-    const response = await this.client
-      .from('fuel_logs')
-      .select(
-        'id,driver_id,bus_id,plate_no,odometer,litres,fuel_cost_per_litre,total_cost,note,image_url,timestamp,created_at',
-      )
-      .gte('timestamp', cursorTimestamp)
-      .order('timestamp', { ascending: true })
-      .limit(200);
+    const response = await this.withSupabaseRetry(
+      () =>
+        this.client!
+          .from('fuel_logs')
+          .select(
+            'id,driver_id,bus_id,plate_no,odometer,litres,fuel_cost_per_litre,total_cost,note,image_url,timestamp,created_at',
+          )
+          .gte('timestamp', cursorTimestamp)
+          .order('timestamp', { ascending: true })
+          .limit(200),
+      'Fuel log reverse import fetch',
+    );
 
     if (response.error) {
       const nextState: FuelLogImportState = {
@@ -671,6 +727,11 @@ export class SupabaseService implements OnModuleInit {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (this.isTransientFetchFailure(error)) {
+        this.logger.warn(`Fuel log reverse import transient fetch issue: ${message}`);
+        return;
+      }
+
       this.logger.error(`Fuel log reverse import failed: ${message}`);
     }
   }

@@ -2,11 +2,47 @@ import { BadRequestException, ConflictException, Injectable, NotFoundException }
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import * as bcrypt from 'bcrypt';
-import { Prisma, Role } from '@prisma/client';
+import { Prisma, Role, StaffDocumentType } from '@prisma/client';
+import { existsSync, unlinkSync } from 'fs';
+import { CreateStaffDocumentDto } from './dto/staff-document.dto';
 
 @Injectable()
 export class StaffService {
   constructor(private prisma: PrismaService) {}
+
+  private getLeaveEntitlementByCategory(
+    leaveCode: string,
+    category: Role | string | undefined,
+    fallback: number,
+  ) {
+    const normalizedCategory = String(category || 'TEACHING_REGULAR');
+    const teachingPolicy: Record<string, number> = {
+      CL: 12,
+      SL: 10,
+      EL: 15,
+      ML: 180,
+      PL: 15,
+      LOP: 999,
+    };
+    const nonTeachingPolicy: Record<string, number> = {
+      CL: 12,
+      SL: 10,
+      EL: 15,
+      ML: 180,
+      PL: 15,
+      LOP: 999,
+    };
+    const policy = normalizedCategory.startsWith('NON_TEACHING')
+      ? nonTeachingPolicy
+      : teachingPolicy;
+    return policy[leaveCode] ?? fallback;
+  }
+
+  private getAcademicYearForDate(date: Date): string {
+    const month = date.getMonth();
+    const year = date.getFullYear();
+    return month >= 5 ? `${year}-${year + 1}` : `${year - 1}-${year}`;
+  }
 
   private resolveStaffUserRole(role?: Role) {
     if (!role || role === Role.STAFF) {
@@ -92,6 +128,12 @@ export class StaffService {
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
             pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
+            city:data.city,
+            pincode:data.pincode,
+            area:data.area,
+            doorno:data.doorNo,
+            state:data.state
+            // state:data.state
           },
           include: { children: { select: { id: true, name: true, standard: true } } },
         });
@@ -107,6 +149,45 @@ export class StaffService {
           },
         });
 
+        await tx.staffStatutory.upsert({
+          where: { staffId: staff.id },
+          update: {},
+          create: {
+            staffId: staff.id,
+            basicSalary: data.salary ?? undefined,
+            grossSalary: data.salary ?? undefined,
+          },
+        });
+
+        const currentAcademicYear = this.getAcademicYearForDate(new Date());
+        const activeLeaveTypes = await tx.leaveType.findMany({
+          where: { isActive: true },
+          select: { id: true, code: true, maxPerYear: true },
+        });
+
+        if (activeLeaveTypes.length > 0) {
+          const staffCategory = (data.category as string) || 'TEACHING_REGULAR';
+          await tx.leaveBalance.createMany({
+            data: activeLeaveTypes.map((leaveType) => ({
+              staffId: staff.id,
+              leaveTypeId: leaveType.id,
+              year: currentAcademicYear,
+              total: this.getLeaveEntitlementByCategory(
+                leaveType.code,
+                staffCategory,
+                leaveType.maxPerYear,
+              ),
+              used: 0,
+              remaining: this.getLeaveEntitlementByCategory(
+                leaveType.code,
+                staffCategory,
+                leaveType.maxPerYear,
+              ),
+            })),
+            skipDuplicates: true,
+          });
+        }
+
         return staff;
       });
     } catch (error) {
@@ -116,6 +197,9 @@ export class StaffService {
 
   async findAll() {
     return this.prisma.staff.findMany({
+      where:{
+        isActive:true,
+      },
       include: { children: { select: { id: true, name: true, standard: true } } },
       orderBy: { createdAt: 'desc' },
     });
@@ -126,6 +210,7 @@ export class StaffService {
       where: {
         role: Role.TRANSPORT_MANAGER,
         staffId: { not: null },
+        isActive:true
       },
       select: {
         id: true,
@@ -171,10 +256,88 @@ export class StaffService {
   async findOne(id: string) {
     const staff = await this.prisma.staff.findUnique({
       where: { id },
-      include: { children: { select: { id: true, name: true, standard: true } } },
+      include: {
+        children: { select: { id: true, name: true, standard: true } },
+        documents: { orderBy: { uploadedAt: 'desc' } },
+      },
     });
     if (!staff) throw new NotFoundException('Staff not found');
     return staff;
+  }
+
+  async addDocument(staffId: string, data: CreateStaffDocumentDto, file: Express.Multer.File) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    if (!file) {
+      throw new BadRequestException('Document file is required');
+    }
+
+    const normalizedPath = file.path.replace(/\\/g, '/');
+    const documentType = data.type || StaffDocumentType.OTHER;
+    const title = data.title?.trim() || this.buildDocumentTitle(documentType, file.originalname);
+
+    return this.prisma.staffDocument.create({
+      data: {
+        staffId,
+        type: documentType,
+        title,
+        filePath: normalizedPath,
+        originalName: file.originalname,
+        mimeType: file.mimetype,
+        sizeBytes: file.size,
+        description: data.description?.trim() || null,
+        documentNumber: data.documentNumber?.trim() || null,
+        issuedDate: data.issuedDate ? new Date(data.issuedDate) : null,
+        expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
+        isVerified: Boolean(data?.isVerified ?? false),
+      },
+    });
+  }
+
+  async listDocuments(staffId: string, type?: StaffDocumentType) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    if (!staff) {
+      throw new NotFoundException('Staff not found');
+    }
+
+    return this.prisma.staffDocument.findMany({
+      where: {
+        staffId,
+        ...(type ? { type } : {}),
+      },
+      orderBy: { uploadedAt: 'desc' },
+    });
+  }
+
+  async removeDocument(staffId: string, documentId: string) {
+    const document = await this.prisma.staffDocument.findFirst({
+      where: { id: documentId, staffId },
+    });
+
+    if (!document) {
+      throw new NotFoundException('Staff document not found');
+    }
+
+    await this.prisma.staffDocument.delete({ where: { id: documentId } });
+
+    if (document.filePath && existsSync(document.filePath)) {
+      try {
+        unlinkSync(document.filePath);
+      } catch {
+        // File cleanup failures should not block DB deletion.
+      }
+    }
+
+    return { success: true };
+  }
+
+  private buildDocumentTitle(type: StaffDocumentType, originalName: string) {
+    const baseName = originalName.replace(/\.[^.]+$/, '').trim();
+    if (baseName) return baseName;
+    return type.replace(/_/g, ' ');
   }
 
   async update(id: string, data: CreateStaffDto) {
@@ -207,6 +370,11 @@ export class StaffService {
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
             pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
+            city:data.city,
+            doorno:data.doorNo,
+            pincode:data.pincode,
+            area:data.area,
+            state:data.state
           },
           include: { children: { select: { id: true, name: true, standard: true } } },
         });

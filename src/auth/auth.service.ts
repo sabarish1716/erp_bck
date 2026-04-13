@@ -58,6 +58,7 @@ async loginDriver(driver: Driver) {
       sub: user.id,
       email: user.email,
       role: user.role,
+      staffId: user.staffId,
     };
 
     const permissions = await this.rolePermissionsService.getEffectivePermissionsForUser({

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
 import { HrService } from './hr.service';
 import { MarkAttendanceDto, BulkMarkAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
 import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } from './dto/leave.dto';
@@ -17,25 +17,26 @@ export class HrController {
   // ─── DASHBOARD ─────────────────────────────
   @Get('dashboard')
   @Permissions(Permission.HR_DASHBOARD)
-  getDashboard() {
-    return this.hrService.getDashboard();
+  getDashboard(@Req() req: any) {
+    return this.hrService.getDashboard(req.user);
   }
 
   // ─── ATTENDANCE ────────────────────────────
   @Get('attendance')
   @Permissions(Permission.HR_ATTENDANCE_READ)
   getAttendance(
+    @Req() req: any,
     @Query('date') date?: string,
     @Query('month') month?: string,
     @Query('staffId') staffId?: string,
   ) {
-    return this.hrService.getAttendance({ date, month, staffId });
+    return this.hrService.getAttendance({ date, month, staffId }, req.user);
   }
 
   @Get('attendance/monthly-report/:month')
   @Permissions(Permission.HR_ATTENDANCE_READ)
-  getMonthlyReport(@Param('month') month: string) {
-    return this.hrService.getMonthlyReport(month);
+  getMonthlyReport(@Req() req: any, @Param('month') month: string) {
+    return this.hrService.getMonthlyReport(month, req.user);
   }
 
   @Post('attendance/mark')
@@ -69,19 +70,26 @@ export class HrController {
     return this.hrService.createLeaveType(dto);
   }
 
+  @Get('leave/policy')
+  @Permissions(Permission.HR_LEAVE_READ)
+  getLeavePermissionPolicy(@Req() req: any, @Query('staffId') staffId?: string) {
+    return this.hrService.getLeavePermissionPolicy(staffId, req.user);
+  }
+
   @Get('leave/applications')
   @Permissions(Permission.HR_LEAVE_READ)
   getLeaveApplications(
+    @Req() req: any,
     @Query('status') status?: string,
     @Query('staffId') staffId?: string,
   ) {
-    return this.hrService.getLeaveApplications({ status, staffId });
+    return this.hrService.getLeaveApplications({ status, staffId }, req.user);
   }
 
   @Post('leave/apply')
   @Permissions(Permission.HR_LEAVE_MANAGE)
-  applyLeave(@Body() dto: ApplyLeaveDto) {
-    return this.hrService.applyLeave(dto);
+  applyLeave(@Req() req: any, @Body() dto: ApplyLeaveDto) {
+    return this.hrService.applyLeave(dto, req.user);
   }
 
   @Put('leave/:id/approve')
@@ -105,10 +113,11 @@ export class HrController {
   @Get('leave/balances')
   @Permissions(Permission.HR_LEAVE_READ)
   getLeaveBalances(
+    @Req() req: any,
     @Query('staffId') staffId?: string,
     @Query('year') year?: string,
   ) {
-    return this.hrService.getLeaveBalances({ staffId, year });
+    return this.hrService.getLeaveBalances({ staffId, year }, req.user);
   }
 
   @Post('leave/balances/init')
@@ -121,23 +130,24 @@ export class HrController {
   @Get('permission')
   @Permissions(Permission.HR_PERMISSION_READ)
   getPermissions(
+    @Req() req: any,
     @Query('staffId') staffId?: string,
     @Query('month') month?: string,
     @Query('status') status?: string,
   ) {
-    return this.hrService.getPermissions({ staffId, month, status });
+    return this.hrService.getPermissions({ staffId, month, status }, req.user);
   }
 
   @Get('permission/summary/:month')
   @Permissions(Permission.HR_PERMISSION_READ)
-  getPermissionSummary(@Param('month') month: string) {
-    return this.hrService.getPermissionSummary(month);
+  getPermissionSummary(@Req() req: any, @Param('month') month: string) {
+    return this.hrService.getPermissionSummary(month, req.user);
   }
 
   @Post('permission/apply')
   @Permissions(Permission.HR_PERMISSION_MANAGE)
-  applyPermission(@Body() dto: ApplyPermissionDto) {
-    return this.hrService.applyPermission(dto);
+  applyPermission(@Req() req: any, @Body() dto: ApplyPermissionDto) {
+    return this.hrService.applyPermission(dto, req.user);
   }
 
   @Put('permission/:id/approve')
@@ -269,17 +279,18 @@ export class HrController {
   @Get('payroll')
   @Permissions(Permission.HR_PAYROLL_READ)
   getPayrolls(
+    @Req() req: any,
     @Query('month') month?: string,
     @Query('staffId') staffId?: string,
     @Query('status') status?: string,
   ) {
-    return this.hrService.getPayrolls({ month, staffId, status });
+    return this.hrService.getPayrolls({ month, staffId, status }, req.user);
   }
 
   @Get('payroll/:id')
   @Permissions(Permission.HR_PAYROLL_READ)
-  getPayroll(@Param('id') id: string) {
-    return this.hrService.getPayroll(id);
+  getPayroll(@Req() req: any, @Param('id') id: string) {
+    return this.hrService.getPayroll(id, req.user);
   }
 
 
@@ -310,25 +321,26 @@ export class HrController {
 
   // ─── ADVANCE / LOAN TICKETS ───────────────
   @Post('advance')
-  @Permissions(Permission.HR_PAYROLL_MANAGE)
-  createAdvanceRequest(@Body() dto: CreateAdvanceRequestDto) {
-    return this.hrService.createAdvanceRequest(dto);
+  @Permissions(Permission.HR_PAYROLL_READ)
+  createAdvanceRequest(@Req() req: any, @Body() dto: CreateAdvanceRequestDto) {
+    return this.hrService.createAdvanceRequest(dto, req.user);
   }
 
   @Get('advance')
   @Permissions(Permission.HR_PAYROLL_READ)
   getAdvanceRequests(
+    @Req() req: any,
     @Query('staffId') staffId?: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
   ) {
-    return this.hrService.getAdvanceRequests({ staffId, status, type });
+    return this.hrService.getAdvanceRequests({ staffId, status, type }, req.user);
   }
 
   @Get('advance/:id')
   @Permissions(Permission.HR_PAYROLL_READ)
-  getAdvanceRequest(@Param('id') id: string) {
-    return this.hrService.getAdvanceRequest(id);
+  getAdvanceRequest(@Req() req: any, @Param('id') id: string) {
+    return this.hrService.getAdvanceRequest(id, req.user);
   }
 
   @Put('advance/:id/approve')

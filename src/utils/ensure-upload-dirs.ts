@@ -8,6 +8,7 @@ export function ensureUploadDirs() {
     './uploads/documents/aadhar',
     './uploads/documents/tc',
     './uploads/documents/birth',
+    './uploads/documents/staff',
     './uploads/fuel-logs',
   ];
   for (const dir of dirs) {

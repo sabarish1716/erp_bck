@@ -1,6 +1,6 @@
 
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { AttendanceStatus, PunchMethod } from '@prisma/client';
+import { AttendanceStatus, PunchMethod, StaffCategory, Role } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MarkAttendanceDto, BulkMarkAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
 import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } from './dto/leave.dto';
@@ -9,11 +9,109 @@ import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statu
 import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
 import { GeneratePayrollDto, ApprovePayrollDto } from './dto/payroll.dto';
 
-const PERMISSION_HOURS_LIMIT = 4;
+type LeavePermissionPolicy = {
+  permissionHoursLimit: number;
+  leaveEntitlements: Record<string, number>;
+};
+
+type RequestUser = {
+  sub?: string;
+  id?: string;
+  role?: Role | string;
+  staffId?: string | null;
+};
+
+const TEACHING_POLICY: LeavePermissionPolicy = {
+  permissionHoursLimit: 4,
+  leaveEntitlements: {
+    CL: 12,
+    SL: 10,
+    EL: 15,
+    ML: 180,
+    PL: 15,
+    LOP: 999,
+  },
+};
+
+const NON_TEACHING_POLICY: LeavePermissionPolicy = {
+  permissionHoursLimit: 4,
+  leaveEntitlements: {
+    CL: 12,
+    SL: 10,
+    EL: 15,
+    ML: 180,
+    PL: 15,
+    LOP: 999,
+  },
+};
 
 @Injectable()
 export class HrService {
   constructor(private prisma: PrismaService) {}
+
+  private isSelfServiceRole(role?: string | Role | null) {
+    return role === Role.STAFF || role === Role.TEACHER;
+  }
+
+  private ensureOwnStaffId(staffId: string | undefined, requester?: RequestUser) {
+    if (!requester || !this.isSelfServiceRole(requester.role)) return staffId;
+    if (!requester.staffId) {
+      throw new BadRequestException('Staff account is not linked to a staff profile');
+    }
+    if (staffId && staffId !== requester.staffId) {
+      throw new BadRequestException('You can only access your own HR records');
+    }
+    return requester.staffId;
+  }
+
+  private getPolicyForCategory(category?: StaffCategory | null): LeavePermissionPolicy {
+    if (category && String(category).startsWith('NON_TEACHING')) {
+      return NON_TEACHING_POLICY;
+    }
+    return TEACHING_POLICY;
+  }
+
+  private getLeaveEntitlementForCategory(
+    leaveCode: string,
+    category: StaffCategory | null | undefined,
+    fallback: number,
+  ) {
+    const policy = this.getPolicyForCategory(category);
+    return policy.leaveEntitlements[leaveCode] ?? fallback;
+  }
+
+  private getPermissionLimitForCategory(category: StaffCategory | null | undefined) {
+    return this.getPolicyForCategory(category).permissionHoursLimit;
+  }
+
+  private async getStaffCategory(staffId: string) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { category: true },
+    });
+    if (!staff) throw new NotFoundException('Staff not found');
+    return staff.category;
+  }
+
+  async getLeavePermissionPolicy(staffId?: string, requester?: RequestUser) {
+    const effectiveStaffId = this.ensureOwnStaffId(staffId, requester);
+    if (effectiveStaffId) {
+      const category = await this.getStaffCategory(effectiveStaffId);
+      return {
+        category,
+        effective: this.getPolicyForCategory(category),
+        teaching: TEACHING_POLICY,
+        nonTeaching: NON_TEACHING_POLICY,
+      };
+    }
+
+    return {
+      category: null,
+      effective: null,
+      teaching: TEACHING_POLICY,
+      nonTeaching: NON_TEACHING_POLICY,
+    };
+  }
 
   private normalizeEnumKey(value: string) {
     return value.trim().toUpperCase().replace(/[\s-]+/g, '_');
@@ -44,9 +142,10 @@ export class HrService {
   // ─── ATTENDANCE ────────────────────────────────
   // ═══════════════════════════════════════════════
 
-  async getAttendance(query: { date?: string; month?: string; staffId?: string }) {
+  async getAttendance(query: { date?: string; month?: string; staffId?: string }, requester?: RequestUser) {
     const where: any = {};
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.date) {
       where.date = new Date(query.date);
     } else if (query.month) {
@@ -149,13 +248,15 @@ export class HrService {
   }
 
 
-  async getMonthlyReport(month: string) {
+  async getMonthlyReport(month: string, requester?: RequestUser) {
     const [y, m] = month.split('-').map(Number);
     const startDate = new Date(y, m - 1, 1);
     const endDate = new Date(y, m, 1);
 
+    const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
+
     const staff = await this.prisma.staff.findMany({
-      where: { isActive: true },
+      where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) },
       select: { id: true, name: true, employeeId: true, department: true },
     });
 
@@ -193,10 +294,11 @@ export class HrService {
     });
   }
 
-  async getLeaveApplications(query: { status?: string; staffId?: string }) {
+  async getLeaveApplications(query: { status?: string; staffId?: string }, requester?: RequestUser) {
     const where: any = {};
     if (query.status) where.status = query.status;
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     return this.prisma.leaveApplication.findMany({
       where,
       include: {
@@ -207,17 +309,61 @@ export class HrService {
     });
   }
 
-  async applyLeave(dto: ApplyLeaveDto) {
+  async applyLeave(dto: ApplyLeaveDto, requester?: RequestUser) {
+    const effectiveStaffId = this.ensureOwnStaffId(dto.staffId, requester);
+    const normalizedDto = { ...dto, staffId: effectiveStaffId || dto.staffId };
     return this.prisma.$transaction(async (tx) => {
+      const leaveType = await tx.leaveType.findUnique({
+        where: { id: normalizedDto.leaveTypeId },
+        select: { id: true, code: true, maxPerYear: true },
+      });
+      if (!leaveType) throw new NotFoundException('Leave type not found');
+
+      const fromDate = new Date(normalizedDto.fromDate);
+      const year = this.getAcademicYear(fromDate);
+      const category = await this.getStaffCategory(normalizedDto.staffId);
+      const totalEntitlement = this.getLeaveEntitlementForCategory(
+        leaveType.code,
+        category,
+        leaveType.maxPerYear,
+      );
+
+      if (leaveType.code !== 'LOP') {
+        const balance = await tx.leaveBalance.upsert({
+          where: {
+            staffId_leaveTypeId_year: {
+              staffId: normalizedDto.staffId,
+              leaveTypeId: leaveType.id,
+              year,
+            },
+          },
+          update: {},
+          create: {
+            staffId: normalizedDto.staffId,
+            leaveTypeId: leaveType.id,
+            year,
+            total: totalEntitlement,
+            used: 0,
+            remaining: totalEntitlement,
+          },
+        });
+
+        if (balance.remaining < normalizedDto.days) {
+          throw new BadRequestException(
+            `Insufficient leave balance. Remaining: ${balance.remaining}, requested: ${normalizedDto.days}`,
+          );
+        }
+      }
+
       const application = await tx.leaveApplication.create({
         data: {
-          staffId: dto.staffId,
-          leaveTypeId: dto.leaveTypeId,
-          fromDate: new Date(dto.fromDate),
-          toDate: new Date(dto.toDate),
-          days: dto.days,
-          halfDay: dto.halfDay ?? false,
-          reason: dto.reason,
+          staffId: normalizedDto.staffId,
+          leaveTypeId: normalizedDto.leaveTypeId,
+          fromDate,
+          toDate: new Date(normalizedDto.toDate),
+          days: normalizedDto.days,
+          halfDay: normalizedDto.halfDay ?? false,
+          reason: normalizedDto.reason,
         },
         include: {
           leaveType: { select: { id: true, name: true, code: true } },
@@ -235,6 +381,8 @@ export class HrService {
     if (!application) throw new NotFoundException('Leave application not found');
     if (application.status !== 'PENDING') throw new BadRequestException('Only pending applications can be approved');
 
+    const staffCategory = await this.getStaffCategory(application.staffId);
+
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.leaveApplication.update({
         where: { id },
@@ -250,9 +398,18 @@ export class HrService {
           staffId: application.staffId,
           leaveTypeId: application.leaveTypeId,
           year,
-          total: application.leaveType.maxPerYear,
+          total: this.getLeaveEntitlementForCategory(
+            application.leaveType.code,
+            staffCategory,
+            application.leaveType.maxPerYear,
+          ),
           used: application.days,
-          remaining: application.leaveType.maxPerYear - application.days,
+          remaining:
+            this.getLeaveEntitlementForCategory(
+              application.leaveType.code,
+              staffCategory,
+              application.leaveType.maxPerYear,
+            ) - application.days,
         },
       });
 
@@ -296,9 +453,10 @@ export class HrService {
     });
   }
 
-  async getLeaveBalances(query: { staffId?: string; year?: string }) {
+  async getLeaveBalances(query: { staffId?: string; year?: string }, requester?: RequestUser) {
     const where: any = {};
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.year) where.year = query.year;
     return this.prisma.leaveBalance.findMany({
       where,
@@ -307,13 +465,28 @@ export class HrService {
   }
 
   async initLeaveBalances(staffId: string, year: string) {
-    const leaveTypes = await this.prisma.leaveType.findMany({ where: { isActive: true } });
+    const [leaveTypes, category] = await Promise.all([
+      this.prisma.leaveType.findMany({ where: { isActive: true } }),
+      this.getStaffCategory(staffId),
+    ]);
     const balances: any[] = [];
     for (const lt of leaveTypes) {
+      const totalEntitlement = this.getLeaveEntitlementForCategory(
+        lt.code,
+        category,
+        lt.maxPerYear,
+      );
       const bal = await this.prisma.leaveBalance.upsert({
         where: { staffId_leaveTypeId_year: { staffId, leaveTypeId: lt.id, year } },
         update: {},
-        create: { staffId, leaveTypeId: lt.id, year, total: lt.maxPerYear, used: 0, remaining: lt.maxPerYear },
+        create: {
+          staffId,
+          leaveTypeId: lt.id,
+          year,
+          total: totalEntitlement,
+          used: 0,
+          remaining: totalEntitlement,
+        },
       });
       balances.push(bal);
     }
@@ -324,9 +497,10 @@ export class HrService {
   // ─── PERMISSION (SHORT LEAVE) ─────────────────
   // ═══════════════════════════════════════════════
 
-  async getPermissions(query: { staffId?: string; month?: string; status?: string }) {
+  async getPermissions(query: { staffId?: string; month?: string; status?: string }, requester?: RequestUser) {
     const where: any = {};
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.status) where.status = query.status;
     if (query.month) {
       const [y, m] = query.month.split('-').map(Number);
@@ -339,15 +513,42 @@ export class HrService {
     });
   }
 
-  async applyPermission(dto: ApplyPermissionDto) {
+  async applyPermission(dto: ApplyPermissionDto, requester?: RequestUser) {
+    const effectiveStaffId = this.ensureOwnStaffId(dto.staffId, requester);
+    const normalizedDto = { ...dto, staffId: effectiveStaffId || dto.staffId };
+
+    const category = await this.getStaffCategory(normalizedDto.staffId);
+    const permissionLimit = this.getPermissionLimitForCategory(category);
+
+    const reqDate = new Date(normalizedDto.date);
+    const monthStart = new Date(reqDate.getFullYear(), reqDate.getMonth(), 1);
+    const monthEnd = new Date(reqDate.getFullYear(), reqDate.getMonth() + 1, 1);
+
+    const approvedPermissions = await this.prisma.permissionRequest.findMany({
+      where: {
+        staffId: normalizedDto.staffId,
+        status: 'APPROVED',
+        date: { gte: monthStart, lt: monthEnd },
+      },
+      select: { hours: true },
+    });
+
+    const usedHours = approvedPermissions.reduce((sum, row) => sum + Number(row.hours || 0), 0);
+    const projected = usedHours + normalizedDto.hours;
+    if (projected > permissionLimit) {
+      throw new BadRequestException(
+        `Permission hour limit exceeded. Allowed: ${permissionLimit}h, approved: ${usedHours}h, requested: ${normalizedDto.hours}h`,
+      );
+    }
+
     return this.prisma.permissionRequest.create({
       data: {
-        staffId: dto.staffId,
-        date: new Date(dto.date),
-        fromTime: dto.fromTime,
-        toTime: dto.toTime,
-        hours: dto.hours,
-        reason: dto.reason,
+        staffId: normalizedDto.staffId,
+        date: new Date(normalizedDto.date),
+        fromTime: normalizedDto.fromTime,
+        toTime: normalizedDto.toTime,
+        hours: normalizedDto.hours,
+        reason: normalizedDto.reason,
       },
     });
   }
@@ -372,14 +573,16 @@ export class HrService {
     });
   }
 
-  async getPermissionSummary(month: string) {
+  async getPermissionSummary(month: string, requester?: RequestUser) {
     const [y, m] = month.split('-').map(Number);
     const startDate = new Date(y, m - 1, 1);
     const endDate = new Date(y, m, 1);
 
+    const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
+
     const staff = await this.prisma.staff.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true, employeeId: true, department: true },
+      where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) },
+      select: { id: true, name: true, employeeId: true, department: true, category: true },
     });
 
     const approved = await this.prisma.permissionRequest.findMany({
@@ -393,9 +596,10 @@ export class HrService {
 
     return staff.map((s) => {
       const used = usageMap[s.id] || 0;
-      const excess = Math.max(0, used - PERMISSION_HOURS_LIMIT);
+      const limit = this.getPermissionLimitForCategory(s.category);
+      const excess = Math.max(0, used - limit);
       const lopDays = excess > 0 ? Math.ceil(excess / 8 * 2) / 2 : 0; // half-day increments
-      return { ...s, usedHours: used, limit: PERMISSION_HOURS_LIMIT, excessHours: excess, lopDays };
+      return { ...s, usedHours: used, limit, excessHours: excess, lopDays };
     });
   }
 
@@ -624,7 +828,8 @@ export class HrService {
         where: { staffId: staff.id, status: 'APPROVED', date: { gte: startDate, lt: endDate } },
       });
       const permissionHoursUsed = approvedPermissions.reduce((sum, p) => sum + p.hours, 0);
-      const excessHours = Math.max(0, permissionHoursUsed - PERMISSION_HOURS_LIMIT);
+      const permissionLimit = this.getPermissionLimitForCategory(staff.category);
+      const excessHours = Math.max(0, permissionHoursUsed - permissionLimit);
       const permissionLopDays = excessHours > 0 ? Math.ceil(excessHours / 8 * 2) / 2 : 0;
 
       const perDaySalary = grossSalary / totalWorkingDays;
@@ -714,10 +919,11 @@ export class HrService {
     return { count: results.length, records: results };
   }
 
-  async getPayrolls(query: { month?: string; staffId?: string; status?: string }) {
+  async getPayrolls(query: { month?: string; staffId?: string; status?: string }, requester?: RequestUser) {
     const where: any = {};
     if (query.month) where.month = query.month;
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.status) where.status = query.status;
     return this.prisma.payroll.findMany({
       where,
@@ -726,12 +932,16 @@ export class HrService {
     });
   }
 
-  async getPayroll(id: string) {
+  async getPayroll(id: string, requester?: RequestUser) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
       include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true, paymentMode: true } } },
     });
     if (!payroll) throw new NotFoundException('Payroll record not found');
+    const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
+    if (effectiveStaffId && payroll.staffId !== effectiveStaffId) {
+      throw new BadRequestException('You can only access your own payroll record');
+    }
     return payroll;
   }
 
@@ -766,7 +976,8 @@ export class HrService {
   // ─── DASHBOARD ────────────────────────────────
   // ═══════════════════════════════════════════════
 
-  async getDashboard() {
+  async getDashboard(requester?: RequestUser) {
+    const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
@@ -778,10 +989,10 @@ export class HrService {
       pendingLeaves,
       pendingPermissions,
     ] = await Promise.all([
-      this.prisma.staff.count({ where: { isActive: true } }),
-      this.prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow } } }),
-      this.prisma.leaveApplication.count({ where: { status: 'PENDING' } }),
-      this.prisma.permissionRequest.count({ where: { status: 'PENDING' } }),
+      this.prisma.staff.count({ where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) } }),
+      this.prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow }, ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
+      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
+      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
     ]);
 
     const present = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
@@ -810,15 +1021,16 @@ export class HrService {
     return `ADV-${year}-${String(seq).padStart(5, '0')}`;
   }
 
-  async createAdvanceRequest(data: { staffId: string; type: string; amount: number; reason?: string; monthlyDeduction?: number }) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: data.staffId } });
+  async createAdvanceRequest(data: { staffId: string; type: string; amount: number; reason?: string; monthlyDeduction?: number }, requester?: RequestUser) {
+    const staffId = this.ensureOwnStaffId(data.staffId, requester) || data.staffId;
+    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
     if (!staff) throw new NotFoundException('Staff not found');
     const ticketNo = await this.getNextAdvanceTicketNo();
     const monthly = data.monthlyDeduction || data.amount; // default: full repay in one month
     return this.prisma.staffAdvance.create({
       data: {
         ticketNo,
-        staffId: data.staffId,
+        staffId,
         type: data.type,
         amount: data.amount,
         reason: data.reason,
@@ -829,9 +1041,10 @@ export class HrService {
     });
   }
 
-  async getAdvanceRequests(query: { staffId?: string; status?: string; type?: string }) {
+  async getAdvanceRequests(query: { staffId?: string; status?: string; type?: string }, requester?: RequestUser) {
     const where: any = {};
-    if (query.staffId) where.staffId = query.staffId;
+    const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
+    if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.status) where.status = query.status;
     if (query.type) where.type = query.type;
     return this.prisma.staffAdvance.findMany({
@@ -841,12 +1054,16 @@ export class HrService {
     });
   }
 
-  async getAdvanceRequest(id: string) {
+  async getAdvanceRequest(id: string, requester?: RequestUser) {
     const adv = await this.prisma.staffAdvance.findUnique({
       where: { id },
       include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, category: true } } },
     });
     if (!adv) throw new NotFoundException('Advance request not found');
+    const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
+    if (effectiveStaffId && adv.staffId !== effectiveStaffId) {
+      throw new BadRequestException('You can only access your own advance request');
+    }
     return adv;
   }
 

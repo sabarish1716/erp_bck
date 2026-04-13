@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   Post,
@@ -6,11 +7,19 @@ import {
   Delete,
   Param,
   Body,
+  Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { StaffService } from './staff.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { StaffDocumentType } from '@prisma/client';
+import { CreateStaffDocumentDto } from './dto/staff-document.dto';
 
 @Controller('staff')
 export class StaffController {
@@ -71,5 +80,51 @@ export class StaffController {
   @Permissions(Permission.STAFF_UPDATE)
   unlinkChild(@Param('studentId') studentId: string) {
     return this.staffService.unlinkChildFromStaff(studentId);
+  }
+
+  @Post(':id/documents')
+  @Permissions(Permission.STAFF_UPDATE)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/documents/staff',
+        filename: (req, file, cb) => {
+          const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+          cb(null, `staff-doc-${uniqueSuffix}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 8 * 1024 * 1024 },
+      fileFilter: (req, file, cb) => {
+        if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
+          return cb(new BadRequestException('Only JPG, PNG, or PDF files are allowed'), false);
+        }
+        cb(null, true);
+      },
+    }),
+  )
+  addDocument(
+    @Param('id') id: string,
+    @Body() data: CreateStaffDocumentDto,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.staffService.addDocument(id, data, file);
+  }
+
+  @Get(':id/documents')
+  @Permissions(Permission.STAFF_READ)
+  listDocuments(
+    @Param('id') id: string,
+    @Query('type') type?: StaffDocumentType,
+  ) {
+    return this.staffService.listDocuments(id, type);
+  }
+
+  @Delete(':id/documents/:documentId')
+  @Permissions(Permission.STAFF_UPDATE)
+  removeDocument(
+    @Param('id') id: string,
+    @Param('documentId') documentId: string,
+  ) {
+    return this.staffService.removeDocument(id, documentId);
   }
 }

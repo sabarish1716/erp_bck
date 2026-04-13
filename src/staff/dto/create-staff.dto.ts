@@ -30,4 +30,15 @@ export class CreateStaffDto {
   @IsOptional() @IsString() bankIfsc?: string;
   @IsOptional() @IsDateString() pfJoiningDate?: string;
   @IsOptional() @IsEnum(Role) role?: Role;
+    // "property doorNo should not exist",
+    //     "property area should not exist",
+    //     "property city should not exist",
+    //     "property state should not exist",
+    //     "property pincode should not exist"
+  @IsOptional() @IsString() doorNo?:string;
+  @IsOptional() @IsString() area?:string;
+  @IsOptional() @IsString() city?:string;
+  @IsOptional() @IsString() state?:string;
+  @IsOptional() @IsString() pincode?:string;
+
 }
