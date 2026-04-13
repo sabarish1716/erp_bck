@@ -377,6 +377,25 @@ async function main() {
         paymentMode: 'CASH',
       },
     }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0013',
+        name: 'Harini V',
+        email: 'harini.staff@school.com',
+        phone: '9000000013',
+        designation: 'Accountant',
+        department: 'Accounts',
+        qualification: 'B.Com., M.Com.',
+        joiningDate: new Date('2026-02-10T00:00:00.000Z'),
+        salary: 30000,
+        category: StaffCategory.NON_TEACHING_REGULAR,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Indian Overseas Bank',
+        bankAccountNo: '6543210013',
+        bankIfsc: 'IOBA0000456',
+        pfJoiningDate: new Date('2026-02-10T00:00:00.000Z'),
+      },
+    }),
   ]);
 
   for (const staff of staffRecords) {
@@ -496,6 +515,52 @@ async function main() {
         punchMethod: PunchMethod.MANUAL,
         workingHours: 7.2,
       },
+    });
+  }
+
+  const lastMonthStaff = staffRecords.find((staff) => staff.employeeId === 'EMP0013');
+  if (lastMonthStaff) {
+    await prisma.attendance.createMany({
+      data: [
+        {
+          staffId: lastMonthStaff.id,
+          date: new Date('2026-03-03T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:58',
+          checkOut: '17:10',
+          punchMethod: PunchMethod.FINGERPRINT,
+          workingHours: 8,
+          isESSLSync: true,
+        },
+        {
+          staffId: lastMonthStaff.id,
+          date: new Date('2026-03-04T00:00:00.000Z'),
+          status: AttendanceStatus.LATE,
+          checkIn: '09:18',
+          checkOut: '17:06',
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 7.5,
+        },
+        {
+          staffId: lastMonthStaff.id,
+          date: new Date('2026-03-05T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:54',
+          checkOut: '17:14',
+          punchMethod: PunchMethod.FINGERPRINT,
+          workingHours: 8.1,
+          isESSLSync: true,
+        },
+        {
+          staffId: lastMonthStaff.id,
+          date: new Date('2026-03-06T00:00:00.000Z'),
+          status: AttendanceStatus.HALF_DAY,
+          checkIn: '09:02',
+          checkOut: '13:05',
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 4,
+        },
+      ],
     });
   }
 

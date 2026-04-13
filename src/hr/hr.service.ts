@@ -788,11 +788,11 @@ export class HrService {
 
     for (const staff of staffList) {
       const statutory = staff.staffStatutory;
-      const basicSalary = statutory?.basicSalary || staff.salary || 0;
+      const basicSalary = statutory?.basicSalary ?? staff.salary ?? 0;
       const hra = basicSalary * 0.2;
       const da = basicSalary * 0.1;
       const otherAllowances = 0;
-      const grossSalary = statutory?.grossSalary || (basicSalary + hra + da + otherAllowances);
+      const grossSalary = statutory?.grossSalary ?? staff.salary ?? (basicSalary + hra + da + otherAllowances);
 
       // Count working days & attendance
       const attendances = await this.prisma.attendance.findMany({
@@ -838,7 +838,10 @@ export class HrService {
 
       // PF calculation
       let pfDeduction = 0;
-      if (settings.pfEnabled && (statutory?.pfEnabled !== false)) {
+      const pfEligible = statutory
+        ? statutory.pfEnabled !== false
+        : Boolean(staff.pfJoiningDate);
+      if (settings.pfEnabled && pfEligible) {
         const pfWage = Math.min(basicSalary, settings.pfWageLimit);
         pfDeduction = Math.round(pfWage * settings.pfEmployeeRate / 100);
       }

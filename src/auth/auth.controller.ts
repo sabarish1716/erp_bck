@@ -41,7 +41,7 @@ export class AuthController {
     // JWT payload has { sub, email, role } — look up full user from DB
     const dbUser = await this.prisma.user.findUnique({
       where: { id: jwtPayload.sub },
-      select: { id: true, name: true, email: true, role: true },
+      select: { id: true, name: true, email: true, role: true, staffId: true },
     });
 
     if (!dbUser) return { error: 'User not found' };
@@ -56,6 +56,7 @@ export class AuthController {
       name: dbUser.name,
       email: dbUser.email,
       role: dbUser.role,
+      staffId: dbUser.staffId,
       permissions,
     };
   }
