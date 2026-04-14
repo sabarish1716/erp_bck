@@ -12,6 +12,8 @@ import {
   Query,
   UseInterceptors,
   UploadedFile,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import { TransportService } from './transport.service';
 import {
@@ -29,12 +31,19 @@ import { Public } from '../auth/public.decorator';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import type { Response } from 'express';
 
 @Controller('transport')
 export class TransportController {
   constructor(private readonly transportService: TransportService) {}
 
   // ─── ROUTES ───────────────────────────────────
+  @Get('dashboard')
+  @Permissions(Permission.TRANSPORT_DASHBOARD)
+  getDashboard(@Query('academicYear') academicYear?: string) {
+    return this.transportService.getDashboard(academicYear);
+  }
+
   // ─── VEHICLE-DRIVER MAPPING ─────────────────────────────
   @Get('drivers')
   @Permissions(Permission.TRANSPORT_READ)
@@ -118,6 +127,44 @@ export class TransportController {
     return this.transportService.getFuelLogs({ plateNo, busId, driverId, from, to });
   }
 
+  @Get('buses/:id/fuel-report')
+  @Permissions(Permission.TRANSPORT_READ)
+  getBusFuelReport(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.transportService.getBusFuelReport(id, from, to);
+  }
+
+  @Get('buses/:id/fuel-report/export/excel')
+  @Permissions(Permission.TRANSPORT_READ)
+  async exportBusFuelReportExcel(
+    @Param('id') id: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.transportService.exportBusFuelReportExcel(id, from, to);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return new StreamableFile(file.content);
+  }
+
+  @Get('buses/:id/fuel-report/export/pdf')
+  @Permissions(Permission.TRANSPORT_READ)
+  async exportBusFuelReportPdf(
+    @Param('id') id: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.transportService.exportBusFuelReportPdf(id, from, to);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return new StreamableFile(file.content);
+  }
+
   // Public endpoint for Flutter driver app (no auth token)
   @Public()
   @Post('fuel-log/driver')
@@ -145,7 +192,8 @@ export class TransportController {
     @Body() dto: any,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : null;
+    // Use uploaded file path if present, otherwise use imageUrl from body (Supabase Storage URL)
+    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : (dto.imageUrl || null);
     return this.transportService.createFuelLogFromDriver({ ...dto, imageUrl });
   }
 
@@ -153,6 +201,44 @@ export class TransportController {
   @Permissions(Permission.TRANSPORT_READ)
   getDailyMileage(@Query('busId') busId: string, @Query('date') date?: string) {
     return this.transportService.getDailyMileage(busId, date);
+  }
+
+  @Get('buses/:id/mileage-report')
+  @Permissions(Permission.TRANSPORT_READ)
+  getBusMileageReport(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.transportService.getBusMileageReport(id, from, to);
+  }
+
+  @Get('buses/:id/mileage-report/export/excel')
+  @Permissions(Permission.TRANSPORT_READ)
+  async exportBusMileageReportExcel(
+    @Param('id') id: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.transportService.exportBusMileageReportExcel(id, from, to);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return new StreamableFile(file.content);
+  }
+
+  @Get('buses/:id/mileage-report/export/pdf')
+  @Permissions(Permission.TRANSPORT_READ)
+  async exportBusMileageReportPdf(
+    @Param('id') id: string,
+    @Query('from') from: string | undefined,
+    @Query('to') to: string | undefined,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const file = await this.transportService.exportBusMileageReportPdf(id, from, to);
+    res.setHeader('Content-Type', file.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    return new StreamableFile(file.content);
   }
 
 
@@ -322,6 +408,15 @@ export class TransportController {
     @Param('busId') busId: string,
   ) {
     return this.transportService.assignDriverToBus(driverId, busId);
+  }
+
+  @Patch('drivers/:driverId/assign-route/:routeId')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  assignDriverToRoute(
+    @Param('driverId') driverId: string,
+    @Param('routeId') routeId: string,
+  ) {
+    return this.transportService.assignDriverToRoute(driverId, routeId);
   }
 
   @Patch('drivers/:driverId/unassign-bus')

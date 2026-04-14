@@ -6,8 +6,10 @@ import {
   IsEmail,
   IsBoolean,
   IsDateString,
+  IsEnum,
   MinLength,
 } from 'class-validator';
+import { Role } from '@prisma/client';
 
 export class CreateStaffDto {
   @IsOptional() @IsString() employeeId?: string;
@@ -27,4 +29,5 @@ export class CreateStaffDto {
   @IsOptional() @IsString() bankAccountNo?: string;
   @IsOptional() @IsString() bankIfsc?: string;
   @IsOptional() @IsDateString() pfJoiningDate?: string;
+  @IsOptional() @IsEnum(Role) role?: Role;
 }

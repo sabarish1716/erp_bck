@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaService } from './prisma/prisma.service';
 import { UserModule } from './user/user.module';
 import { UserService } from './user/user.service';
@@ -18,11 +19,31 @@ import { PosModule } from './pos/pos.module';
 import { DocRequestModule } from './doc-request/doc-request.module';
 import { HouseModule } from './house/house.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { SupabaseModule } from './supabase/supabase.module';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
 
 @Module({
-  imports: [UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule, DashboardModule],
+  imports: [
+    ScheduleModule.forRoot(),
+    SupabaseModule,
+    UserModule,
+    AuthModule,
+    AdmissionModule,
+    DriverModule,
+    LocationModule,
+    StudentModule,
+    FeesModule,
+    TransportModule,
+    StaffModule,
+    SettingsModule,
+    PaymentLinkModule,
+    HrModule,
+    PosModule,
+    DocRequestModule,
+    HouseModule,
+    DashboardModule
+  ],
   providers: [
     PrismaService,
     UserService,

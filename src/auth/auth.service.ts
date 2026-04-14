@@ -41,6 +41,7 @@ async loginDriver(driver: Driver) {
   async login(data: any) {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
+     
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -71,6 +72,7 @@ async loginDriver(driver: Driver) {
         name: user.name,
         email: user.email,
         role: user.role,
+        staffId:user.staffId,
         permissions,
       },
     };

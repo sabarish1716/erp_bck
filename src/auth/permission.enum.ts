@@ -23,6 +23,7 @@ export enum Permission {
   FEES_DASHBOARD        = 'fees:dashboard',
 
   // ─── TRANSPORT ─────────────────────────────
+  TRANSPORT_DASHBOARD  = 'transport:dashboard',
   TRANSPORT_ROUTE_CREATE = 'transport:route:create',
   TRANSPORT_ROUTE_READ   = 'transport:route:read',
   TRANSPORT_ROUTE_UPDATE = 'transport:route:update',

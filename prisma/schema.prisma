@@ -20,7 +20,7 @@ model User {
   student     Student? @relation(fields: [studentId], references: [id])
 
   isActive    Boolean  @default(true)
-
+  staffId     String?  @unique
   // Document issue relations
   docRequestsMade    DocRequest[] @relation("DocRequestedBy")
   docRequestsReviewed DocRequest[] @relation("DocReviewedBy")
@@ -28,13 +28,30 @@ model User {
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
 }
 
 enum Role {
   ADMIN
   PRINCIPAL
   STAFF
+  TRANSPORT_MANAGER
+  TEACHER
   STUDENT
+}
+
+enum SyncJobType {
+  LOCATION
+  MILEAGE
+  DRIVER_STATUS
+  FUEL_LOG
+}
+
+enum SyncJobStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
 }
 
 
@@ -165,8 +182,27 @@ model Family {
   motherAadhar String?
   motherOccupation String?
 
+  // Single parent support
+  isSingleParent    Boolean @default(false)
+  guardianName      String?
+  guardianPhone     String?
+  guardianWhatsapp  String?
+  guardianAadhar    String?
+  guardianOccupation String?
+  guardianRelation  String?   // e.g. "father", "mother", "grandfather"
+
+  // Sibling 1 details
+  sibling1Name      String?
+  sibling1Standard  String?
+  sibling1School    String?   // "Same School" or school name
+
+  // Sibling 2 details
+  sibling2Name      String?
+  sibling2Standard  String?
+  sibling2School    String?   // "Same School" or school name
+
   siblingSchool   String?
-otherSchoolName String?
+  otherSchoolName String?
 
   otherWhatsapp String?
   familyIncome  Float?
@@ -197,6 +233,7 @@ model AcademicDetail {
   studentId          String
 
   examName           String?   // e.g. "SSLC", "MATRIC", "CBSE"
+  boardName          String?   @default("State Board") // "State Board" or custom board name
   registerNo         String?
   monthYear          String?   // e.g. "March 2024"
 
@@ -245,6 +282,9 @@ model Document {
   aadharMotherHardCopy  Boolean @default(false)
   aadharStudentHardCopy Boolean @default(false)
   transferCertHardCopy  Boolean @default(false)
+
+  // ✅ 3 photos received checkbox
+  photosReceived        Boolean @default(false)
 
   // ✅ Actual uploaded file paths
   photoPath         String?
@@ -454,6 +494,23 @@ model Location {
 
   // prevent duplicates during retry sync
   @@unique([driverId, createdAt])
+}
+
+model SupabaseSyncJob {
+  id          String        @id @default(uuid())
+  type        SyncJobType
+  status      SyncJobStatus @default(PENDING)
+  dedupeKey   String?       @unique
+  payload     Json
+  attempts    Int           @default(0)
+  lastError   String?
+  availableAt DateTime      @default(now())
+  processedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status, availableAt])
+  @@index([type, status])
 }
 
 model Mileage {
@@ -1347,3 +1404,5 @@ model DocRequest {
   @@index([status])
   @@index([type])
 }
+
+

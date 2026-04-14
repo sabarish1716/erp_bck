@@ -27,6 +27,13 @@ export class LocationController {
     return this.locationService.create(dto);
   }
 
+  // POST /location/mileage — from Flutter app (public, GPS-based mileage)
+  @Post('mileage')
+  @Public()
+  async saveMileage(@Body() body: { driverId: string; distanceKm: number; date: string }) {
+    return this.locationService.saveMileageFromDriver(body);
+  }
+
   // GET /location/live
   @Get('live/drivers')
   @Permissions(Permission.LOCATION_READ)
