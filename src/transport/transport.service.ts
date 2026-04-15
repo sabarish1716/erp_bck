@@ -822,6 +822,10 @@ export class TransportService {
     }
 
     try {
+      if (data.busId) {
+        await this.clearBusAssignments(data.busId);
+      }
+
       return await this.prisma.driver.create({
         data: {
           name: data.name,
@@ -873,6 +877,10 @@ export class TransportService {
 
 
     try {
+      if (updateData.busId && updateData.busId !== existing.busId) {
+        await this.clearBusAssignments(updateData.busId, id);
+      }
+
       return await this.prisma.driver.update({
         where: { id },
         data: updateData,
@@ -1035,12 +1043,24 @@ export class TransportService {
     return this.prisma.bus.delete({ where: { id } });
   }
 
+  private async clearBusAssignments(busId: string, exceptDriverId?: string) {
+    await this.prisma.driver.updateMany({
+      where: {
+        busId,
+        ...(exceptDriverId ? { id: { not: exceptDriverId } } : {}),
+      },
+      data: { busId: null },
+    });
+  }
+
   /** Assign a driver to a bus */
   async assignDriverToBus(driverId: string, busId: string) {
     const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
     if (!driver) throw new NotFoundException('Driver not found');
     const bus = await this.prisma.bus.findUnique({ where: { id: busId }, include: { route: true } });
     if (!bus) throw new NotFoundException('Bus not found');
+
+    await this.clearBusAssignments(busId, driverId);
 
     const updated = await this.prisma.driver.update({
       where: { id: driverId },
@@ -1079,7 +1099,9 @@ export class TransportService {
 
     // Assign driver to the first available bus on the route
     const targetBus = route.buses[0];
-    
+
+    await this.clearBusAssignments(targetBus.id, driverId);
+
     const updated = await this.prisma.driver.update({
       where: { id: driverId },
       data: { busId: targetBus.id },
@@ -1150,10 +1172,13 @@ export class TransportService {
         // Return only active drivers or all assigned drivers
         for (const driver of bus.drivers) {
           mappings.push({
+            busId: bus.id,
+            driverId: driver.id,
             plateNo: bus.number,
             driverName: driver.name,
             driverPhone: driver.phone,
             licenseNo: driver.licenseNo,
+            status: driver.status,
           });
         }
       }
@@ -1163,45 +1188,76 @@ export class TransportService {
 
   /** Assign a driver to a bus (vehicle-driver mapping) */
   async assignVehicleDriver(dto: any) {
-    // Accepts: plateNo, driverName, driverPhone, licenseNo
-    const { plateNo, driverName, driverPhone, licenseNo } = dto;
-    if (!plateNo || !driverName || !driverPhone || !licenseNo) {
-      throw new BadRequestException('plateNo, driverName, driverPhone, and licenseNo are required');
+    const busId = dto?.busId ? String(dto.busId) : undefined;
+    const driverId = dto?.driverId ? String(dto.driverId) : undefined;
+    const plateNo = dto?.plateNo ? String(dto.plateNo).trim() : undefined;
+    const driverName = dto?.driverName ? String(dto.driverName).trim() : undefined;
+    const driverPhone = dto?.driverPhone ? String(dto.driverPhone).trim() : undefined;
+    const licenseNo = dto?.licenseNo ? String(dto.licenseNo).trim() : undefined;
+
+    let bus = null as any;
+    if (busId) {
+      bus = await this.prisma.bus.findUnique({ where: { id: busId } });
+      if (!bus) throw new NotFoundException('Bus not found');
+    } else if (plateNo) {
+      bus = await this.prisma.bus.findFirst({ where: { number: plateNo } });
+      if (!bus) {
+        bus = await this.prisma.bus.create({ data: { number: plateNo } });
+      }
+    } else {
+      throw new BadRequestException('busId or plateNo is required');
     }
 
-    // Find or create Bus
-    let bus = await this.prisma.bus.findFirst({ where: { number: plateNo } });
-    if (!bus) {
-      bus = await this.prisma.bus.create({ data: { number: plateNo } });
-    }
+    let assignedDriver = null as any;
+    if (driverId) {
+      assignedDriver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+      if (!assignedDriver) throw new NotFoundException('Driver not found');
+    } else {
+      if (!driverName || !driverPhone) {
+        throw new BadRequestException('driverId or driverName and driverPhone are required');
+      }
 
-    // Find or create Driver
-    let driver = await this.prisma.driver.findFirst({
-      where: {
-        name: driverName,
-        phone: driverPhone,
-        licenseNo: licenseNo,
-      },
-    });
-    if (!driver) {
-      driver = await this.prisma.driver.create({
-        data: {
-          name: driverName,
-          phone: driverPhone,
-          licenseNo: licenseNo,
-          busId: bus.id,
+      assignedDriver = await this.prisma.driver.findFirst({
+        where: {
+          OR: [
+            { phone: driverPhone },
+            ...(licenseNo ? [{ licenseNo }] : []),
+          ],
         },
       });
-    } else {
-      // Assign driver to bus
-      await this.prisma.driver.update({ where: { id: driver.id }, data: { busId: bus.id } });
+
+      if (!assignedDriver) {
+        assignedDriver = await this.prisma.driver.create({
+          data: {
+            name: driverName,
+            phone: driverPhone,
+            licenseNo: licenseNo || null,
+            busId: bus.id,
+          },
+          include: { bus: true },
+        });
+      }
     }
 
-    // Return updated driver with bus info
-    return this.prisma.driver.findUnique({
-      where: { id: driver.id },
+    await this.clearBusAssignments(bus.id, assignedDriver.id);
+
+    const updated = await this.prisma.driver.update({
+      where: { id: assignedDriver.id },
+      data: { busId: bus.id },
       include: { bus: true },
     });
+
+    if (this.supabase) {
+      await this.supabase.enqueueDriverStatusSync({
+        driverId: updated.id,
+        name: updated.name,
+        phone: updated.phone || undefined,
+        busId: bus.id,
+        status: updated.status,
+      });
+    }
+
+    return updated;
   }
 
   /** Remove driver mapping from a bus (vehicle-driver mapping) */
@@ -1661,10 +1717,20 @@ export class TransportService {
 
   /** Create fuel log from Flutter driver app (public, resolves driver by phone) */
   async createFuelLogFromDriver(dto: any) {
-    const driverRef = String(dto.driverId || '').trim();
-    if (!driverRef) throw new BadRequestException('driverId (phone number) is required');
-    if (dto.odometer == null || isNaN(Number(dto.odometer))) throw new BadRequestException('odometer is required');
-    if (dto.litres == null || isNaN(Number(dto.litres))) throw new BadRequestException('litres is required');
+    const driverRef = String(
+      dto.driverId ?? dto.driver_id ?? dto.driverPhone ?? dto.phone ?? dto.phoneNumber ?? dto.deviceId ?? '',
+    ).trim();
+    if (!driverRef) throw new BadRequestException('driverId or driverPhone is required');
+
+    const odometerValue = dto.odometer ?? dto.distance ?? dto.distanceKm ?? dto.km;
+    const litresValue = dto.litres ?? dto.liters ?? dto.fuelLitres;
+
+    if (odometerValue == null || isNaN(Number(odometerValue))) {
+      throw new BadRequestException('odometer is required');
+    }
+    if (litresValue == null || isNaN(Number(litresValue))) {
+      throw new BadRequestException('litres is required');
+    }
 
     // Find all matching drivers and prefer the one with a bus assigned
     const candidates = await this.prisma.driver.findMany({
@@ -1709,12 +1775,26 @@ export class TransportService {
         driverId: driver.id,
         busId: resolvedBusId,
         plateNo: resolvedPlateNo,
-        odometer: Number(dto.odometer),
-        litres: Number(dto.litres),
-        fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
-        totalCost: dto.totalCost != null ? Number(dto.totalCost) : null,
-        note: dto.note || null,
-        imageUrl: dto.imageUrl || null,
+        odometer: Number(odometerValue),
+        litres: Number(litresValue),
+        fuelCostPerLitre:
+          dto.fuelCostPerLitre != null
+            ? Number(dto.fuelCostPerLitre)
+            : dto.fuel_cost_per_litre != null
+              ? Number(dto.fuel_cost_per_litre)
+              : dto.rate != null
+                ? Number(dto.rate)
+                : null,
+        totalCost:
+          dto.totalCost != null
+            ? Number(dto.totalCost)
+            : dto.total_cost != null
+              ? Number(dto.total_cost)
+              : dto.amount != null
+                ? Number(dto.amount)
+                : null,
+        note: dto.note || dto.remarks || dto.comment || null,
+        imageUrl: dto.imageUrl || dto.image_url || null,
       },
     });
 
@@ -1724,12 +1804,26 @@ export class TransportService {
       driverId: driver.id,
       busId: resolvedBusId || undefined,
       plateNo: resolvedPlateNo || undefined,
-      odometer: Number(dto.odometer),
-      litres: Number(dto.litres),
-      fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : undefined,
-      totalCost: dto.totalCost != null ? Number(dto.totalCost) : undefined,
-      note: dto.note || undefined,
-      imageUrl: dto.imageUrl || undefined,
+      odometer: Number(odometerValue),
+      litres: Number(litresValue),
+      fuelCostPerLitre:
+        dto.fuelCostPerLitre != null
+          ? Number(dto.fuelCostPerLitre)
+          : dto.fuel_cost_per_litre != null
+            ? Number(dto.fuel_cost_per_litre)
+            : dto.rate != null
+              ? Number(dto.rate)
+              : undefined,
+      totalCost:
+        dto.totalCost != null
+          ? Number(dto.totalCost)
+          : dto.total_cost != null
+            ? Number(dto.total_cost)
+            : dto.amount != null
+              ? Number(dto.amount)
+              : undefined,
+      note: dto.note || dto.remarks || dto.comment || undefined,
+      imageUrl: dto.imageUrl || dto.image_url || undefined,
       timestamp: fuelLog.timestamp.toISOString(),
     });
 

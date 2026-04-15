@@ -166,8 +166,14 @@ export class TransportController {
   }
 
   // Public endpoint for Flutter driver app (no auth token)
+  // Accept legacy and plural aliases used by older mobile builds.
   @Public()
-  @Post('fuel-log/driver')
+  @Post([
+    'fuel-log/driver',
+    'fuel-logs/driver',
+    'fuel-log/upload',
+    'fuel-logs/upload',
+  ])
   @UseInterceptors(
     FileInterceptor('image', {
       storage: diskStorage({
@@ -192,8 +198,10 @@ export class TransportController {
     @Body() dto: any,
     @UploadedFile() file?: Express.Multer.File,
   ) {
-    // Use uploaded file path if present, otherwise use imageUrl from body (Supabase Storage URL)
-    const imageUrl = file ? `/uploads/fuel-logs/${file.filename}` : (dto.imageUrl || null);
+    // Use uploaded file path if present, otherwise accept either camelCase or snake_case image URL keys.
+    const imageUrl = file
+      ? `/uploads/fuel-logs/${file.filename}`
+      : (dto.imageUrl || dto.image_url || null);
     return this.transportService.createFuelLogFromDriver({ ...dto, imageUrl });
   }
 

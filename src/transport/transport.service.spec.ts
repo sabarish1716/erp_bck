@@ -29,9 +29,16 @@ describe('TransportService', () => {
       bus: {
         count: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
       },
       driver: {
         count: jest.fn(),
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+        create: jest.fn(),
       },
       location: {
         findMany: jest.fn(),
@@ -49,7 +56,7 @@ describe('TransportService', () => {
       },
     };
 
-    service = new TransportService(prisma, { syncLocation: jest.fn(), syncMileage: jest.fn(), syncDriverStatus: jest.fn(), getClient: jest.fn() } as any);
+    service = new TransportService(prisma, { syncLocation: jest.fn(), syncMileage: jest.fn(), enqueueDriverStatusSync: jest.fn(), getClient: jest.fn() } as any);
   });
 
   it('returns pending transport students with formatted standard labels', async () => {
@@ -187,6 +194,56 @@ describe('TransportService', () => {
         },
       ],
     });
+  });
+
+  it('assigns a selected existing driver to a selected bus from the UI payload', async () => {
+    prisma.bus.findUnique.mockResolvedValue({
+      id: 'bus-1',
+      number: 'TN-01-1234',
+      route: { id: 'route-1', routeName: 'Route A' },
+    });
+    prisma.driver.findUnique.mockResolvedValue({
+      id: 'driver-1',
+      name: 'Mani',
+      phone: '9999999999',
+      licenseNo: 'LIC-1',
+      status: 'ACTIVE',
+      busId: null,
+    });
+    prisma.driver.updateMany.mockResolvedValue({ count: 0 });
+    prisma.driver.update.mockResolvedValue({
+      id: 'driver-1',
+      name: 'Mani',
+      phone: '9999999999',
+      licenseNo: 'LIC-1',
+      status: 'ACTIVE',
+      busId: 'bus-1',
+      bus: { id: 'bus-1', number: 'TN-01-1234' },
+    });
+
+    const result = await service.assignVehicleDriver({
+      busId: 'bus-1',
+      driverId: 'driver-1',
+    });
+
+    expect(prisma.driver.updateMany).toHaveBeenCalledWith({
+      where: {
+        busId: 'bus-1',
+        id: { not: 'driver-1' },
+      },
+      data: { busId: null },
+    });
+    expect(prisma.driver.update).toHaveBeenCalledWith({
+      where: { id: 'driver-1' },
+      data: { busId: 'bus-1' },
+      include: { bus: true },
+    });
+    expect(result).toEqual(
+      expect.objectContaining({
+        id: 'driver-1',
+        busId: 'bus-1',
+      }),
+    );
   });
 
   it('returns a fuel report for an individual bus', async () => {

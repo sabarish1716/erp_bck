@@ -45,6 +45,16 @@ export class LocationService {
     };
   }
 
+  private getLiveWindowMinutes() {
+    const rawValue = Number(process.env.LOCATION_LIVE_WINDOW_MINUTES || 15);
+
+    if (!Number.isFinite(rawValue) || rawValue <= 0) {
+      return 15;
+    }
+
+    return Math.min(Math.floor(rawValue), 1440);
+  }
+
   private async resolveDriverAndBus(dto: CreateLocationDto) {
     const driverRef = String(dto.driverId || '').trim();
     console.log(`[LocationService] Resolving locator for: ${driverRef}`);
@@ -219,14 +229,23 @@ export class LocationService {
     const geofence = this.getGeofenceConfig();
 
     const now = new Date();
-    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+    const liveWindowMinutes = this.getLiveWindowMinutes();
+    const liveWindowStart = new Date(now.getTime() - liveWindowMinutes * 60 * 1000);
+
+    try {
+      await this.supabase.importRecentDriverLocationsToLocal(liveWindowStart);
+    } catch (error) {
+      console.warn(
+        `[LocationService] Failed to reverse import recent driver locations: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
 
     // Get latest driver locations
     const latestCandidates = await this.prisma.location.findMany({
       where: {
         createdAt: {
           lte: now,
-          gt: fiveMinutesAgo,
+          gt: liveWindowStart,
         },
       },
       orderBy: { createdAt: 'desc' },

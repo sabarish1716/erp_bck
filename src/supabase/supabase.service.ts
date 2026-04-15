@@ -31,6 +31,17 @@ type RemoteFuelLogRow = {
   created_at: string | null;
 };
 
+type RemoteDriverLocationRow = {
+  id: string;
+  driver_id: string;
+  bus_id: string | null;
+  latitude: number;
+  longitude: number;
+  speed: number | null;
+  mileage_km: number | null;
+  created_at: string;
+};
+
 @Injectable()
 export class SupabaseService implements OnModuleInit {
   private client: SupabaseClient | null = null;
@@ -150,7 +161,7 @@ export class SupabaseService implements OnModuleInit {
     });
   }
 
-  private async resolveDriverForImportedFuelLog(driverRef: string) {
+  private async resolveDriverByReference(driverRef: string) {
     const trimmedRef = String(driverRef || '').trim();
     if (!trimmedRef) {
       return null;
@@ -179,6 +190,10 @@ export class SupabaseService implements OnModuleInit {
     }
 
     return driver;
+  }
+
+  private async resolveDriverForImportedFuelLog(driverRef: string) {
+    return this.resolveDriverByReference(driverRef);
   }
 
   private async resolveBusForImportedFuelLog(
@@ -234,6 +249,180 @@ export class SupabaseService implements OnModuleInit {
     }
 
     return null;
+  }
+
+  private async resolveBusIdForImportedLocation(
+    remoteBusId: string | null | undefined,
+    driver?: { id?: string; phone?: string | null; busId?: string | null } | null,
+    remoteDriverRef?: string | null,
+  ) {
+    if (driver?.busId) {
+      return driver.busId;
+    }
+
+    if (remoteBusId) {
+      const bus = await this.prisma.bus.findUnique({
+        where: { id: remoteBusId },
+        select: { id: true },
+      });
+      if (bus) {
+        return bus.id;
+      }
+    }
+
+    if (driver?.id) {
+      const lastLocation = await this.prisma.location.findFirst({
+        where: { driverId: driver.id },
+        orderBy: { createdAt: 'desc' },
+        select: { busId: true },
+      });
+      if (lastLocation?.busId) {
+        return lastLocation.busId;
+      }
+
+      const lastFuelLog = await this.prisma.fuelLog.findFirst({
+        where: { driverId: driver.id, busId: { not: null } },
+        orderBy: { timestamp: 'desc' },
+        select: { busId: true },
+      });
+      if (lastFuelLog?.busId) {
+        return lastFuelLog.busId;
+      }
+    }
+
+    const phoneCandidate = String(remoteDriverRef || driver?.phone || '').trim();
+    if (this.client && phoneCandidate) {
+      const response = await this.withSupabaseRetry(
+        () =>
+          this.client!
+            .from('drivers')
+            .select('bus_id,phone,driver_id,updated_at')
+            .or(`phone.eq.${phoneCandidate},driver_id.eq.${phoneCandidate}`)
+            .order('updated_at', { ascending: false })
+            .limit(1),
+        'Driver location remote bus lookup',
+      );
+
+      const remoteDriver = Array.isArray(response.data) ? response.data[0] : null;
+      const remoteResolvedBusId = remoteDriver?.bus_id ? String(remoteDriver.bus_id) : null;
+
+      if (remoteResolvedBusId) {
+        const bus = await this.prisma.bus.findUnique({
+          where: { id: remoteResolvedBusId },
+          select: { id: true },
+        });
+        if (bus) {
+          return bus.id;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  async importRecentDriverLocationsToLocal(since: Date) {
+    if (!this.client) {
+      return {
+        importedCount: 0,
+        skippedCount: 0,
+        fetchedCount: 0,
+        reason: 'client-unavailable',
+      };
+    }
+
+    const response = await this.withSupabaseRetry(
+      () =>
+        this.client!
+          .from('driver_locations')
+          .select('id,driver_id,bus_id,latitude,longitude,speed,mileage_km,created_at')
+          .gte('created_at', since.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(2000),
+      'Driver location reverse import fetch',
+    );
+
+    if (response.error) {
+      throw new Error(response.error.message);
+    }
+
+    const rows = (response.data || []) as RemoteDriverLocationRow[];
+    let importedCount = 0;
+    let skippedCount = 0;
+
+    for (const row of rows) {
+      const driver = await this.resolveDriverByReference(row.driver_id);
+      if (!driver) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const busId = await this.resolveBusIdForImportedLocation(
+        row.bus_id,
+        driver,
+        row.driver_id,
+      );
+      if (!busId) {
+        skippedCount += 1;
+        continue;
+      }
+
+      if (!row.bus_id) {
+        try {
+          const updateResponse = await this.withSupabaseRetry(
+            () =>
+              this.client!
+                .from('driver_locations')
+                .update({ bus_id: busId })
+                .eq('id', row.id),
+            'Driver location remote bus repair',
+          );
+
+          if (!updateResponse.error) {
+            row.bus_id = busId;
+          }
+        } catch {
+          // Keep local import working even if remote repair fails.
+        }
+      }
+
+      const createdAt = new Date(row.created_at);
+      if (Number.isNaN(createdAt.getTime())) {
+        skippedCount += 1;
+        continue;
+      }
+
+      await this.prisma.location.upsert({
+        where: {
+          driverId_createdAt: {
+            driverId: driver.id,
+            createdAt,
+          },
+        },
+        update: {
+          busId,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          speed: row.speed ?? null,
+        },
+        create: {
+          driverId: driver.id,
+          busId,
+          latitude: row.latitude,
+          longitude: row.longitude,
+          speed: row.speed ?? null,
+          createdAt,
+        },
+      });
+
+      importedCount += 1;
+    }
+
+    return {
+      importedCount,
+      skippedCount,
+      fetchedCount: rows.length,
+      reason: null,
+    };
   }
 
   private async importRemoteFuelLog(row: RemoteFuelLogRow) {
@@ -733,6 +922,29 @@ export class SupabaseService implements OnModuleInit {
       }
 
       this.logger.error(`Fuel log reverse import failed: ${message}`);
+    }
+  }
+
+  @Cron('0 0 20 * * *')
+  async clearDriverLocationsAt8Pm() {
+    if (!this.client) {
+      return;
+    }
+
+    try {
+      const { error } = await this.withSupabaseRetry(
+        () => this.client!.from('driver_locations').delete().not('id', 'is', null),
+        'Driver location nightly cleanup',
+      );
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      this.logger.log('Cleared all Supabase driver_locations rows at 8 PM');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(`Driver location nightly cleanup failed: ${message}`);
     }
   }
 
