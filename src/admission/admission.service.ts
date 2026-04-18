@@ -78,9 +78,83 @@ function getNextAcademicYear(academicYear?: string | null) {
   return `${endYear}-${endYear + 1}`;
 }
 
+/**
+ * Process and validate sibling school selection.
+ * Logic:
+ * - If school is "Other School", the customSchoolName is required and stored
+ * - If school is anything else (e.g., "Same School" or predefined), customSchoolName is cleared
+ * - Validates that customSchoolName is provided when "Other School" is selected
+ * 
+ * @param siblingNumber - "1" or "2" for the sibling identifier
+ * @param schoolValue - The selected school value
+ * @param customSchoolName - The custom school name (for "Other School" selection)
+ * @returns Object with processedSchool and processedCustomSchoolName
+ */
+function processSiblingSchoolSelection(
+  siblingNumber: string,
+  schoolValue?: string,
+  customSchoolName?: string,
+): { processedSchool: string | null; processedCustomSchoolName: string | null } {
+  // If no school selected, return nulls
+  if (!schoolValue) {
+    return { processedSchool: null, processedCustomSchoolName: null };
+  }
+
+  // If "Other School" is selected, custom school name is required
+  if (schoolValue === "Other School") {
+    if (!customSchoolName || customSchoolName.trim() === "") {
+      throw new BadRequestException(
+        `Sibling ${siblingNumber}: "Other School" selected but school name not provided. Please enter the school name.`
+      );
+    }
+    // Store the custom school name and set school to "Other School"
+    return {
+      processedSchool: "Other School",
+      processedCustomSchoolName: customSchoolName.trim(),
+    };
+  }
+
+  // For any other selection (e.g., "Same School" or predefined schools), clear custom name
+  return {
+    processedSchool: schoolValue,
+    processedCustomSchoolName: null, // Clear the custom school name
+  };
+}
+
 @Injectable()
 export class AdmissionService {
   constructor(private prisma: PrismaService) {}
+   // 👇 your methods here
+
+  async saveFamily(data: any) {
+    const familyData = {
+      fatherName: data.fatherName,
+      fatherPhone: data.fatherPhone,
+      fatherWhatsapp: data.fatherWhatsapp,
+      fatherAadhar: data.fatherAadhar,
+      fatherOccupation: data.fatherOccupation,
+      preferredPhone: data.preferredPhone,
+      parentsEmail: data.parentsEmail
+    };
+
+    const existingFamily = await this.prisma.family.findUnique({
+      where: { studentId: data.studentId }
+    });
+
+    if (existingFamily) {
+      return this.prisma.family.update({
+        where: { studentId: data.studentId },
+        data: familyData
+      });
+    }
+
+    return this.prisma.family.create({
+      data: {
+        studentId: data.studentId,
+        ...familyData
+      }
+    });
+  }
 
   private escapeCsvCell(value: unknown): string {
     if (value === null || value === undefined) return '';
@@ -213,9 +287,9 @@ export class AdmissionService {
         });
 
         results.push({ row: i + 1, status: 'success', admissionNo });
-      } catch (err) {
-        results.push({ row: i + 1, status: 'error', error: err?.message || 'Unknown error' });
-      }
+      }catch (error: any) {
+  throw new Error(error.message);
+}
     }
 
     const successCount = results.filter(r => r.status === 'success').length;
@@ -238,7 +312,7 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
 
   return this.prisma.student.create({
     data: {
-      name: data.name,
+  name: data.name ?? '',   // ✅ fix
       standard: toStandardEnum(data.standard),
       gender: data.gender || 'MALE',
       dob: data.dob ? new Date(data.dob) : new Date(),
@@ -286,13 +360,35 @@ parentsEmail: data.parentsEmail,
         guardianOccupation: data.family.guardianOccupation,
         guardianRelation: data.family.guardianRelation,
 
-        // Sibling details
+        // ✅ Sibling 1 details with school selection validation
         sibling1Name: data.family.sibling1Name,
         sibling1Standard: data.family.sibling1Standard,
-        sibling1School: data.family.sibling1School,
+        ...(() => {
+          const sibling1Result = processSiblingSchoolSelection(
+            "1",
+            data.family.sibling1School,
+            data.family.sibling1OtherSchoolName,
+          );
+          return {
+            sibling1School: sibling1Result.processedSchool,
+            sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
+          };
+        })(),
+
+        // ✅ Sibling 2 details with school selection validation
         sibling2Name: data.family.sibling2Name,
         sibling2Standard: data.family.sibling2Standard,
-        sibling2School: data.family.sibling2School,
+        ...(() => {
+          const sibling2Result = processSiblingSchoolSelection(
+            "2",
+            data.family.sibling2School,
+            data.family.sibling2OtherSchoolName,
+          );
+          return {
+            sibling2School: sibling2Result.processedSchool,
+            sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
+          };
+        })(),
 
         familyIncome: data.family.familyIncome
           ? parseFloat(data.family.familyIncome)
@@ -363,7 +459,13 @@ parentsEmail: data.parentsEmail,
         data.academics && data.academics.length > 0
           ? {
               create: data.academics.map((acad) => {
-                const totals = calcAcademicTotals(acad);
+                const totals = calcAcademicTotals({
+  ...acad,
+  subjects: acad.subjects?.map(s => ({
+    maxMarks: s.maxMarks ?? 0,
+    obtainedMarks: s.obtainedMarks ?? 0
+  }))
+});
                 return {
                   examName: acad.examName,
                   boardName: acad.boardName || 'State Board',
@@ -379,7 +481,11 @@ parentsEmail: data.parentsEmail,
                           subjectName: s.subjectName,
                           maxMarks: s.maxMarks,
                           obtainedMarks: s.obtainedMarks,
-                          percentage: s.percentage ?? (s.maxMarks > 0 ? parseFloat(((s.obtainedMarks / s.maxMarks) * 100).toFixed(2)) : 0),
+                         percentage: s.percentage ?? (
+  (s.maxMarks ?? 0) > 0
+    ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
+    : 0
+),
                         })),
                       }
                     : undefined,
@@ -418,7 +524,7 @@ parentsEmail: data.parentsEmail,
         : undefined,
         users: {
           create: {
-            name: data.name,
+           name: data.name ?? '',
             email: data?.email ?? `user${data.admission?.admissionNo}@example.com`,
             password: 'defaultpassword', // In real app, hash this and generate properly
             role: 'STUDENT',
@@ -586,7 +692,7 @@ parentsEmail: data.parentsEmail,
       throw new Error('Invalid update data: expected an object');
     }
     const updateData: any = {
-      name: data.name,
+      name: data.name ?? '',
       standard: toStandardEnum(data.standard),
       gender: data.gender || 'MALE',
       religion: data.religion,
@@ -630,12 +736,34 @@ parentsEmail: data.parentsEmail,
             guardianAadhar: data.family.guardianAadhar,
             guardianOccupation: data.family.guardianOccupation,
             guardianRelation: data.family.guardianRelation,
+            // ✅ Sibling 1 with school selection validation
             sibling1Name: data.family.sibling1Name,
             sibling1Standard: data.family.sibling1Standard,
-            sibling1School: data.family.sibling1School,
+            ...(() => {
+              const sibling1Result = processSiblingSchoolSelection(
+                "1",
+                data.family.sibling1School,
+                data.family.sibling1OtherSchoolName,
+              );
+              return {
+                sibling1School: sibling1Result.processedSchool,
+                sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
+              };
+            })(),
+            // ✅ Sibling 2 with school selection validation
             sibling2Name: data.family.sibling2Name,
             sibling2Standard: data.family.sibling2Standard,
-            sibling2School: data.family.sibling2School,
+            ...(() => {
+              const sibling2Result = processSiblingSchoolSelection(
+                "2",
+                data.family.sibling2School,
+                data.family.sibling2OtherSchoolName,
+              );
+              return {
+                sibling2School: sibling2Result.processedSchool,
+                sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
+              };
+            })(),
             familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
             siblings: data.family.siblings,
             hostelRequired: data.family.hostelRequired || false,
@@ -658,12 +786,34 @@ parentsEmail: data.parentsEmail,
             guardianAadhar: data.family.guardianAadhar,
             guardianOccupation: data.family.guardianOccupation,
             guardianRelation: data.family.guardianRelation,
+            // ✅ Sibling 1 with school selection validation
             sibling1Name: data.family.sibling1Name,
             sibling1Standard: data.family.sibling1Standard,
-            sibling1School: data.family.sibling1School,
+            ...(() => {
+              const sibling1Result = processSiblingSchoolSelection(
+                "1",
+                data.family.sibling1School,
+                data.family.sibling1OtherSchoolName,
+              );
+              return {
+                sibling1School: sibling1Result.processedSchool,
+                sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
+              };
+            })(),
+            // ✅ Sibling 2 with school selection validation
             sibling2Name: data.family.sibling2Name,
             sibling2Standard: data.family.sibling2Standard,
-            sibling2School: data.family.sibling2School,
+            ...(() => {
+              const sibling2Result = processSiblingSchoolSelection(
+                "2",
+                data.family.sibling2School,
+                data.family.sibling2OtherSchoolName,
+              );
+              return {
+                sibling2School: sibling2Result.processedSchool,
+                sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
+              };
+            })(),
             familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
             siblings: data.family.siblings,
             hostelRequired: data.family.hostelRequired || false,
@@ -752,7 +902,13 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       }
       updateData.academics = {
         create: data.academics.map((acad) => {
-          const totals = calcAcademicTotals(acad);
+          const totals = calcAcademicTotals({
+  ...acad,
+  subjects: acad.subjects?.map(s => ({
+    maxMarks: s.maxMarks ?? 0,
+    obtainedMarks: s.obtainedMarks ?? 0
+  }))
+});
           return {
             examName: acad.examName,
             boardName: acad.boardName || 'State Board',
@@ -768,7 +924,11 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
                     subjectName: s.subjectName,
                     maxMarks: s.maxMarks,
                     obtainedMarks: s.obtainedMarks,
-                    percentage: s.percentage ?? (s.maxMarks > 0 ? parseFloat(((s.obtainedMarks / s.maxMarks) * 100).toFixed(2)) : 0),
+                   percentage: s.percentage ?? (
+  (s.maxMarks ?? 0) > 0
+    ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
+    : 0
+),
                   })),
                 }
               : undefined,

@@ -45,11 +45,13 @@ class FamilyDto {
   @IsOptional() @IsString() sibling1Name?: string;
   @IsOptional() @IsString() sibling1Standard?: string;
   @IsOptional() @IsString() sibling1School?: string;
+  @IsOptional() @IsString() sibling1OtherSchoolName?: string;
 
   // Sibling 2 details
   @IsOptional() @IsString() sibling2Name?: string;
   @IsOptional() @IsString() sibling2Standard?: string;
   @IsOptional() @IsString() sibling2School?: string;
+  @IsOptional() @IsString() sibling2OtherSchoolName?: string;
 
   @IsOptional() @IsString() siblingSchool?: string;
 @IsOptional() @IsString() otherSchoolName?: string;
@@ -97,9 +99,9 @@ class DocumentsDto {
 }
 
 class SubjectMarkDto {
-  @IsNotEmpty() @IsString() subjectName: string;
-  @IsNotEmpty() @IsNumber() maxMarks: number;
-  @IsNotEmpty() @IsNumber() obtainedMarks: number;
+  @IsNotEmpty() @IsString() subjectName?: string;
+  @IsNotEmpty() @IsNumber() maxMarks?: number;
+  @IsNotEmpty() @IsNumber() obtainedMarks? : number;
   @IsOptional() @IsNumber() percentage?: number;
 }
 
@@ -136,7 +138,7 @@ class AdmissionInfoDto {
 }
 
 export class CreateAdmissionDto {
-  @IsNotEmpty() @IsString() name: string;
+  @IsNotEmpty() @IsString() name?: string;
   @IsOptional() @IsString() standard?: string;
   @IsOptional() @IsString() gender?: Gender;
   @IsOptional() @IsDateString() dob?: string;

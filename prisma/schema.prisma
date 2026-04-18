@@ -204,14 +204,16 @@ model Family {
   guardianRelation  String?   // e.g. "father", "mother", "grandfather"
 
   // Sibling 1 details
-  sibling1Name      String?
-  sibling1Standard  String?
-  sibling1School    String?   // "Same School" or school name
+  sibling1Name              String?   // Name of sibling 1
+  sibling1Standard          String?   // Grade/standard of sibling 1
+  sibling1School            String?   // "Same School", "Other School", or predefined school name
+  sibling1OtherSchoolName   String?   // Custom school name if "Other School" is selected for sibling 1
 
   // Sibling 2 details
-  sibling2Name      String?
-  sibling2Standard  String?
-  sibling2School    String?   // "Same School" or school name
+  sibling2Name              String?   // Name of sibling 2
+  sibling2Standard          String?   // Grade/standard of sibling 2
+  sibling2School            String?   // "Same School", "Other School", or predefined school name
+  sibling2OtherSchoolName   String?   // Custom school name if "Other School" is selected for sibling 2
 
   siblingSchool   String?
   otherSchoolName String?
