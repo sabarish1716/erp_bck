@@ -1,17 +1,9 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString } from 'class-validator';
 
 export class PromoteStudentsDto {
   @IsString()
-  fromStandard: string;
+  academicYear!: string;
 
   @IsString()
-  toStandard: string;
-
-  @IsOptional()
-  @IsString()
-  academicYear?: string;
-
-  @IsOptional()
-  @IsString()
-  newAcademicYear?: string;
+  newAcademicYear!: string;
 }

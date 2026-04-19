@@ -1179,205 +1179,100 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
   }
 
-  async promoteStudents(
-    fromStandard: string,
-    toStandard: string,
-    academicYear?: string,
-    newAcademicYear?: string,
-  ) {
-    const from = toStandardEnum(fromStandard);
-    const to = toStandardEnum(toStandard);
+  async promoteAllStudents(academicYear: string, newAcademicYear: string) {
+  const students = await this.prisma.student.findMany({
+    where: { academicYear },
+  });
 
-    if (from === to) {
-      throw new BadRequestException('From and To standards cannot be the same');
-    }
+  let updatedCount = 0;
 
-    // Validate promotion direction (must be upward)
-    const standardOrder = [
-      'LKG', 'UKG',
-      'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6',
-      'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
-    ];
-    const fromIdx = standardOrder.indexOf(from);
-    const toIdx = standardOrder.indexOf(to);
-    if (fromIdx >= 0 && toIdx >= 0 && toIdx <= fromIdx) {
-      throw new BadRequestException('Promotion must be to a higher standard');
-    }
-
-    const settingsRow = await this.prisma.appSetting.findUnique({
-      where: { key: 'admin.settings' },
-      select: { value: true },
-    });
-    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
-    const sourceAcademicYear =
-      normalizeAcademicYear(academicYear) ||
-      normalizeAcademicYear(String(settings.academicYear || '')) ||
-      academicYear ||
-      undefined;
-    const targetAcademicYear =
-      normalizeAcademicYear(newAcademicYear) ||
-      getNextAcademicYear(sourceAcademicYear || String(settings.academicYear || ''));
-
-    const dateRange = getAcademicYearDateRange(sourceAcademicYear);
-    const admissionFilter = dateRange
-      ? {
-          isApproved: true,
-          admissionDate: { gte: dateRange.start, lte: dateRange.end },
-        }
-      : { isApproved: true };
-
-    // Get students being promoted for tracking
-    const studentsToPromote = await this.prisma.student.findMany({
-      where: {
-        standard: from,
-        admission: { is: admissionFilter },
-      },
-      select: { id: true, name: true, standard: true },
-    });
-
-    const result = await this.prisma.student.updateMany({
-      where: {
-        standard: from,
-        admission: { is: admissionFilter },
-      },
-      data: { standard: to },
-    });
-
-    await this.prisma.admission.updateMany({
-      where: {
-        standard: from,
-        ...admissionFilter,
-      },
-      data: { standard: to },
-    });
-
-    if (targetAcademicYear) {
-      await this.prisma.appSetting.upsert({
-        where: { key: 'admin.settings' },
-        update: {
-          value: {
-            ...settings,
-            academicYear: targetAcademicYear,
-          },
-        },
-        create: {
-          key: 'admin.settings',
-          value: {
-            ...settings,
-            academicYear: targetAcademicYear,
-          },
-        },
-      });
-    }
-
-    return {
-      fromStandard: from,
-      toStandard: to,
-      updatedCount: result.count,
-      academicYear: sourceAcademicYear || null,
-      newAcademicYear: targetAcademicYear || null,
-      promotedStudents: studentsToPromote.map(s => ({ id: s.id, name: s.name })),
+  const getNextStandard = (standard: string) => {
+    const map = {
+      LKG: 'UKG',
+      UKG: 'STD_1',
+      STD_1: 'STD_2',
+      STD_2: 'STD_3',
+      STD_3: 'STD_4',
+      STD_4: 'STD_5',
+      STD_5: 'STD_6',
+      STD_6: 'STD_7',
+      STD_7: 'STD_8',
+      STD_8: 'STD_9',
+      STD_9: 'STD_10',
+      STD_10: 'STD_11',
+      STD_11: 'STD_12',
+      STD_12: 'GRADUATED',
     };
+
+    return map[standard] || standard;
+  };
+
+  for (const student of students) {
+    const nextStandard = getNextStandard(student.standard);
+
+    await this.prisma.student.update({
+      where: { id: student.id },
+      data: {
+        standard: nextStandard,
+        academicYear: newAcademicYear,
+      },
+    });
+
+    updatedCount++;
   }
 
-  async demoteStudents(
-    fromStandard: string,
-    toStandard: string,
-    academicYear?: string,
-    newAcademicYear?: string,
-  ) {
-    const from = toStandardEnum(fromStandard);
-    const to = toStandardEnum(toStandard);
+  return {
+    updatedCount,
+    newAcademicYear,
+  };
+}
 
-    if (from === to) {
-      throw new BadRequestException('From and To standards cannot be the same');
-    }
+  async demoteAllStudents(academicYear: string, newAcademicYear: string) {
+  const students = await this.prisma.student.findMany({
+    where: { academicYear },
+  });
 
-    const standardOrder = [
-      'LKG', 'UKG',
-      'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6',
-      'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
-    ];
-    const fromIdx = standardOrder.indexOf(from);
-    const toIdx = standardOrder.indexOf(to);
-    if (fromIdx >= 0 && toIdx >= 0 && toIdx >= fromIdx) {
-      throw new BadRequestException('Demotion must be to a lower standard');
-    }
+  let updatedCount = 0;
 
-    const settingsRow = await this.prisma.appSetting.findUnique({
-      where: { key: 'admin.settings' },
-      select: { value: true },
-    });
-    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
-    const sourceAcademicYear =
-      normalizeAcademicYear(academicYear) ||
-      normalizeAcademicYear(String(settings.academicYear || '')) ||
-      academicYear ||
-      undefined;
-    const targetAcademicYear =
-      normalizeAcademicYear(newAcademicYear) ||
-      getPreviousAcademicYear(sourceAcademicYear || String(settings.academicYear || ''));
-
-    const dateRange = getAcademicYearDateRange(sourceAcademicYear);
-    const admissionFilter = dateRange
-      ? {
-          isApproved: true,
-          admissionDate: { gte: dateRange.start, lte: dateRange.end },
-        }
-      : { isApproved: true };
-
-    const studentsToDemote = await this.prisma.student.findMany({
-      where: {
-        standard: from,
-        admission: { is: admissionFilter },
-      },
-      select: { id: true, name: true, standard: true },
-    });
-
-    const result = await this.prisma.student.updateMany({
-      where: {
-        standard: from,
-        admission: { is: admissionFilter },
-      },
-      data: { standard: to },
-    });
-
-    await this.prisma.admission.updateMany({
-      where: {
-        standard: from,
-        ...admissionFilter,
-      },
-      data: { standard: to },
-    });
-
-    if (targetAcademicYear) {
-      await this.prisma.appSetting.upsert({
-        where: { key: 'admin.settings' },
-        update: {
-          value: {
-            ...settings,
-            academicYear: targetAcademicYear,
-          },
-        },
-        create: {
-          key: 'admin.settings',
-          value: {
-            ...settings,
-            academicYear: targetAcademicYear,
-          },
-        },
-      });
-    }
-
-    return {
-      fromStandard: from,
-      toStandard: to,
-      updatedCount: result.count,
-      academicYear: sourceAcademicYear || null,
-      newAcademicYear: targetAcademicYear || null,
-      demotedStudents: studentsToDemote.map((s) => ({ id: s.id, name: s.name })),
+  const getPreviousStandard = (standard: string) => {
+    const map = {
+      UKG: 'LKG',
+      STD_1: 'UKG',
+      STD_2: 'STD_1',
+      STD_3: 'STD_2',
+      STD_4: 'STD_3',
+      STD_5: 'STD_4',
+      STD_6: 'STD_5',
+      STD_7: 'STD_6',
+      STD_8: 'STD_7',
+      STD_9: 'STD_8',
+      STD_10: 'STD_9',
+      STD_11: 'STD_10',
+      STD_12: 'STD_11',
     };
+
+    return map[standard] || standard;
+  };
+
+  for (const student of students) {
+    const prevStandard = getPreviousStandard(student.standard);
+
+    await this.prisma.student.update({
+      where: { id: student.id },
+      data: {
+        standard: prevStandard,
+        academicYear: newAcademicYear,
+      },
+    });
+
+    updatedCount++;
   }
+
+  return {
+    updatedCount,
+    newAcademicYear,
+  };
+}
 
   async linkSiblings(studentIds: string[], siblingGroupId?: string) {
     const uniqueIds = [...new Set((studentIds || []).filter(Boolean))];

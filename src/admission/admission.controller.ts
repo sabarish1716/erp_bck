@@ -163,27 +163,21 @@ async create(
     return this.service.updateStandardSeatConfig(body.seats, req?.user?.email);
   }
 
-  @Post('promote')
-  @Permissions(Permission.ADMISSION_UPDATE)
-  promoteStudents(@Body() body: PromoteStudentsDto) {
-    return this.service.promoteStudents(
-      body.fromStandard,
-      body.toStandard,
-      body.academicYear,
-      body.newAcademicYear,
-    );
-  }
+@Post('promote')
+promoteStudents(@Body() body: PromoteStudentsDto) {
+  return this.service.promoteAllStudents(
+    body.academicYear,
+    body.newAcademicYear,
+  );
+}
 
-  @Post('demote')
-  @Permissions(Permission.ADMISSION_UPDATE)
-  demoteStudents(@Body() body: PromoteStudentsDto) {
-    return this.service.demoteStudents(
-      body.fromStandard,
-      body.toStandard,
-      body.academicYear,
-      body.newAcademicYear,
-    );
-  }
+ @Post('demote')
+demoteStudents(@Body() body: PromoteStudentsDto) {
+  return this.service.demoteAllStudents(
+    body.academicYear,
+    body.newAcademicYear,
+  );
+}
 
   @Post('demote-individual')
   @Permissions(Permission.ADMISSION_UPDATE)

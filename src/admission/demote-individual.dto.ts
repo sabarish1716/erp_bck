@@ -1,9 +1,10 @@
-import { IsString, IsArray, IsOptional } from 'class-validator';
+import { IsString, IsArray, IsOptional, ArrayNotEmpty } from 'class-validator';
 
 export class DemoteIndividualDto {
   @IsArray()
+  @ArrayNotEmpty()
   @IsString({ each: true })
-  studentIds: string[];
+  studentIds!: string[];
 
   @IsOptional()
   @IsString()
