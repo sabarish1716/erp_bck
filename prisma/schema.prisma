@@ -516,6 +516,7 @@ model Bus {
   capacity    Int?
   drivers     Driver[]
   locations   Location[]
+  expenses TransportExpense[]
   mileages    Mileage[] @relation("BusMileages")
   fuelLogs    FuelLog[] @relation("BusFuelLogs")
   route       TransportRoute? @relation("RouteBuses", fields: [routeId], references: [id])
@@ -615,6 +616,39 @@ model FuelLog {
   @@index([driverId])
   @@index([busId])
   @@index([plateNo, timestamp])
+}
+
+model TransportExpense {
+  id          String   @id @default(uuid())
+
+  busId       String
+  date        DateTime
+  category    ExpenseCategory
+  amount      Float
+
+  // Fuel (manual entry)
+  fuelStation   String?
+  paymentMode   PaymentMode?
+  litres        Float?
+  pricePerLitre Float?
+
+  // Maintenance
+  workshop    String?
+  description String?
+
+  // Parts
+  partName    String?
+  isShared    Boolean?
+
+  // Tax
+  taxType     String?
+
+  createdAt   DateTime @default(now())
+
+  bus Bus @relation(fields: [busId], references: [id])
+
+  @@index([busId])
+  @@index([date])
 }
 
 model FeeStructure {
@@ -901,6 +935,18 @@ enum LeaveStatus {
   APPROVED
   REJECTED
   CANCELLED
+}
+
+enum ExpenseCategory {
+  FUEL
+  MAINTENANCE
+  PARTS
+  TAX
+}
+
+enum PaymentMode {
+  CASH
+  CARD
 }
 
 model Attendance {
