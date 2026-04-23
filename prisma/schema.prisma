@@ -803,10 +803,14 @@ model TransportExpense {
 
   // Parts
   partName    String?
+   quantity    Int?        // ✅ added
+  unitCost    Float?      // ✅ added
   isShared    Boolean?
 
   // Tax
   taxType     String?
+    referenceNo String?     // ✅ added
+
 
   createdAt   DateTime @default(now())
 
