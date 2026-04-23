@@ -1,8 +1,20 @@
-import { IsString, IsNumber, IsOptional, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsArray,
+} from 'class-validator';
 
 export class CreateExpenseDto {
   @IsString()
-  busId!: string;
+  busId?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  busIds?: string[];
 
   @IsString()
   date!: string;
@@ -42,9 +54,22 @@ export class CreateExpenseDto {
   partName?: string;
 
   @IsOptional()
+  @IsBoolean()
   isShared?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  quantity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  unitCost?: number;
 
   @IsOptional()
   @IsString()
   taxType?: string;
+
+  @IsOptional()
+  @IsString()
+  referenceNo?: string;
 }
