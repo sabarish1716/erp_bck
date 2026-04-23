@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsBoolean } from 'class-validator';
 
 export class GeneratePayrollDto {
   @IsNotEmpty() @IsString() month: string;
@@ -7,4 +7,10 @@ export class GeneratePayrollDto {
 
 export class ApprovePayrollDto {
   @IsArray() ids: string[];
+}
+
+export class UpdatePayrollDto {
+  @IsOptional() @IsBoolean() lopCancelled?: boolean;
+  @IsOptional() @IsNumber() bonusIncentive?: number;
+  @IsOptional() @IsNumber() extraAllowance?: number;
 }

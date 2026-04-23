@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query } from '@nestjs/common';
 import { TransportExpenseService } from './transport-expense.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';   // 👈 ADD HERE
 
@@ -14,5 +14,15 @@ export class TransportExpenseController {
   @Get()
   getAll() {
     return this.service.findAll();
+  }
+
+  @Get('salary-report')
+  getSalaryReport(@Query('month') month?: string) {
+    return this.service.getTransportSalaryReport(month);
+  }
+
+  @Get('finance-report')
+  getFinanceReport(@Query('month') month?: string) {
+    return this.service.getTransportFinanceReport(month);
   }
 }

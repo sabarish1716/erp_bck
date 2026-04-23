@@ -22,10 +22,11 @@ import { SupabaseModule } from './supabase/supabase.module';
 import { JwtAuthGuard } from './auth/jwt.guard';
 import { PermissionsGuard } from './auth/permissions.guard';
 import { TransportExpenseModule } from './transport-expense/transport-expense.module';
+import { ExamModule } from './exam/exam.module';
 
 
 @Module({
-  imports: [ScheduleModule.forRoot(), SupabaseModule, UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule,TransportExpenseModule],
+  imports: [ScheduleModule.forRoot(), SupabaseModule, UserModule, AuthModule, AdmissionModule, DriverModule, LocationModule, StudentModule, FeesModule, TransportModule, StaffModule, SettingsModule, PaymentLinkModule, HrModule, PosModule, DocRequestModule, HouseModule, TransportExpenseModule, ExamModule],
   providers: [
     PrismaService,
     UserService,

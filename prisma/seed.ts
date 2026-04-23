@@ -4,6 +4,7 @@ import {
   Gender,
   Community,
   AcademicStream,
+  ExamSession,
   Standard,
   DiscountType,
   AttendanceStatus,
@@ -86,6 +87,14 @@ async function resetDatabase() {
   await prisma.leaveBalance.deleteMany();
   await prisma.leaveType.deleteMany();
   await prisma.statutorySettings.deleteMany();
+
+  await prisma.examSeatAllocation.deleteMany();
+  await prisma.examScheduleHall.deleteMany();
+  await prisma.examSchedule.deleteMany();
+  await prisma.examRollNumber.deleteMany();
+  await prisma.examSubject.deleteMany();
+  await prisma.examHall.deleteMany();
+  await prisma.exam.deleteMany();
 
   await prisma.subjectMark.deleteMany();
   await prisma.academicDetail.deleteMany();
@@ -396,6 +405,107 @@ async function main() {
         pfJoiningDate: new Date('2026-02-10T00:00:00.000Z'),
       },
     }),
+    // ── TEACHING PART-TIME (2) ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0014',
+        name: 'Kavitha Suresh',
+        email: 'kavitha.staff@school.com',
+        phone: '9000000014',
+        designation: 'Part-time Teacher',
+        department: 'Mathematics',
+        qualification: 'B.Sc., B.Ed.',
+        joiningDate: new Date('2026-01-01T00:00:00.000Z'),
+        salary: 15000,
+        category: StaffCategory.TEACHING_PART_TIME,
+        paymentMode: 'CASH',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0015',
+        name: 'Ramesh Babu',
+        email: 'ramesh.staff@school.com',
+        phone: '9000000015',
+        designation: 'Part-time Teacher',
+        department: 'Arts',
+        qualification: 'B.A.',
+        joiningDate: new Date('2026-02-01T00:00:00.000Z'),
+        salary: 12000,
+        category: StaffCategory.TEACHING_PART_TIME,
+        paymentMode: 'CASH',
+      },
+    }),
+    // ── NON-TEACHING SECURITY (2) – daily rate ₹400/day ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0016',
+        name: 'Selvam G',
+        email: 'selvam.staff@school.com',
+        phone: '9000000016',
+        designation: 'Security Guard',
+        department: 'Security',
+        qualification: 'SSLC',
+        joiningDate: new Date('2025-06-01T00:00:00.000Z'),
+        salary: 10400,  // 400 × 26 working days
+        category: StaffCategory.NON_TEACHING_SECURITY,
+        paymentMode: 'CASH',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0017',
+        name: 'Pandian R',
+        email: 'pandian.staff@school.com',
+        phone: '9000000017',
+        designation: 'Security Guard',
+        department: 'Security',
+        qualification: 'SSLC',
+        joiningDate: new Date('2025-08-01T00:00:00.000Z'),
+        salary: 10400,
+        category: StaffCategory.NON_TEACHING_SECURITY,
+        paymentMode: 'CASH',
+      },
+    }),
+    // ── NON-TEACHING SPORTS (2) – daily rate ₹1500/day ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0018',
+        name: 'Dinesh Kumar',
+        email: 'dinesh.staff@school.com',
+        phone: '9000000018',
+        designation: 'Sports Coach',
+        department: 'Sports',
+        qualification: 'B.P.Ed.',
+        joiningDate: new Date('2025-07-01T00:00:00.000Z'),
+        salary: 39000,  // 1500 × 26 working days
+        category: StaffCategory.NON_TEACHING_SPORTS,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'SBI',
+        bankAccountNo: '6543210018',
+        bankIfsc: 'SBIN0001111',
+        pfJoiningDate: new Date('2025-07-01T00:00:00.000Z'),
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0019',
+        name: 'Anitha Priya',
+        email: 'anitha.staff@school.com',
+        phone: '9000000019',
+        designation: 'Sports Coach',
+        department: 'Sports',
+        qualification: 'M.P.Ed.',
+        joiningDate: new Date('2025-09-01T00:00:00.000Z'),
+        salary: 39000,
+        category: StaffCategory.NON_TEACHING_SPORTS,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Canara Bank',
+        bankAccountNo: '6543210019',
+        bankIfsc: 'CNRB0002222',
+        pfJoiningDate: new Date('2025-09-01T00:00:00.000Z'),
+      },
+    }),
   ]);
 
   for (const staff of staffRecords) {
@@ -421,8 +531,15 @@ async function main() {
       esiEmployeeRate: 0.75,
       esiEmployerRate: 3.25,
       esiWageLimit: 21000,
+      esiDailyWageThreshold: 176,
       ptEnabled: true,
       ptAmount: 200,
+      // Salary structure (Gross = Basic 50% + HRA 30% + Travel 0% + Other 0%)
+      basicRate: 50,
+      hraRate: 30,
+      travelAllowanceRate: 0,
+      otherAllowanceRate: 0,
+      clLapseMonths: 3,
     },
   });
 
@@ -440,16 +557,28 @@ async function main() {
 
   for (const staff of staffRecords) {
     const isTrainee = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
+    const isPartTime = staff.category === StaffCategory.TEACHING_PART_TIME;
+    const isDailyRateStaff = ([StaffCategory.NON_TEACHING_SECURITY, StaffCategory.NON_TEACHING_SPORTS] as StaffCategory[]).includes(staff.category);
+    // One part-time teacher (EMP0015) is on stipend — no PF/ESI
+    const isStipend = staff.employeeId === 'EMP0015';
+    const dailyRate = staff.category === StaffCategory.NON_TEACHING_SECURITY ? 400
+      : staff.category === StaffCategory.NON_TEACHING_SPORTS ? 1500
+      : undefined;
+    // Gross for daily-rate staff = 26 working days × daily rate; others = salary
+    const grossForStatutory = isDailyRateStaff ? 26 * (dailyRate ?? 0) : (staff.salary || 0);
+    const basicForStatutory = Math.round(grossForStatutory * 0.5);
     await prisma.staffStatutory.create({
       data: {
         staffId: staff.id,
-        pfNumber: isTrainee ? null : `PF-${staff.employeeId}`,
-        uanNumber: isTrainee ? null : `10001000${staff.employeeId.slice(-2)}`,
-        esiNumber: isTrainee ? null : `ESI-${staff.employeeId}`,
-        pfEnabled: !isTrainee,
-        esiEnabled: !isTrainee && (staff.salary || 0) <= 21000,
-        basicSalary: (staff.salary || 0) * 0.6,
-        grossSalary: staff.salary || 0,
+        pfNumber: (isTrainee || isPartTime) ? null : `PF-${staff.employeeId}`,
+        uanNumber: (isTrainee || isPartTime) ? null : `10001000${staff.employeeId.slice(-2)}`,
+        esiNumber: (isTrainee || isPartTime) ? null : `ESI-${staff.employeeId}`,
+        pfEnabled: !isTrainee && !isStipend,
+        esiEnabled: !isTrainee && !isStipend && grossForStatutory <= 21000,
+        isStipend,
+        ...(dailyRate !== undefined && { dailyRate }),
+        basicSalary: basicForStatutory,
+        grossSalary: grossForStatutory,
       },
     });
 
@@ -618,53 +747,106 @@ async function main() {
   // ═══════════════════════════════════════════════
   // PAYROLL – March 2026 (approved) + April 2026 (generated — current month)
   // ═══════════════════════════════════════════════
-  const pfRate = 0.12;
-  const esiEmployeeRate = statutorySettings.esiEmployeeRate / 100;
-  const esiWageLimit = statutorySettings.esiWageLimit;
-  const ptAmt = statutorySettings.ptAmount;
+  // ── Payroll rate constants from statutory settings ──
+  const BASIC_RATE   = statutorySettings.basicRate / 100;          // 0.50
+  const HRA_RATE     = statutorySettings.hraRate / 100;            // 0.30
+  const PF_EMP_RATE  = statutorySettings.pfEmployeeRate / 100;     // 0.12
+  const PF_EMP_ER_RATE = statutorySettings.pfEmployerRate / 100;   // 0.12
+  const PF_WAGE_LIM  = statutorySettings.pfWageLimit;              // 15000
+  const ESI_EMP_RATE = statutorySettings.esiEmployeeRate / 100;    // 0.0075
+  const ESI_EMP_ER_RATE = statutorySettings.esiEmployerRate / 100; // 0.0325
+  const ESI_WAGE_LIM = statutorySettings.esiWageLimit;             // 21000
+  const ESI_DAILY_TH = statutorySettings.esiDailyWageThreshold;    // 176
+  const PT_AMT       = statutorySettings.ptAmount;                 // 200
 
   for (const month of ['2026-03', '2026-04']) {
     for (const staff of staffRecords) {
-      const sal = staff.salary || 0;
-      const basic = Math.round(sal * 0.6);
-      const hra = Math.round(sal * 0.2);
-      const da = Math.round(sal * 0.1);
-      const others = Math.round(sal * 0.1);
-      const gross = sal;
-      const isTrainee = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
-      const hasPF = !isTrainee && !!staff.pfJoiningDate;
-      const pf = hasPF ? Math.round(basic * pfRate) : 0;
-      const esi = hasPF && gross <= esiWageLimit ? Math.round(gross * esiEmployeeRate) : 0;
-      const pt = hasPF ? ptAmt : 0;
-      const lopDays = month === '2026-04' ? (sal > 50000 ? 0 : 1) : 1;
-      const lopDed = Math.round(gross / 26 * lopDays);
-      const fixedAdv = 0; // will be overridden per-staff below
-      const salAdv = 0;
+      const isTraineePay  = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
+      const isPartTimePay = staff.category === StaffCategory.TEACHING_PART_TIME;
+      const isDailyRatePay = ([StaffCategory.NON_TEACHING_SECURITY, StaffCategory.NON_TEACHING_SPORTS] as StaffCategory[]).includes(staff.category);
+      const isStipendPay  = staff.employeeId === 'EMP0015';
+
+      // LOP: part-time teachers and daily-rate staff have no LOP concept
+      const lopDays = (isPartTimePay || isDailyRatePay) ? 0
+        : month === '2026-04' ? ((staff.salary || 0) > 50000 ? 0 : 1) : 1;
+
+      const totalWorkingDays = 26;
+      const presentDays = totalWorkingDays - lopDays;
+
+      // Gross: daily-rate staff = presentDays × rate; others = fixed salary
+      const dailyRateVal = staff.category === StaffCategory.NON_TEACHING_SECURITY ? 400
+        : staff.category === StaffCategory.NON_TEACHING_SPORTS ? 1500 : 0;
+      const gross = isDailyRatePay ? presentDays * dailyRateVal : (staff.salary || 0);
+
+      // Earnings breakdown
+      const basic        = Math.round(gross * BASIC_RATE);   // 50%
+      const hra          = Math.round(gross * HRA_RATE);     // 30%
+      const da           = 0;                                // legacy, always 0
+      const otherAllows  = 0;                                // configurable, default 0
+      const lopDed       = isDailyRatePay ? 0 : Math.round(gross / totalWorkingDays * lopDays);
+
+      // PF: on Basic (50% of gross), capped at pfWageLimit
+      const hasPF     = !isTraineePay && !isStipendPay && !!staff.pfJoiningDate;
+      const pfBase    = basic;
+      const pfWage    = Math.min(pfBase, PF_WAGE_LIM);
+      const empPF     = hasPF ? Math.round(pfWage * PF_EMP_RATE) : 0;
+      const empErPF   = hasPF ? Math.round(pfWage * PF_EMP_ER_RATE) : 0;
+
+      // ESI: on Basic+HRA (~80% of gross), skip if daily wage < threshold
+      const esiBase      = basic + hra;   // ~80% of gross
+      const dailyEsiWage = Math.round(esiBase / 30);
+      const esiApplicable = hasPF && dailyEsiWage >= ESI_DAILY_TH && esiBase <= ESI_WAGE_LIM;
+      const empESI    = esiApplicable ? Math.round(esiBase * ESI_EMP_RATE) : 0;
+      const empErESI  = esiApplicable ? Math.round(esiBase * ESI_EMP_ER_RATE) : 0;
+
+      // PT only for regular permanent staff with PF
+      const pt = hasPF ? PT_AMT : 0;
+
+      // CTC = Gross + Employer PF + Employer ESI
+      const ctc = gross + empErPF + empErESI;
+
+      // Advance deductions (0 in seed baseline — actual deductions handled in service)
+      const fixedAdv = 0;
+      const salAdv   = 0;
       const otherAdv = 0;
-      const extra = isTrainee && month === '2026-04' ? 500 : 0;
-      const totalDed = pf + esi + pt + lopDed + fixedAdv + salAdv + otherAdv;
+
+      // Extra allowance for trainees in April
+      const extra = isTraineePay && month === '2026-04' ? 500 : 0;
+
+      const totalDed = empPF + empESI + pt + lopDed + fixedAdv + salAdv + otherAdv;
       const net = gross + extra - totalDed;
 
       await prisma.payroll.create({
         data: {
           staffId: staff.id,
           month,
-          basicSalary: basic, hra, da, otherAllowances: others,
+          basicSalary: basic,
+          hra,
+          da,
+          travelAllowance: 0,
+          otherAllowances: otherAllows,
           grossSalary: gross,
-          totalWorkingDays: 26,
-          presentDays: 26 - lopDays,
+          totalWorkingDays,
+          presentDays,
           lopDays,
           lopDeduction: lopDed,
+          lopCancelled: false,
           permissionHoursUsed: month === '2026-04' ? 3 : 2,
           permissionLopDays: 0,
           permissionLopDeduction: 0,
-          pfDeduction: pf,
-          esiDeduction: esi,
+          pfBase,
+          esiBase,
+          pfDeduction: empPF,
+          esiDeduction: empESI,
           ptDeduction: pt,
+          employerPfContribution: empErPF,
+          employerEsiContribution: empErESI,
+          ctc,
           fixedAdvanceDeduction: fixedAdv,
           salaryAdvanceDeduction: salAdv,
           otherAdvanceDeduction: otherAdv,
           extraAllowance: extra,
+          bonusIncentive: 0,
           totalDeductions: totalDed,
           netSalary: net,
           status: month === '2026-03' ? 'approved' : 'generated',
@@ -876,7 +1058,7 @@ async function main() {
     },
   });
 
-  console.log('✅ HR module seeded: 12 staff (4 categories), payroll Mar+Apr 2026, 8 advance tickets, attendance, leaves, permissions');
+  console.log('✅ HR module seeded: 19 staff (7 categories: teaching-regular/trainee/part-time, non-teaching-regular/trainee/security/sports), payroll Mar+Apr 2026 with new PF/ESI/CTC formula, 8 advance tickets, attendance, leaves, permissions');
 
   await prisma.eSSLPunchLog.createMany({
     data: [
@@ -1427,6 +1609,143 @@ async function main() {
       },
     });
   }
+
+  // ═══════════════════════════════════════════════
+  // EXAM / SUBJECT / HALL / TIMETABLE / ROLL / SEAT
+  // ═══════════════════════════════════════════════
+  const annualExam = await prisma.exam.create({
+    data: {
+      name: 'Annual Examination 2026-2027',
+      code: 'ANNUAL-26-27',
+      academicYear: '2026-2027',
+      startDate: new Date('2027-03-10T00:00:00.000Z'),
+      endDate: new Date('2027-03-20T00:00:00.000Z'),
+      status: 'PUBLISHED',
+    },
+  });
+
+  const examStandard = Standard.STD_10;
+
+  const [subMath10A, subSci10A] = await Promise.all([
+    prisma.examSubject.create({
+      data: {
+        examId: annualExam.id,
+        name: 'Mathematics',
+        code: `MATH-${String(examStandard).replace('STD_', '')}A`,
+        standard: examStandard,
+        maxMarks: 100,
+        passMarks: 35,
+      },
+    }),
+    prisma.examSubject.create({
+      data: {
+        examId: annualExam.id,
+        name: 'Science',
+        code: `SCI-${String(examStandard).replace('STD_', '')}A`,
+        standard: examStandard,
+        maxMarks: 100,
+        passMarks: 35,
+      },
+    }),
+  ]);
+
+  const [hallA, hallB] = await Promise.all([
+    prisma.examHall.create({
+      data: {
+        name: 'Hall A',
+        building: 'Main Block',
+        floor: '1',
+        capacity: 25,
+      },
+    }),
+    prisma.examHall.create({
+      data: {
+        name: 'Hall B',
+        building: 'Main Block',
+        floor: '1',
+        capacity: 25,
+      },
+    }),
+  ]);
+
+  const scheduleMath = await prisma.examSchedule.create({
+    data: {
+      examId: annualExam.id,
+      subjectId: subMath10A.id,
+      standard: examStandard,
+      examDate: new Date('2027-03-12T00:00:00.000Z'),
+      startsAt: new Date('2027-03-12T09:30:00.000Z'),
+      endsAt: new Date('2027-03-12T12:30:00.000Z'),
+      session: ExamSession.FN,
+      halls: {
+        create: [{ hallId: hallA.id }, { hallId: hallB.id }],
+      },
+    },
+  });
+
+  await prisma.examSchedule.create({
+    data: {
+      examId: annualExam.id,
+      subjectId: subSci10A.id,
+      standard: examStandard,
+      examDate: new Date('2027-03-14T00:00:00.000Z'),
+      startsAt: new Date('2027-03-14T13:30:00.000Z'),
+      endsAt: new Date('2027-03-14T16:30:00.000Z'),
+      session: ExamSession.AN,
+      halls: {
+        create: [{ hallId: hallA.id }, { hallId: hallB.id }],
+      },
+    },
+  });
+
+  const std10AStudents = await prisma.student.findMany({
+    where: {
+      standard: examStandard,
+    },
+    include: {
+      admission: {
+        select: { admissionNo: true },
+      },
+    },
+  });
+
+  std10AStudents.sort((a, b) => (a.admission?.admissionNo || a.name).localeCompare(b.admission?.admissionNo || b.name));
+
+  const rollRows = [] as Array<{ id: string; studentId: string }>;
+  for (let i = 0; i < std10AStudents.length; i += 1) {
+    const student = std10AStudents[i];
+    const created = await prisma.examRollNumber.create({
+      data: {
+        examId: annualExam.id,
+        studentId: student.id,
+        rollNumber: `ANNUAL-26-27-${String(examStandard)}-${String(i + 1).padStart(3, '0')}`,
+        standard: examStandard,
+        academicYear: '2026-2027',
+      },
+      select: { id: true, studentId: true },
+    });
+    rollRows.push(created);
+  }
+
+  const hallOrder = [hallA.id, hallB.id];
+  const hallCapacity = 25;
+  for (let i = 0; i < rollRows.length; i += 1) {
+    const hallIndex = Math.floor(i / hallCapacity);
+    if (hallIndex >= hallOrder.length) break;
+    const seatNumber = (i % hallCapacity) + 1;
+
+    await prisma.examSeatAllocation.create({
+      data: {
+        scheduleId: scheduleMath.id,
+        hallId: hallOrder[hallIndex],
+        studentId: rollRows[i].studentId,
+        rollNumberId: rollRows[i].id,
+        seatNumber,
+      },
+    });
+  }
+
+  console.log(`✅ Exam module seeded: 1 exam, 2 subjects, 2 halls, 2 timetable entries, ${rollRows.length} roll numbers, ${rollRows.length} seat allocations`);
 
   // ═══════════════════════════════════════════════
   // POS / STORE SEED DATA

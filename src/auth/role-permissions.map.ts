@@ -74,6 +74,14 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     // House
     Permission.HOUSE_READ,
     Permission.HOUSE_UPDATE,
+    // Exam
+    Permission.EXAM_CREATE,
+    Permission.EXAM_READ,
+    Permission.EXAM_SUBJECT_MANAGE,
+    Permission.EXAM_HALL_MANAGE,
+    Permission.EXAM_TIMETABLE_MANAGE,
+    Permission.EXAM_ROLL_GENERATE,
+    Permission.EXAM_SEAT_ALLOCATE,
   ],
 
   [Role.STAFF]: [
@@ -92,6 +100,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.DOC_REQUEST_READ,
     // House — read only
     Permission.HOUSE_READ,
+    // Exam — read only
+    Permission.EXAM_READ,
   ],
 
   [Role.TEACHER]: [
@@ -110,6 +120,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.DOC_REQUEST_READ,
     // House — read only
     Permission.HOUSE_READ,
+    // Exam — read only
+    Permission.EXAM_READ,
   ],
 
   [Role.TRANSPORT_MANAGER]: [
@@ -129,6 +141,14 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.POS_SELL,
     Permission.POS_MANAGE,
     Permission.POS_READ,
+    // Exam
+    Permission.EXAM_CREATE,
+    Permission.EXAM_READ,
+    Permission.EXAM_SUBJECT_MANAGE,
+    Permission.EXAM_HALL_MANAGE,
+    Permission.EXAM_TIMETABLE_MANAGE,
+    Permission.EXAM_ROLL_GENERATE,
+    Permission.EXAM_SEAT_ALLOCATE,
   
   ],
 
@@ -143,6 +163,8 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.DOC_REQUEST_READ,
     // House
     Permission.HOUSE_READ,
+    // Exam
+    Permission.EXAM_READ,
   ],
 };
 

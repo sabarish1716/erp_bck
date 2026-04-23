@@ -7,7 +7,7 @@ import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } fr
 import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from './dto/permission.dto';
 import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
 import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
-import { GeneratePayrollDto, ApprovePayrollDto } from './dto/payroll.dto';
+import { GeneratePayrollDto, ApprovePayrollDto, UpdatePayrollDto } from './dto/payroll.dto';
 
 type LeavePermissionPolicy = {
   permissionHoursLimit: number;
@@ -776,6 +776,12 @@ export class HrService {
     const endDate = new Date(y, m, 1);
 
     const settings = await this.getStatutorySettings();
+    // Salary structure percentages from settings (with defaults)
+    const basicRate = (settings as any).basicRate ?? 50;
+    const hraRate = (settings as any).hraRate ?? 30;
+    const travelAllowanceRate = (settings as any).travelAllowanceRate ?? 0;
+    const otherAllowanceRate = (settings as any).otherAllowanceRate ?? 0;
+    const esiDailyWageThreshold = (settings as any).esiDailyWageThreshold ?? 176;
 
     const staffFilter: any = { isActive: true };
     if (dto.staffIds?.length) staffFilter.id = { in: dto.staffIds };
@@ -788,27 +794,76 @@ export class HrService {
 
     for (const staff of staffList) {
       const statutory = staff.staffStatutory;
-      const basicSalary = statutory?.basicSalary ?? staff.salary ?? 0;
-      const hra = basicSalary * 0.2;
-      const da = basicSalary * 0.1;
-      const otherAllowances = 0;
-      const grossSalary = statutory?.grossSalary ?? staff.salary ?? (basicSalary + hra + da + otherAllowances);
+      const isDailyRate =
+        staff.category === StaffCategory.NON_TEACHING_SECURITY ||
+        staff.category === StaffCategory.NON_TEACHING_SPORTS ||
+        staff.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
+      const isPartTime = staff.category === StaffCategory.TEACHING_PART_TIME;
 
-      // Count working days & attendance
-      const attendances = await this.prisma.attendance.findMany({
-        where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
-      });
+      // ── Gross salary determination ──────────────────────────────────────
+      let grossSalary: number;
+      let basicSalary: number;
+      let hra: number;
+      let travelAllowance: number;
+      let otherAllowances: number;
+
+      if (isDailyRate) {
+        // Daily-rate staff: gross = present days × daily rate
+        const defaultDailyRate =
+          staff.category === StaffCategory.NON_TEACHING_SECURITY
+            ? 400
+            : staff.category === StaffCategory.NON_TEACHING_SPORTS
+              ? 1500
+              : Math.round((staff.salary || 0) / 26);
+        const dailyRate = statutory?.dailyRate ?? defaultDailyRate;
+
+        // Count attendance first (needed for gross)
+        const attendances = await this.prisma.attendance.findMany({
+          where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+        });
+        let presentDaysCount = 0;
+        for (const a of attendances) {
+          if (a.status === 'PRESENT' || a.status === 'LATE') presentDaysCount++;
+          else if (a.status === 'HALF_DAY') presentDaysCount += 0.5;
+        }
+
+        grossSalary = Math.round(presentDaysCount * dailyRate);
+        basicSalary = Math.round(grossSalary * basicRate / 100);
+        hra = Math.round(grossSalary * hraRate / 100);
+        travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
+        otherAllowances = Math.round(grossSalary * otherAllowanceRate / 100);
+      } else {
+        // Salaried staff: gross is stored; break it down by structure
+        grossSalary = statutory?.grossSalary ?? staff.salary ?? 0;
+        basicSalary = Math.round(grossSalary * basicRate / 100);
+        hra = Math.round(grossSalary * hraRate / 100);
+        travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
+        otherAllowances = Math.round(grossSalary * otherAllowanceRate / 100);
+      }
+
+      // ── Attendance & LOP ────────────────────────────────────────────────
+      const attendances = isDailyRate
+        ? [] // already fetched above, but re-use the block below for deductions
+        : await this.prisma.attendance.findMany({
+            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+          });
+
+      const allAttendances = isDailyRate
+        ? await this.prisma.attendance.findMany({
+            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+          })
+        : attendances;
 
       const totalWorkingDays = this.getWorkingDaysInMonth(y, m);
       let presentDays = 0;
       let lopDays = 0;
 
-      for (const a of attendances) {
+      for (const a of allAttendances) {
         if (a.status === 'PRESENT' || a.status === 'LATE') presentDays++;
         else if (a.status === 'HALF_DAY') presentDays += 0.5;
-        else if (a.status === 'ABSENT') lopDays++;
-        else if (a.status === 'ON_LEAVE') {
-          // Check if the leave was LOP
+        else if (a.status === 'ABSENT') {
+          if (!isPartTime && !isDailyRate) lopDays++; // No LOP for part-time / daily-rate
+        } else if (a.status === 'ON_LEAVE') {
           const leaveApp = await this.prisma.leaveApplication.findFirst({
             where: {
               staffId: staff.id,
@@ -818,46 +873,63 @@ export class HrService {
             },
             include: { leaveType: true },
           });
-          if (leaveApp?.leaveType?.code === 'LOP') lopDays++;
-          else presentDays++;
+          if (leaveApp?.leaveType?.code === 'LOP' && !isPartTime && !isDailyRate) {
+            lopDays++;
+          } else {
+            presentDays++;
+          }
         }
       }
 
-      // Permission excess → LOP
-      const approvedPermissions = await this.prisma.permissionRequest.findMany({
-        where: { staffId: staff.id, status: 'APPROVED', date: { gte: startDate, lt: endDate } },
-      });
-      const permissionHoursUsed = approvedPermissions.reduce((sum, p) => sum + p.hours, 0);
-      const permissionLimit = this.getPermissionLimitForCategory(staff.category);
-      const excessHours = Math.max(0, permissionHoursUsed - permissionLimit);
-      const permissionLopDays = excessHours > 0 ? Math.ceil(excessHours / 8 * 2) / 2 : 0;
+      // Permission excess → LOP (not for part-time / daily-rate)
+      let permissionHoursUsed = 0;
+      let permissionLopDays = 0;
+      if (!isPartTime && !isDailyRate) {
+        const approvedPermissions = await this.prisma.permissionRequest.findMany({
+          where: { staffId: staff.id, status: 'APPROVED', date: { gte: startDate, lt: endDate } },
+        });
+        permissionHoursUsed = approvedPermissions.reduce((sum, p) => sum + p.hours, 0);
+        const permissionLimit = this.getPermissionLimitForCategory(staff.category);
+        const excessHours = Math.max(0, permissionHoursUsed - permissionLimit);
+        permissionLopDays = excessHours > 0 ? Math.ceil(excessHours / 8 * 2) / 2 : 0;
+      }
 
-      const perDaySalary = grossSalary / totalWorkingDays;
-      const lopDeduction = lopDays * perDaySalary;
-      const permissionLopDeduction = permissionLopDays * perDaySalary;
+      const perDaySalary = isDailyRate ? 0 : grossSalary / totalWorkingDays;
+      const lopDeduction = isDailyRate ? 0 : Math.round(lopDays * perDaySalary);
+      const permissionLopDeduction = isDailyRate ? 0 : Math.round(permissionLopDays * perDaySalary);
 
-      // PF calculation
+      // ── PF calculation ──────────────────────────────────────────────────
+      // PF is on Basic = 50% of gross (pfBase), not on full gross
+      const pfBase = basicSalary; // = grossSalary * basicRate / 100
       let pfDeduction = 0;
-      const pfEligible = statutory
-        ? statutory.pfEnabled !== false
-        : Boolean(staff.pfJoiningDate);
+      let employerPfContribution = 0;
+      const isStipend = statutory?.isStipend ?? false;
+      const pfEligible = !isStipend && (statutory ? statutory.pfEnabled !== false : Boolean(staff.pfJoiningDate));
       if (settings.pfEnabled && pfEligible) {
-        const pfWage = Math.min(basicSalary, settings.pfWageLimit);
+        const pfWage = Math.min(pfBase, settings.pfWageLimit);
         pfDeduction = Math.round(pfWage * settings.pfEmployeeRate / 100);
+        employerPfContribution = Math.round(pfWage * settings.pfEmployerRate / 100);
       }
 
-      // ESI calculation
+      // ── ESI calculation ─────────────────────────────────────────────────
+      // ESI is on esiBase = Basic (50%) + HRA (30%) = 80% of gross
+      // But skip if daily wage < esiDailyWageThreshold (default ₹176)
+      const esiBase = basicSalary + hra; // = grossSalary * (basicRate + hraRate) / 100 = ~80%
       let esiDeduction = 0;
-      if (settings.esiEnabled && (statutory?.esiEnabled !== false)) {
-        if (grossSalary <= settings.esiWageLimit) {
-          esiDeduction = Math.round(grossSalary * settings.esiEmployeeRate / 100);
+      let employerEsiContribution = 0;
+      const dailyEsiWage = esiBase / 30;
+      const esiEligible = dailyEsiWage >= esiDailyWageThreshold;
+      if (settings.esiEnabled && (statutory?.esiEnabled !== false) && esiEligible) {
+        if (esiBase <= settings.esiWageLimit) {
+          esiDeduction = Math.round(esiBase * settings.esiEmployeeRate / 100);
+          employerEsiContribution = Math.round(esiBase * settings.esiEmployerRate / 100);
         }
       }
 
-      // PT calculation
+      // ── Prof Tax ────────────────────────────────────────────────────────
       const ptDeduction = settings.ptEnabled ? settings.ptAmount : 0;
 
-      // Advance deductions — auto-deduct from active advances
+      // ── Advance deductions ──────────────────────────────────────────────
       let fixedAdvanceDeduction = 0;
       let salaryAdvanceDeduction = 0;
       let otherAdvanceDeduction = 0;
@@ -873,29 +945,41 @@ export class HrService {
         else otherAdvanceDeduction += deduction;
       }
 
-      const extraAllowance = 0; // Can be overridden manually later
-
-      const totalDeductions = Math.round(lopDeduction + permissionLopDeduction + pfDeduction + esiDeduction + ptDeduction + fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction);
-      const netSalary = Math.round(grossSalary + extraAllowance - totalDeductions);
+      // ── Net / Take-Home & CTC ───────────────────────────────────────────
+      // Net = Gross − LOP − Employee PF − Employee ESI − Advances
+      const totalDeductions = Math.round(
+        lopDeduction + permissionLopDeduction +
+        pfDeduction + esiDeduction + ptDeduction +
+        fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
+      );
+      const netSalary = Math.round(grossSalary - totalDeductions);
+      // CTC = Gross + Employer PF + Employer ESI
+      const ctc = Math.round(grossSalary + employerPfContribution + employerEsiContribution);
 
       const payroll = await this.prisma.payroll.upsert({
         where: { staffId_month: { staffId: staff.id, month } },
         update: {
-          basicSalary, hra, da, otherAllowances, grossSalary,
-          totalWorkingDays, presentDays, lopDays, lopDeduction: Math.round(lopDeduction),
-          permissionHoursUsed, permissionLopDays, permissionLopDeduction: Math.round(permissionLopDeduction),
+          basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
+          totalWorkingDays, presentDays, lopDays, lopDeduction,
+          permissionHoursUsed, permissionLopDays, permissionLopDeduction,
+          pfBase, esiBase,
           pfDeduction, esiDeduction, ptDeduction,
-          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction, extraAllowance,
+          employerPfContribution, employerEsiContribution, ctc,
+          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
+          extraAllowance: 0,
           totalDeductions, netSalary,
           status: 'generated',
         },
         create: {
           staffId: staff.id, month,
-          basicSalary, hra, da, otherAllowances, grossSalary,
-          totalWorkingDays, presentDays, lopDays, lopDeduction: Math.round(lopDeduction),
-          permissionHoursUsed, permissionLopDays, permissionLopDeduction: Math.round(permissionLopDeduction),
+          basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
+          totalWorkingDays, presentDays, lopDays, lopDeduction,
+          permissionHoursUsed, permissionLopDays, permissionLopDeduction,
+          pfBase, esiBase,
           pfDeduction, esiDeduction, ptDeduction,
-          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction, extraAllowance,
+          employerPfContribution, employerEsiContribution, ctc,
+          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
+          extraAllowance: 0,
           totalDeductions, netSalary,
         },
       });
@@ -920,6 +1004,39 @@ export class HrService {
     }
 
     return { count: results.length, records: results };
+  }
+
+  // Manual update: cancel LOP or add bonus/incentive
+  async updatePayrollManual(id: string, dto: UpdatePayrollDto) {
+    const payroll = await this.prisma.payroll.findUnique({ where: { id } });
+    if (!payroll) throw new NotFoundException('Payroll record not found');
+
+    const updates: any = {};
+
+    if (dto.lopCancelled === true) {
+      // Cancel LOP: reset LOP deduction to 0 and recalculate net
+      updates.lopCancelled = true;
+      updates.lopDays = 0;
+      updates.lopDeduction = 0;
+      updates.permissionLopDays = 0;
+      updates.permissionLopDeduction = 0;
+      const newTotalDeductions = Math.max(
+        0,
+        payroll.totalDeductions - payroll.lopDeduction - payroll.permissionLopDeduction,
+      );
+      updates.totalDeductions = newTotalDeductions;
+      updates.netSalary = Math.round(payroll.grossSalary - newTotalDeductions);
+    }
+
+    if (dto.bonusIncentive !== undefined) {
+      updates.bonusIncentive = dto.bonusIncentive;
+    }
+
+    if (dto.extraAllowance !== undefined) {
+      updates.extraAllowance = dto.extraAllowance;
+    }
+
+    return this.prisma.payroll.update({ where: { id }, data: updates });
   }
 
   async getPayrolls(query: { month?: string; staffId?: string; status?: string }, requester?: RequestUser) {

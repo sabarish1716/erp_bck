@@ -5,7 +5,7 @@ import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } fr
 import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from './dto/permission.dto';
 import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
 import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
-import { GeneratePayrollDto, ApprovePayrollDto } from './dto/payroll.dto';
+import { GeneratePayrollDto, ApprovePayrollDto, UpdatePayrollDto } from './dto/payroll.dto';
 import { CreateAdvanceRequestDto, ApproveAdvanceDto, RejectAdvanceDto } from './dto/advance.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
@@ -310,6 +310,18 @@ export class HrController {
   @Permissions(Permission.HR_PAYROLL_READ)
   getLOPReport(@Param('month') month: string) {
     return this.hrService.getLOPReport(month);
+  }
+
+  @Put('payroll/:id/update')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  updatePayrollManual(@Param('id') id: string, @Body() dto: UpdatePayrollDto) {
+    return this.hrService.updatePayrollManual(id, dto);
+  }
+
+  @Put('payroll/:id/cancel-lop')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  cancelPayrollLOP(@Param('id') id: string) {
+    return this.hrService.updatePayrollManual(id, { lopCancelled: true });
   }
 
   // ─── SALARY ABSTRACT ──────────────────────

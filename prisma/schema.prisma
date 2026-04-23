@@ -96,11 +96,26 @@ enum AcademicStream {
   COMMERCE         // Commerce, Economics, Accountancy, Computer Application
 }
 
+enum ExamSession {
+  FN
+  AN
+}
+
+enum ExamStatus {
+  DRAFT
+  PUBLISHED
+  COMPLETED
+}
+
 enum StaffCategory {
   TEACHING_REGULAR
   TEACHING_TRAINEE
+  TEACHING_PART_TIME      // Part-time teachers – no LOP
   NON_TEACHING_REGULAR
   NON_TEACHING_TRAINEE
+  NON_TEACHING_SECURITY   // Daily-rate: presentDays × dailyRate (default ₹400)
+  NON_TEACHING_SPORTS     // Daily-rate: presentDays × dailyRate (default ₹1500)
+  NON_TEACHING_ACTING_DRIVER // Day-based salary for acting drivers (dailyRate)
 }
 
 enum StaffDocumentType {
@@ -168,6 +183,8 @@ model Student {
   studentFees       StudentFee[]
   studentTransport  StudentTransport?
   docRequests       DocRequest[]
+  examRollNumbers   ExamRollNumber[]
+  examSeatAllocs    ExamSeatAllocation[]
   houseCaptain      House?   @relation("HouseCaptain")
   houseViceCaptain  House?   @relation("HouseViceCaptain")
   houseBandCaptain  House?   @relation("HouseBandCaptain")
@@ -451,6 +468,7 @@ model Staff {
   permissionRequests  PermissionRequest[]
   staffStatutory      StaffStatutory?
   payrollRecords      Payroll[]
+  examInvigilations   ExamInvigilatorAssignment[]
   esslMapping         ESSLStaffMapping?
   advances            StaffAdvance[]
 
@@ -558,6 +576,153 @@ model SupabaseSyncJob {
 
   @@index([status, availableAt])
   @@index([type, status])
+}
+
+model Exam {
+  id          String          @id @default(uuid())
+  name        String
+  code        String          @unique
+  academicYear String
+  startDate   DateTime
+  endDate     DateTime
+  status      ExamStatus      @default(DRAFT)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  subjects    ExamSubject[]
+  schedules   ExamSchedule[]
+  rollNumbers ExamRollNumber[]
+
+  @@index([academicYear, status])
+}
+
+model ExamSubject {
+  id           String         @id @default(uuid())
+  examId       String
+  name         String
+  code         String
+  standard     Standard
+  section      String?
+  stream       AcademicStream?
+  maxMarks     Int            @default(100)
+  passMarks    Int            @default(35)
+  createdAt    DateTime       @default(now())
+
+  exam         Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  schedules    ExamSchedule[]
+
+  @@unique([examId, code])
+  @@index([examId, standard, section])
+}
+
+model ExamHall {
+  id          String             @id @default(uuid())
+  name        String             @unique
+  building    String?
+  floor       String?
+  capacity    Int
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  schedules   ExamScheduleHall[]
+  seatAllocs  ExamSeatAllocation[]
+  invigilatorAssignments ExamInvigilatorAssignment[]
+
+  @@index([isActive])
+}
+
+model ExamSchedule {
+  id            String              @id @default(uuid())
+  examId        String
+  subjectId     String
+  standard      Standard
+  section       String?
+  stream        AcademicStream?
+  examDate      DateTime
+  startsAt      DateTime
+  endsAt        DateTime
+  session       ExamSession
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  exam          Exam                @relation(fields: [examId], references: [id], onDelete: Cascade)
+  subject       ExamSubject         @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  halls         ExamScheduleHall[]
+  seatAllocs    ExamSeatAllocation[]
+  invigilatorAssignments ExamInvigilatorAssignment[]
+
+  @@index([examDate, startsAt, endsAt])
+  @@index([examId, standard, section])
+}
+
+model ExamScheduleHall {
+  id          String          @id @default(uuid())
+  scheduleId  String
+  hallId      String
+  createdAt   DateTime        @default(now())
+
+  schedule    ExamSchedule    @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  hall        ExamHall        @relation(fields: [hallId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleId, hallId])
+  @@index([hallId])
+}
+
+model ExamRollNumber {
+  id           String          @id @default(uuid())
+  examId       String
+  studentId    String
+  rollNumber   String
+  standard     Standard
+  section      String?
+  stream       AcademicStream?
+  academicYear String
+  createdAt    DateTime        @default(now())
+
+  exam         Exam            @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student      Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  seatAllocs   ExamSeatAllocation[]
+
+  @@unique([examId, studentId])
+  @@unique([examId, rollNumber])
+  @@index([examId, standard, section])
+}
+
+model ExamSeatAllocation {
+  id           String          @id @default(uuid())
+  scheduleId   String
+  hallId       String
+  studentId    String
+  rollNumberId String
+  seatNumber   Int
+  createdAt    DateTime        @default(now())
+
+  schedule     ExamSchedule    @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  hall         ExamHall        @relation(fields: [hallId], references: [id], onDelete: Restrict)
+  student      Student         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  rollNumber   ExamRollNumber  @relation(fields: [rollNumberId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, studentId])
+  @@unique([scheduleId, hallId, seatNumber])
+  @@index([scheduleId, hallId])
+}
+
+model ExamInvigilatorAssignment {
+  id         String       @id @default(uuid())
+  scheduleId String
+  hallId     String
+  staffId    String
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  schedule   ExamSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  hall       ExamHall     @relation(fields: [hallId], references: [id], onDelete: Restrict)
+  staff      Staff        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+
+  @@unique([scheduleId, hallId])
+  @@unique([scheduleId, staffId])
+  @@index([staffId])
 }
 
 model Mileage {
@@ -1047,18 +1212,29 @@ model PermissionRequest {
 
 model StatutorySettings {
   id              String   @id @default(uuid())
+  // PF
   pfEnabled       Boolean  @default(true)
   pfEmployeeRate  Float    @default(12)
   pfEmployerRate  Float    @default(12)
   pfWageLimit     Float    @default(15000)
   pfAdminCharges  Float    @default(0.5)
   pfEdliCharges   Float    @default(0.5)
+  // ESI
   esiEnabled      Boolean  @default(true)
   esiEmployeeRate Float    @default(0.75)
   esiEmployerRate Float    @default(3.25)
   esiWageLimit    Float    @default(21000)
+  esiDailyWageThreshold Float @default(176) // ESI skipped if daily wage < this
+  // Professional Tax
   ptEnabled       Boolean  @default(false)
   ptAmount        Float    @default(200)
+  // Salary structure: Gross = Basic (basicRate%) + HRA (hraRate%) + Travel (travelAllowanceRate%) + Other (otherAllowanceRate%)
+  basicRate            Float    @default(50)  // Basic = 50% of gross
+  hraRate              Float    @default(30)  // HRA = 30% of gross
+  travelAllowanceRate  Float    @default(0)   // Travel allowance %
+  otherAllowanceRate   Float    @default(0)   // Other allowances %
+  // Casual Leave carry-forward lapse
+  clLapseMonths        Int      @default(3)   // CL carry-forward lapses after X months
 
   updatedAt       DateTime @updatedAt
 }
@@ -1073,6 +1249,8 @@ model StaffStatutory {
   grossSalary   Float?
   pfEnabled     Boolean  @default(true)
   esiEnabled    Boolean  @default(true)
+  isStipend     Boolean  @default(false)  // Stipend staff: no PF (booked as stipend in tally)
+  dailyRate     Float?                    // For NON_TEACHING_SECURITY / NON_TEACHING_SPORTS
 
   staff         Staff    @relation(fields: [staffId], references: [id])
 
@@ -1147,27 +1325,41 @@ model Payroll {
   id                     String   @id @default(uuid())
   staffId                String
   month                  String
-  basicSalary            Float    @default(0)
-  hra                    Float    @default(0)
-  da                     Float    @default(0)
+  // Earnings breakdown: Gross = Basic + HRA + TravelAllowance + OtherAllowances
+  basicSalary            Float    @default(0)  // 50% of gross
+  hra                    Float    @default(0)  // 30% of gross (configurable)
+  travelAllowance        Float    @default(0)  // travel allowance %
+  da                     Float    @default(0)  // kept for legacy
   otherAllowances        Float    @default(0)
   grossSalary            Float    @default(0)
+  // Attendance
   totalWorkingDays       Int      @default(0)
   presentDays            Float    @default(0)
   lopDays                Float    @default(0)
   lopDeduction           Float    @default(0)
+  lopCancelled           Boolean  @default(false) // manual LOP cancellation
   permissionHoursUsed    Float    @default(0)
   permissionLopDays      Float    @default(0)
   permissionLopDeduction Float    @default(0)
-  pfDeduction            Float    @default(0)
-  esiDeduction           Float    @default(0)
+  // Statutory deductions
+  pfBase                 Float    @default(0)  // 50% of gross (PF calculated on this)
+  esiBase                Float    @default(0)  // 80% of gross (ESI calculated on this)
+  pfDeduction            Float    @default(0)  // employee PF
+  esiDeduction           Float    @default(0)  // employee ESI
   ptDeduction            Float    @default(0)
+  employerPfContribution Float    @default(0)
+  employerEsiContribution Float   @default(0)
+  ctc                    Float    @default(0)  // Gross + Employer PF + Employer ESI
+  // Advance deductions
   fixedAdvanceDeduction  Float    @default(0)
   salaryAdvanceDeduction Float    @default(0)
   otherAdvanceDeduction  Float    @default(0)
   extraAllowance         Float    @default(0)
+  // Bonus / Incentive (separate, added after Net)
+  bonusIncentive         Float    @default(0)
+  // Totals
   totalDeductions        Float    @default(0)
-  netSalary              Float    @default(0)
+  netSalary              Float    @default(0)  // Gross − LOP − Employee PF − Employee ESI − Advances
   status                 String   @default("generated")
 
   staff                  Staff    @relation(fields: [staffId], references: [id])
