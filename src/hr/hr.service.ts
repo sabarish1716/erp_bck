@@ -775,6 +775,18 @@ export class HrService {
     const startDate = new Date(y, m - 1, 1);
     const endDate = new Date(y, m, 1);
 
+    const actingDriverDayOverridesRecord = await this.prisma.appSetting.findUnique({
+      where: { key: 'hr.actingDriverDayOverrides' },
+      select: { value: true },
+    });
+    const actingDriverDayOverridesStore =
+      actingDriverDayOverridesRecord &&
+      typeof actingDriverDayOverridesRecord.value === 'object' &&
+      !Array.isArray(actingDriverDayOverridesRecord.value)
+        ? (actingDriverDayOverridesRecord.value as Record<string, Record<string, number>>)
+        : {};
+    const monthDayOverrides = actingDriverDayOverridesStore[month] || {};
+
     const settings = await this.getStatutorySettings();
     // Salary structure percentages from settings (with defaults)
     const basicRate = (settings as any).basicRate ?? 50;
@@ -794,10 +806,17 @@ export class HrService {
 
     for (const staff of staffList) {
       const statutory = staff.staffStatutory;
+      const isActingDriver =
+        staff.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
       const isDailyRate =
         staff.category === StaffCategory.NON_TEACHING_SECURITY ||
         staff.category === StaffCategory.NON_TEACHING_SPORTS ||
-        staff.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
+        isActingDriver;
+      const actingDriverOverrideDaysRaw = Number(monthDayOverrides[staff.id]);
+      const actingDriverOverrideDays =
+        isActingDriver && Number.isFinite(actingDriverOverrideDaysRaw) && actingDriverOverrideDaysRaw >= 0
+          ? Number(actingDriverOverrideDaysRaw.toFixed(1))
+          : undefined;
       const isPartTime = staff.category === StaffCategory.TEACHING_PART_TIME;
 
       // ── Gross salary determination ──────────────────────────────────────
@@ -827,7 +846,9 @@ export class HrService {
           else if (a.status === 'HALF_DAY') presentDaysCount += 0.5;
         }
 
-        grossSalary = Math.round(presentDaysCount * dailyRate);
+        const effectiveDays = actingDriverOverrideDays ?? presentDaysCount;
+
+        grossSalary = Math.round(effectiveDays * dailyRate);
         basicSalary = Math.round(grossSalary * basicRate / 100);
         hra = Math.round(grossSalary * hraRate / 100);
         travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
@@ -881,6 +902,10 @@ export class HrService {
         }
       }
 
+      if (actingDriverOverrideDays !== undefined) {
+        presentDays = actingDriverOverrideDays;
+      }
+
       // Permission excess → LOP (not for part-time / daily-rate)
       let permissionHoursUsed = 0;
       let permissionLopDays = 0;
@@ -904,7 +929,10 @@ export class HrService {
       let pfDeduction = 0;
       let employerPfContribution = 0;
       const isStipend = statutory?.isStipend ?? false;
-      const pfEligible = !isStipend && (statutory ? statutory.pfEnabled !== false : Boolean(staff.pfJoiningDate));
+      const pfEligible =
+        !isActingDriver &&
+        !isStipend &&
+        (statutory ? statutory.pfEnabled !== false : Boolean(staff.pfJoiningDate));
       if (settings.pfEnabled && pfEligible) {
         const pfWage = Math.min(pfBase, settings.pfWageLimit);
         pfDeduction = Math.round(pfWage * settings.pfEmployeeRate / 100);
@@ -918,7 +946,7 @@ export class HrService {
       let esiDeduction = 0;
       let employerEsiContribution = 0;
       const dailyEsiWage = esiBase / 30;
-      const esiEligible = dailyEsiWage >= esiDailyWageThreshold;
+      const esiEligible = !isActingDriver && dailyEsiWage >= esiDailyWageThreshold;
       if (settings.esiEnabled && (statutory?.esiEnabled !== false) && esiEligible) {
         if (esiBase <= settings.esiWageLimit) {
           esiDeduction = Math.round(esiBase * settings.esiEmployeeRate / 100);
@@ -927,34 +955,44 @@ export class HrService {
       }
 
       // ── Prof Tax ────────────────────────────────────────────────────────
-      const ptDeduction = settings.ptEnabled ? settings.ptAmount : 0;
+      const ptDeduction = isActingDriver ? 0 : (settings.ptEnabled ? settings.ptAmount : 0);
 
       // ── Advance deductions ──────────────────────────────────────────────
       let fixedAdvanceDeduction = 0;
       let salaryAdvanceDeduction = 0;
       let otherAdvanceDeduction = 0;
 
-      const activeAdvances = await this.prisma.staffAdvance.findMany({
-        where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
-      });
+      const activeAdvances = isActingDriver
+        ? []
+        : await this.prisma.staffAdvance.findMany({
+            where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
+          });
 
-      for (const adv of activeAdvances) {
-        const deduction = Math.min(adv.monthlyDeduction, adv.balanceRemaining);
-        if (adv.type === 'FIXED_ADVANCE') fixedAdvanceDeduction += deduction;
-        else if (adv.type === 'SALARY_ADVANCE') salaryAdvanceDeduction += deduction;
-        else otherAdvanceDeduction += deduction;
+      if (!isActingDriver) {
+        for (const adv of activeAdvances) {
+          const deduction = Math.min(adv.monthlyDeduction, adv.balanceRemaining);
+          if (adv.type === 'FIXED_ADVANCE') fixedAdvanceDeduction += deduction;
+          else if (adv.type === 'SALARY_ADVANCE') salaryAdvanceDeduction += deduction;
+          else otherAdvanceDeduction += deduction;
+        }
       }
 
       // ── Net / Take-Home & CTC ───────────────────────────────────────────
       // Net = Gross − LOP − Employee PF − Employee ESI − Advances
-      const totalDeductions = Math.round(
-        lopDeduction + permissionLopDeduction +
-        pfDeduction + esiDeduction + ptDeduction +
-        fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
-      );
-      const netSalary = Math.round(grossSalary - totalDeductions);
+      const totalDeductions = isActingDriver
+        ? 0
+        : Math.round(
+            lopDeduction + permissionLopDeduction +
+            pfDeduction + esiDeduction + ptDeduction +
+            fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
+          );
+      const netSalary = isActingDriver
+        ? Math.round(grossSalary)
+        : Math.round(grossSalary - totalDeductions);
       // CTC = Gross + Employer PF + Employer ESI
-      const ctc = Math.round(grossSalary + employerPfContribution + employerEsiContribution);
+      const ctc = isActingDriver
+        ? Math.round(grossSalary)
+        : Math.round(grossSalary + employerPfContribution + employerEsiContribution);
 
       const payroll = await this.prisma.payroll.upsert({
         where: { staffId_month: { staffId: staff.id, month } },

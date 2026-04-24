@@ -17,12 +17,65 @@ type ExpenseFilters = {
 export class TransportExpenseService {
   constructor(private prisma: PrismaService) {}
 
+  private static readonly ACTING_DRIVER_DAYS_KEY = 'hr.actingDriverDayOverrides';
+
+  private normalizeDailyRate(dailyRate: number): number {
+    const normalized = Number(dailyRate);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new BadRequestException('dailyRate must be a positive number');
+    }
+
+    return Number(normalized.toFixed(2));
+  }
+
   private getMonthWindow(month?: string) {
     const parsed = month && /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
     const [year, mon] = parsed.split('-').map(Number);
     const start = new Date(year, mon - 1, 1);
     const end = new Date(year, mon, 1);
     return { month: parsed, start, end };
+  }
+
+  private normalizeMonth(month?: string): string {
+    if (!month) {
+      return new Date().toISOString().slice(0, 7);
+    }
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      throw new BadRequestException('month must be in YYYY-MM format');
+    }
+    return month;
+  }
+
+  private normalizeManualDays(days: number): number {
+    const normalized = Number(days);
+    if (!Number.isFinite(normalized) || normalized < 0) {
+      throw new BadRequestException('days must be a number greater than or equal to 0');
+    }
+    return Number(normalized.toFixed(1));
+  }
+
+  private async getActingDriverDayOverridesStore(): Promise<Record<string, Record<string, number>>> {
+    const record = await this.prisma.appSetting.findUnique({
+      where: { key: TransportExpenseService.ACTING_DRIVER_DAYS_KEY },
+      select: { value: true },
+    });
+
+    if (!record || typeof record.value !== 'object' || Array.isArray(record.value)) {
+      return {};
+    }
+
+    return record.value as Record<string, Record<string, number>>;
+  }
+
+  private async saveActingDriverDayOverridesStore(store: Record<string, Record<string, number>>) {
+    await this.prisma.appSetting.upsert({
+      where: { key: TransportExpenseService.ACTING_DRIVER_DAYS_KEY },
+      update: { value: store as any },
+      create: {
+        key: TransportExpenseService.ACTING_DRIVER_DAYS_KEY,
+        value: store as any,
+      },
+    });
   }
 
   private readTransportComponent(value: unknown): number {
@@ -34,6 +87,8 @@ export class TransportExpenseService {
 
   async getTransportSalaryReport(month?: string) {
     const { month: reportMonth, start, end } = this.getMonthWindow(month);
+    const dayOverridesStore = await this.getActingDriverDayOverridesStore();
+    const monthOverrides = dayOverridesStore[reportMonth] || {};
 
     const staffRows = await this.prisma.staff.findMany({
       where: {
@@ -80,10 +135,13 @@ export class TransportExpenseService {
     }
 
     const rows = staffRows.map((s) => {
-      const presentDays = Number((presentMap.get(s.id) || 0).toFixed(1));
+      const attendanceDays = Number((presentMap.get(s.id) || 0).toFixed(1));
       const dailyRate = s.staffStatutory?.dailyRate || Number(((s.salary || 0) / 26).toFixed(2));
       const payroll = s.payrollRecords[0];
       const isActingDriver = s.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
+      const overrideDays = Number(monthOverrides[s.id]);
+      const hasOverride = Number.isFinite(overrideDays) && overrideDays >= 0;
+      const presentDays = hasOverride ? Number(overrideDays.toFixed(1)) : attendanceDays;
 
       const computedSalary = isActingDriver
         ? Number((presentDays * dailyRate).toFixed(2))
@@ -96,9 +154,17 @@ export class TransportExpenseService {
         designation: s.designation,
         category: s.category,
         presentDays,
+        attendanceDays,
+        manualDays: hasOverride ? presentDays : null,
         dailyRate,
         salaryExpense: computedSalary,
-        source: isActingDriver ? 'DAY_BASED' : payroll ? 'PAYROLL' : 'STAFF_SALARY',
+        source: isActingDriver
+          ? hasOverride
+            ? 'DAY_BASED_MANUAL'
+            : 'DAY_BASED'
+          : payroll
+            ? 'PAYROLL'
+            : 'STAFF_SALARY',
       };
     });
 
@@ -109,6 +175,183 @@ export class TransportExpenseService {
       totalStaff: rows.length,
       totalSalaryExpense,
       rows,
+    };
+  }
+
+  async getActingDriverDailyRates() {
+    const rows = await this.prisma.staff.findMany({
+      where: {
+        isActive: true,
+        category: StaffCategory.NON_TEACHING_ACTING_DRIVER,
+      },
+      include: {
+        staffStatutory: {
+          select: { dailyRate: true },
+        },
+      },
+      orderBy: [{ name: 'asc' }],
+    });
+
+    return rows.map((staff) => ({
+      staffId: staff.id,
+      employeeId: staff.employeeId,
+      name: staff.name,
+      designation: staff.designation,
+      category: staff.category,
+      perDaySalary: staff.staffStatutory?.dailyRate ?? null,
+      fallbackPerDaySalary: Number((((staff.salary || 0) / 26) || 0).toFixed(2)),
+    }));
+  }
+
+  async updateActingDriverDailyRate(staffId: string, dailyRate: number) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true,
+        employeeId: true,
+        name: true,
+        designation: true,
+        category: true,
+        salary: true,
+      },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('Staff not found');
+    }
+
+    if (staff.category !== StaffCategory.NON_TEACHING_ACTING_DRIVER) {
+      throw new BadRequestException('Per-day salary can be updated only for acting drivers');
+    }
+
+    const normalizedRate = this.normalizeDailyRate(dailyRate);
+
+    await this.prisma.staffStatutory.upsert({
+      where: { staffId },
+      update: { dailyRate: normalizedRate },
+      create: {
+        staffId,
+        basicSalary: staff.salary ?? undefined,
+        grossSalary: staff.salary ?? undefined,
+        dailyRate: normalizedRate,
+      },
+    });
+
+    return {
+      staffId: staff.id,
+      employeeId: staff.employeeId,
+      name: staff.name,
+      designation: staff.designation,
+      category: staff.category,
+      perDaySalary: normalizedRate,
+    };
+  }
+
+  async getActingDriverManualDays(month?: string) {
+    const selectedMonth = this.normalizeMonth(month);
+    const { start, end } = this.getMonthWindow(selectedMonth);
+
+    const [staffRows, attendanceRows, overridesStore] = await Promise.all([
+      this.prisma.staff.findMany({
+        where: {
+          isActive: true,
+          category: StaffCategory.NON_TEACHING_ACTING_DRIVER,
+        },
+        include: {
+          staffStatutory: {
+            select: { dailyRate: true },
+          },
+        },
+        orderBy: [{ name: 'asc' }],
+      }),
+      this.prisma.attendance.findMany({
+        where: {
+          date: { gte: start, lt: end },
+        },
+        select: { staffId: true, status: true },
+      }),
+      this.getActingDriverDayOverridesStore(),
+    ]);
+
+    const attendanceMap = new Map<string, number>();
+    for (const row of attendanceRows) {
+      const previous = attendanceMap.get(row.staffId) || 0;
+      const weight =
+        row.status === AttendanceStatus.PRESENT || row.status === AttendanceStatus.LATE
+          ? 1
+          : row.status === AttendanceStatus.HALF_DAY
+            ? 0.5
+            : 0;
+      attendanceMap.set(row.staffId, previous + weight);
+    }
+
+    const monthOverrides = overridesStore[selectedMonth] || {};
+
+    return {
+      month: selectedMonth,
+      rows: staffRows.map((staff) => {
+        const attendanceDays = Number((attendanceMap.get(staff.id) || 0).toFixed(1));
+        const manualDaysValue = Number(monthOverrides[staff.id]);
+        const hasManualDays = Number.isFinite(manualDaysValue) && manualDaysValue >= 0;
+        const manualDays = hasManualDays ? Number(manualDaysValue.toFixed(1)) : null;
+        const effectiveDays = manualDays ?? attendanceDays;
+        const dailyRate = staff.staffStatutory?.dailyRate ?? Number(((staff.salary || 0) / 26).toFixed(2));
+
+        return {
+          staffId: staff.id,
+          employeeId: staff.employeeId,
+          name: staff.name,
+          designation: staff.designation,
+          perDaySalary: dailyRate,
+          attendanceDays,
+          manualDays,
+          effectiveDays,
+          estimatedSalary: Number((effectiveDays * dailyRate).toFixed(2)),
+        };
+      }),
+    };
+  }
+
+  async updateActingDriverManualDays(staffId: string, month: string, days: number) {
+    const selectedMonth = this.normalizeMonth(month);
+    const normalizedDays = this.normalizeManualDays(days);
+
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true,
+        employeeId: true,
+        name: true,
+        designation: true,
+        category: true,
+      },
+    });
+
+    if (!staff) {
+      throw new BadRequestException('Staff not found');
+    }
+    if (staff.category !== StaffCategory.NON_TEACHING_ACTING_DRIVER) {
+      throw new BadRequestException('Manual days can be updated only for acting drivers');
+    }
+
+    const store = await this.getActingDriverDayOverridesStore();
+    const monthOverrides = {
+      ...(store[selectedMonth] || {}),
+      [staffId]: normalizedDays,
+    };
+
+    await this.saveActingDriverDayOverridesStore({
+      ...store,
+      [selectedMonth]: monthOverrides,
+    });
+
+    return {
+      staffId: staff.id,
+      employeeId: staff.employeeId,
+      name: staff.name,
+      designation: staff.designation,
+      month: selectedMonth,
+      manualDays: normalizedDays,
     };
   }
 

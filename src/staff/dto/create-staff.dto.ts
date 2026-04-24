@@ -40,5 +40,6 @@ export class CreateStaffDto {
   @IsOptional() @IsString() city?:string;
   @IsOptional() @IsString() state?:string;
   @IsOptional() @IsString() pincode?:string;
+  @IsOptional() @IsNumber() perDaySalary?: number;
 
 }

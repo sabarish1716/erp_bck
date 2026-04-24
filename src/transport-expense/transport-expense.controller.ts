@@ -6,10 +6,14 @@ import {
   Query,
   Res,
   StreamableFile,
+  Put,
+  Param,
 } from '@nestjs/common';
 import { TransportExpenseService } from './transport-expense.service';
 import { CreateExpenseDto } from './dto/create-expense.dto';
 import type { Response } from 'express';
+import { UpdateActingDriverRateDto } from './dto/update-acting-driver-rate.dto';
+import { UpdateActingDriverDaysDto } from './dto/update-acting-driver-days.dto';
 
 const EXPENSE_CATEGORIES = ['FUEL', 'MAINTENANCE', 'PARTS', 'TAX'] as const;
 type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
@@ -84,5 +88,31 @@ export class TransportExpenseController {
     res.setHeader('Content-Type', file.contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
     return new StreamableFile(file.content);
+  }
+
+  @Get('acting-drivers/daily-rate')
+  getActingDriverDailyRates() {
+    return this.service.getActingDriverDailyRates();
+  }
+
+  @Put('acting-drivers/:staffId/daily-rate')
+  updateActingDriverDailyRate(
+    @Param('staffId') staffId: string,
+    @Body() dto: UpdateActingDriverRateDto,
+  ) {
+    return this.service.updateActingDriverDailyRate(staffId, dto.dailyRate);
+  }
+
+  @Get('acting-drivers/manual-days')
+  getActingDriverManualDays(@Query('month') month?: string) {
+    return this.service.getActingDriverManualDays(month);
+  }
+
+  @Put('acting-drivers/:staffId/manual-days')
+  updateActingDriverManualDays(
+    @Param('staffId') staffId: string,
+    @Body() dto: UpdateActingDriverDaysDto,
+  ) {
+    return this.service.updateActingDriverManualDays(staffId, dto.month, dto.days);
   }
 }

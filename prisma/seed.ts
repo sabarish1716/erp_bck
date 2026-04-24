@@ -506,6 +506,40 @@ async function main() {
         pfJoiningDate: new Date('2025-09-01T00:00:00.000Z'),
       },
     }),
+    // ── NON-TEACHING ACTING DRIVER (2) – daily rate configurable ──
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0020',
+        name: 'Rajesh Kumar',
+        email: 'rajesh.actingdriver@school.com',
+        phone: '9000000020',
+        designation: 'Acting Driver',
+        department: 'Transport',
+        qualification: 'HSC',
+        joiningDate: new Date('2026-01-05T00:00:00.000Z'),
+        salary: 23400, // fallback = 900 x 26
+        category: StaffCategory.NON_TEACHING_ACTING_DRIVER,
+        paymentMode: 'BANK_TRANSFER',
+        bankName: 'Indian Bank',
+        bankAccountNo: '6543210020',
+        bankIfsc: 'IDIB000C020',
+      },
+    }),
+    prisma.staff.create({
+      data: {
+        employeeId: 'EMP0021',
+        name: 'Prabhu N',
+        email: 'prabhu.actingdriver@school.com',
+        phone: '9000000021',
+        designation: 'Acting Driver',
+        department: 'Transport',
+        qualification: 'SSLC',
+        joiningDate: new Date('2026-02-01T00:00:00.000Z'),
+        salary: 22100, // fallback = 850 x 26
+        category: StaffCategory.NON_TEACHING_ACTING_DRIVER,
+        paymentMode: 'CASH',
+      },
+    }),
   ]);
 
   for (const staff of staffRecords) {
@@ -558,11 +592,17 @@ async function main() {
   for (const staff of staffRecords) {
     const isTrainee = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
     const isPartTime = staff.category === StaffCategory.TEACHING_PART_TIME;
-    const isDailyRateStaff = ([StaffCategory.NON_TEACHING_SECURITY, StaffCategory.NON_TEACHING_SPORTS] as StaffCategory[]).includes(staff.category);
+    const isDailyRateStaff = ([
+      StaffCategory.NON_TEACHING_SECURITY,
+      StaffCategory.NON_TEACHING_SPORTS,
+      StaffCategory.NON_TEACHING_ACTING_DRIVER,
+    ] as StaffCategory[]).includes(staff.category);
     // One part-time teacher (EMP0015) is on stipend — no PF/ESI
     const isStipend = staff.employeeId === 'EMP0015';
     const dailyRate = staff.category === StaffCategory.NON_TEACHING_SECURITY ? 400
       : staff.category === StaffCategory.NON_TEACHING_SPORTS ? 1500
+      : staff.category === StaffCategory.NON_TEACHING_ACTING_DRIVER
+        ? (staff.employeeId === 'EMP0020' ? 900 : 850)
       : undefined;
     // Gross for daily-rate staff = 26 working days × daily rate; others = salary
     const grossForStatutory = isDailyRateStaff ? 26 * (dailyRate ?? 0) : (staff.salary || 0);
@@ -693,6 +733,71 @@ async function main() {
     });
   }
 
+  const actingDriver1 = staffRecords.find((staff) => staff.employeeId === 'EMP0020');
+  const actingDriver2 = staffRecords.find((staff) => staff.employeeId === 'EMP0021');
+
+  if (actingDriver1 && actingDriver2) {
+    await prisma.attendance.createMany({
+      data: [
+        {
+          staffId: actingDriver1.id,
+          date: new Date('2026-04-03T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:45',
+          checkOut: '17:20',
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 8.5,
+        },
+        {
+          staffId: actingDriver1.id,
+          date: new Date('2026-04-04T00:00:00.000Z'),
+          status: AttendanceStatus.HALF_DAY,
+          checkIn: '08:55',
+          checkOut: '13:00',
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 4,
+        },
+        {
+          staffId: actingDriver1.id,
+          date: new Date('2026-04-05T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:50',
+          checkOut: '17:10',
+          punchMethod: PunchMethod.FINGERPRINT,
+          workingHours: 8.2,
+          isESSLSync: true,
+        },
+        {
+          staffId: actingDriver2.id,
+          date: new Date('2026-04-03T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:48',
+          checkOut: '17:05',
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 8,
+        },
+        {
+          staffId: actingDriver2.id,
+          date: new Date('2026-04-04T00:00:00.000Z'),
+          status: AttendanceStatus.ABSENT,
+          punchMethod: PunchMethod.MANUAL,
+          workingHours: 0,
+          remarks: 'Unavailable for replacement duty',
+        },
+        {
+          staffId: actingDriver2.id,
+          date: new Date('2026-04-05T00:00:00.000Z'),
+          status: AttendanceStatus.PRESENT,
+          checkIn: '08:52',
+          checkOut: '17:18',
+          punchMethod: PunchMethod.FINGERPRINT,
+          workingHours: 8.3,
+          isESSLSync: true,
+        },
+      ],
+    });
+  }
+
   await prisma.leaveApplication.create({
     data: {
       staffId: staffRecords[1].id,
@@ -763,7 +868,11 @@ async function main() {
     for (const staff of staffRecords) {
       const isTraineePay  = ([StaffCategory.TEACHING_TRAINEE, StaffCategory.NON_TEACHING_TRAINEE] as StaffCategory[]).includes(staff.category);
       const isPartTimePay = staff.category === StaffCategory.TEACHING_PART_TIME;
-      const isDailyRatePay = ([StaffCategory.NON_TEACHING_SECURITY, StaffCategory.NON_TEACHING_SPORTS] as StaffCategory[]).includes(staff.category);
+      const isDailyRatePay = ([
+        StaffCategory.NON_TEACHING_SECURITY,
+        StaffCategory.NON_TEACHING_SPORTS,
+        StaffCategory.NON_TEACHING_ACTING_DRIVER,
+      ] as StaffCategory[]).includes(staff.category);
       const isStipendPay  = staff.employeeId === 'EMP0015';
 
       // LOP: part-time teachers and daily-rate staff have no LOP concept
@@ -775,7 +884,10 @@ async function main() {
 
       // Gross: daily-rate staff = presentDays × rate; others = fixed salary
       const dailyRateVal = staff.category === StaffCategory.NON_TEACHING_SECURITY ? 400
-        : staff.category === StaffCategory.NON_TEACHING_SPORTS ? 1500 : 0;
+        : staff.category === StaffCategory.NON_TEACHING_SPORTS ? 1500
+          : staff.category === StaffCategory.NON_TEACHING_ACTING_DRIVER
+            ? (staff.employeeId === 'EMP0020' ? 900 : 850)
+            : 0;
       const gross = isDailyRatePay ? presentDays * dailyRateVal : (staff.salary || 0);
 
       // Earnings breakdown

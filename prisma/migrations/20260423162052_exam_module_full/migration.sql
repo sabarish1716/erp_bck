@@ -1,4 +1,4 @@
-﻿-- CreateEnum
+-- CreateEnum
 CREATE TYPE "ExamSession" AS ENUM ('FN', 'AN');
 
 -- CreateEnum

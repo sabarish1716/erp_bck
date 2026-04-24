@@ -10,6 +10,22 @@ import { CreateStaffDocumentDto } from './dto/staff-document.dto';
 export class StaffService {
   constructor(private prisma: PrismaService) {}
 
+  private sanitizePerDaySalary(value?: number) {
+    if (value === undefined || value === null) return undefined;
+    const normalized = Number(value);
+    if (!Number.isFinite(normalized) || normalized <= 0) {
+      throw new BadRequestException('perDaySalary must be a positive number');
+    }
+    return Number(normalized.toFixed(2));
+  }
+
+  private withPerDaySalary<T extends { staffStatutory?: { dailyRate?: number | null } | null }>(staff: T) {
+    return {
+      ...staff,
+      perDaySalary: staff.staffStatutory?.dailyRate ?? null,
+    };
+  }
+
   private getLeaveEntitlementByCategory(
     leaveCode: string,
     category: Role | string | undefined,
@@ -105,6 +121,7 @@ export class StaffService {
     const hashedPassword = await bcrypt.hash(data.password, 10);
     const isActive = data.isActive ?? true;
     const userRole = this.resolveStaffUserRole(data.role);
+    const perDaySalary = this.sanitizePerDaySalary(data.perDaySalary);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -135,7 +152,10 @@ export class StaffService {
             state:data.state
             // state:data.state
           },
-          include: { children: { select: { id: true, name: true, standard: true } } },
+          include: {
+            children: { select: { id: true, name: true, standard: true } },
+            staffStatutory: { select: { dailyRate: true } },
+          },
         });
 
         await tx.user.create({
@@ -151,11 +171,14 @@ export class StaffService {
 
         await tx.staffStatutory.upsert({
           where: { staffId: staff.id },
-          update: {},
+          update: {
+            ...(perDaySalary !== undefined ? { dailyRate: perDaySalary } : {}),
+          },
           create: {
             staffId: staff.id,
             basicSalary: data.salary ?? undefined,
             grossSalary: data.salary ?? undefined,
+            ...(perDaySalary !== undefined ? { dailyRate: perDaySalary } : {}),
           },
         });
 
@@ -188,7 +211,15 @@ export class StaffService {
           });
         }
 
-        return staff;
+        const refreshed = await tx.staff.findUniqueOrThrow({
+          where: { id: staff.id },
+          include: {
+            children: { select: { id: true, name: true, standard: true } },
+            staffStatutory: { select: { dailyRate: true } },
+          },
+        });
+
+        return this.withPerDaySalary(refreshed);
       });
     } catch (error) {
       this.handleStaffWriteError(error);
@@ -196,13 +227,18 @@ export class StaffService {
   }
 
   async findAll() {
-    return this.prisma.staff.findMany({
+    const rows = await this.prisma.staff.findMany({
       where:{
         isActive:true,
       },
-      include: { children: { select: { id: true, name: true, standard: true } } },
+      include: {
+        children: { select: { id: true, name: true, standard: true } },
+        staffStatutory: { select: { dailyRate: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
+
+    return rows.map((row) => this.withPerDaySalary(row));
   }
 
   async findTransportManagers() {
@@ -232,7 +268,10 @@ export class StaffService {
 
     const staffMembers = await this.prisma.staff.findMany({
       where: { id: { in: staffIds } },
-      include: { children: { select: { id: true, name: true, standard: true } } },
+      include: {
+        children: { select: { id: true, name: true, standard: true } },
+        staffStatutory: { select: { dailyRate: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -241,7 +280,7 @@ export class StaffService {
     );
 
     return staffMembers.map((staff) => ({
-      ...staff,
+      ...this.withPerDaySalary(staff),
       user: usersByStaffId.get(staff.id)
         ? {
             id: usersByStaffId.get(staff.id)!.id,
@@ -259,10 +298,11 @@ export class StaffService {
       include: {
         children: { select: { id: true, name: true, standard: true } },
         documents: { orderBy: { uploadedAt: 'desc' } },
+        staffStatutory: { select: { dailyRate: true } },
       },
     });
     if (!staff) throw new NotFoundException('Staff not found');
-    return staff;
+    return this.withPerDaySalary(staff);
   }
 
   async addDocument(staffId: string, data: CreateStaffDocumentDto, file: Express.Multer.File) {
@@ -348,6 +388,7 @@ export class StaffService {
       ? await bcrypt.hash(data.password, 10)
       : undefined;
     const userRole = this.resolveStaffUserRole(data.role);
+    const perDaySalary = this.sanitizePerDaySalary(data.perDaySalary);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -376,8 +417,24 @@ export class StaffService {
             area:data.area,
             state:data.state
           },
-          include: { children: { select: { id: true, name: true, standard: true } } },
+          include: {
+            children: { select: { id: true, name: true, standard: true } },
+            staffStatutory: { select: { dailyRate: true } },
+          },
         });
+
+        if (perDaySalary !== undefined) {
+          await tx.staffStatutory.upsert({
+            where: { staffId: staff.id },
+            update: { dailyRate: perDaySalary },
+            create: {
+              staffId: staff.id,
+              basicSalary: data.salary ?? undefined,
+              grossSalary: data.salary ?? undefined,
+              dailyRate: perDaySalary,
+            },
+          });
+        }
 
         const existingUser = await tx.user.findUnique({ where: { email: existing.email } });
 
@@ -406,7 +463,15 @@ export class StaffService {
           });
         }
 
-        return staff;
+        const refreshed = await tx.staff.findUniqueOrThrow({
+          where: { id: staff.id },
+          include: {
+            children: { select: { id: true, name: true, standard: true } },
+            staffStatutory: { select: { dailyRate: true } },
+          },
+        });
+
+        return this.withPerDaySalary(refreshed);
       });
     } catch (error) {
       this.handleStaffWriteError(error);

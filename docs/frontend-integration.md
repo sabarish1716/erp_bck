@@ -269,8 +269,107 @@ Payload:
   "name": "Staff Name",
   "email": "staff@example.com",
   "designation": "Teacher",
-  "password": "secret123"
+  "password": "secret123",
+  "category": "NON_TEACHING_ACTING_DRIVER",
+  "perDaySalary": 850
 }
+```
+
+Notes:
+
+- `perDaySalary` is optional for regular staff.
+- For acting drivers, use `category = NON_TEACHING_ACTING_DRIVER` and send `perDaySalary`.
+- Staff responses now include top-level `perDaySalary` and `staffStatutory.dailyRate`.
+
+## Acting driver per-day salary flow
+
+Use these APIs for an acting driver salary setup/edit screen.
+
+List acting drivers with configured rates:
+
+```http
+GET /erp/api/transport-expense/acting-drivers/daily-rate
+```
+
+Response shape:
+
+```json
+[
+  {
+    "staffId": "staff-uuid",
+    "employeeId": "EMP0042",
+    "name": "Acting Driver 1",
+    "designation": "Acting Driver",
+    "category": "NON_TEACHING_ACTING_DRIVER",
+    "perDaySalary": 850,
+    "fallbackPerDaySalary": 769.23
+  }
+]
+```
+
+Update per-day salary:
+
+```http
+PUT /erp/api/transport-expense/acting-drivers/:staffId/daily-rate
+Content-Type: application/json
+```
+
+```json
+{
+  "dailyRate": 900
+}
+```
+
+Frontend screen checklist:
+
+- Screen name suggestion: `Acting Driver Salary Setup`.
+- Columns: `employeeId`, `name`, `designation`, `perDaySalary`, `fallbackPerDaySalary`.
+- On page load call `GET /erp/api/transport-expense/acting-drivers/daily-rate`.
+- For each row, use an editable number input bound to `perDaySalary`.
+- If `perDaySalary` is `null`, prefill input with `fallbackPerDaySalary`.
+- On Save button click for a row, call `PUT /erp/api/transport-expense/acting-drivers/:staffId/daily-rate` with `{ "dailyRate": <inputValue> }`.
+- Show success toast and refresh only that row (or re-fetch list).
+- Validation: block empty, zero, negative, and non-numeric values.
+
+Minimal frontend API helpers (TypeScript):
+
+```ts
+export type ActingDriverRateRow = {
+  staffId: string;
+  employeeId: string;
+  name: string;
+  designation: string;
+  category: 'NON_TEACHING_ACTING_DRIVER';
+  perDaySalary: number | null;
+  fallbackPerDaySalary: number;
+};
+
+export async function fetchActingDriverRates(baseUrl: string, token: string) {
+  const res = await fetch(`${baseUrl}/erp/api/transport-expense/acting-drivers/daily-rate`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('Failed to load acting driver rates');
+  return (await res.json()) as ActingDriverRateRow[];
+}
+
+export async function updateActingDriverRate(
+  baseUrl: string,
+  token: string,
+  staffId: string,
+  dailyRate: number,
+) {
+  const res = await fetch(`${baseUrl}/erp/api/transport-expense/acting-drivers/${staffId}/daily-rate`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ dailyRate }),
+  });
+  if (!res.ok) throw new Error('Failed to update per-day salary');
+  return res.json();
+}
+```
 
 ## Transport manager frontend scope
 
