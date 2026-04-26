@@ -807,6 +807,9 @@ export class FeesService {
       throw new BadRequestException('Payments can be collected only for approved students');
     }
 
+    const totalPaidOverall = this.getTotalEffectivePaid(studentFee.payments);
+    const overallPending = Math.max(Number(studentFee.netFee || 0) - totalPaidOverall, 0);
+
     // Multi-term payment support
     if (Array.isArray(data.payments) && data.payments.length > 0) {
       // Validate total amount
@@ -814,25 +817,77 @@ export class FeesService {
       if (Math.abs(totalSplit - data.amount) > 0.01) {
         throw new BadRequestException(`Sum of split term payments (${totalSplit}) does not match total amount (${data.amount})`);
       }
+      if (totalSplit > overallPending) {
+        throw new BadRequestException(`Payment amount (${totalSplit}) exceeds pending balance (${overallPending})`);
+      }
+
+      const termPendingMap = new Map<number, number>();
+      for (const term of studentFee.terms) {
+        const termPaid = studentFee.payments
+          .filter((p) => p.termNumber === term.termNumber)
+          .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+        termPendingMap.set(term.termNumber, Math.max(term.amount - termPaid, 0));
+      }
+
+      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
+        (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
+      const nonTermPaid = studentFee.payments
+        .filter((p) => !p.termNumber)
+        .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+      let nonTermPending = Math.max(nonTermTotal - nonTermPaid, 0);
+
+      const allocations: Array<{ termNumber: number | null; amount: number; paidComponents?: Record<string, number> }> = [];
+      let overflowPool = 0;
+
       // Validate each term
       for (const split of data.payments) {
         const term = studentFee.terms.find((t) => t.termNumber === split.termNumber);
         if (!term) throw new BadRequestException(`Term ${split.termNumber} not found`);
-        const termPaid = studentFee.payments
-          .filter((p) => p.termNumber === split.termNumber)
-          .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
-        const termPending = term.amount - termPaid;
-        if (split.amount > termPending) {
-          throw new BadRequestException(`Payment amount (${split.amount}) exceeds term ${split.termNumber} pending balance (${termPending})`);
+
+        const termPending = termPendingMap.get(split.termNumber) || 0;
+        const toTerm = Math.min(split.amount, termPending);
+        if (toTerm > 0) {
+          allocations.push({ termNumber: split.termNumber, amount: toTerm, paidComponents: data.paidComponents });
+          termPendingMap.set(split.termNumber, termPending - toTerm);
+        }
+        if (split.amount > toTerm) {
+          overflowPool += split.amount - toTerm;
         }
       }
+
+      if (overflowPool > 0) {
+        const toNonTerm = Math.min(overflowPool, nonTermPending);
+        if (toNonTerm > 0) {
+          allocations.push({ termNumber: null, amount: toNonTerm });
+          overflowPool -= toNonTerm;
+          nonTermPending -= toNonTerm;
+        }
+      }
+
+      if (overflowPool > 0) {
+        const remainingTerms = [...studentFee.terms].sort((a, b) => a.termNumber - b.termNumber);
+        for (const term of remainingTerms) {
+          if (overflowPool <= 0) break;
+          const termPending = termPendingMap.get(term.termNumber) || 0;
+          if (termPending <= 0) continue;
+          const toTerm = Math.min(overflowPool, termPending);
+          allocations.push({ termNumber: term.termNumber, amount: toTerm });
+          termPendingMap.set(term.termNumber, termPending - toTerm);
+          overflowPool -= toTerm;
+        }
+      }
+
+      if (overflowPool > 0.01) {
+        throw new BadRequestException('Unable to allocate complete payment amount to pending dues');
+      }
+
       // Create a payment record for each term
       return this.prisma.$transaction(async (tx) => {
         const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
-    const createdPayments: any[] = [];
+        const createdPayments: any[] = [];
 
-        // data.payments.sort((a, b) => a.termNumber - b.termNumber); // Ensure payments are processed in term order 
-        for (const split of data?.payments ?? []) {
+        for (const split of allocations) {
+          if (split.amount <= 0) continue;
           let payment = await tx.payment.create({
             data: {
               studentFeeId: data.studentFeeId,
@@ -846,8 +901,8 @@ export class FeesService {
               receiptComponents: data.receiptComponents
                 ? (data.receiptComponents as unknown as Prisma.JsonArray)
                 : undefined,
-              paidComponents: data.paidComponents
-                ? (data.paidComponents as unknown as Prisma.JsonObject)
+              paidComponents: split.paidComponents
+                ? (split.paidComponents as unknown as Prisma.JsonObject)
                 : undefined,
             },
             include: {
@@ -862,86 +917,129 @@ export class FeesService {
           createdPayments.push(payment);
         }
         await this.recalculateTermStatuses(data.studentFeeId, tx);
-        return createdPayments;
+        if (createdPayments.length <= 1) return createdPayments[0] || null;
+        return {
+          ...createdPayments[0],
+          splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
+          totalCollected: createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0),
+        };
       });
     }
 
-    // Legacy: single term or overall payment
-    // When terms exist, payment without term number is allowed for non-term fees (book, hostel, other, custom)
-    if (studentFee.terms.length > 0 && !data.termNumber) {
-      // Non-term payment: validate against non-term fee balance (book + hostel + other + custom - non-term paid)
-      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
-        (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
-      const nonTermPaid = studentFee.payments
-        .filter((p) => !p.termNumber)
-        .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
-      const nonTermPending = nonTermTotal - nonTermPaid;
-      if (nonTermPending <= 0) {
-        throw new BadRequestException('All non-term fees are already paid. Select a term for tuition/transport payment.');
-      }
-      if (data.amount > nonTermPending) {
-        throw new BadRequestException(
-          `Payment amount (${data.amount}) exceeds non-term fee pending balance (${nonTermPending})`,
-        );
-      }
+    if (Number(data.amount || 0) > overallPending) {
+      throw new BadRequestException(`Payment amount (${data.amount}) exceeds pending balance (${overallPending})`);
     }
 
     // If termNumber is specified, validate against term balance
     if (data.termNumber) {
       const term = studentFee.terms.find((t) => t.termNumber === data.termNumber);
       if (!term) throw new BadRequestException(`Term ${data.termNumber} not found`);
-
-      const termPaid = studentFee.payments
-        .filter((p) => p.termNumber === data.termNumber)
-        .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
-      const termPending = term.amount - termPaid;
-
-      if (data.amount > termPending) {
-        throw new BadRequestException(
-          `Payment amount (${data.amount}) exceeds term ${data.termNumber} pending balance (${termPending})`,
-        );
-      }
-    } else {
-      const totalPaid = this.getTotalEffectivePaid(studentFee.payments);
-      const pending = studentFee.netFee - totalPaid;
-
-      if (data.amount > pending) {
-        throw new BadRequestException(
-          `Payment amount (${data.amount}) exceeds pending balance (${pending})`,
-        );
-      }
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const payment = await tx.payment.create({
-        data: {
-          studentFeeId: data.studentFeeId,
-          amount: data.amount,
-          paymentMode: data.paymentMode,
-          paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
-          receiptNo: data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo,
-          remarks: data.remarks,
-          termNumber: data.termNumber || null,
-          status: 'SUCCESS',
-          receiptComponents: data.receiptComponents
-            ? (data.receiptComponents as unknown as Prisma.JsonArray)
-            : undefined,
-          paidComponents: data.paidComponents
-            ? (data.paidComponents as unknown as Prisma.JsonObject)
-            : undefined,
-        },
-        include: {
-          studentFee: {
-            include: {
-              student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
-              terms: { orderBy: { termNumber: 'asc' } },
+      const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
+      const createdPayments: any[] = [];
+
+      const termPendingMap = new Map<number, number>();
+      for (const term of studentFee.terms) {
+        const termPaid = studentFee.payments
+          .filter((p) => p.termNumber === term.termNumber)
+          .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+        termPendingMap.set(term.termNumber, Math.max(term.amount - termPaid, 0));
+      }
+      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
+        (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
+      const nonTermPaid = studentFee.payments
+        .filter((p) => !p.termNumber)
+        .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
+      let nonTermPending = Math.max(nonTermTotal - nonTermPaid, 0);
+
+      let remaining = Number(data.amount || 0);
+      if (data.termNumber) {
+        const selectedPending = termPendingMap.get(data.termNumber) || 0;
+        const toSelected = Math.min(remaining, selectedPending);
+        if (toSelected > 0) {
+          createdPayments.push(await tx.payment.create({
+            data: {
+              studentFeeId: data.studentFeeId,
+              amount: toSelected,
+              paymentMode: data.paymentMode,
+              paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+              receiptNo,
+              remarks: data.remarks,
+              termNumber: data.termNumber,
+              status: 'SUCCESS',
+              receiptComponents: data.receiptComponents ? (data.receiptComponents as unknown as Prisma.JsonArray) : undefined,
+              paidComponents: data.paidComponents ? (data.paidComponents as unknown as Prisma.JsonObject) : undefined,
             },
-          },
-        },
-      });
+            include: {
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+            },
+          }));
+          remaining -= toSelected;
+        }
+      }
+
+      if (remaining > 0) {
+        const toNonTerm = Math.min(remaining, nonTermPending);
+        if (toNonTerm > 0) {
+          createdPayments.push(await tx.payment.create({
+            data: {
+              studentFeeId: data.studentFeeId,
+              amount: toNonTerm,
+              paymentMode: data.paymentMode,
+              paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+              receiptNo,
+              remarks: data.remarks,
+              termNumber: null,
+              status: 'SUCCESS',
+              receiptComponents: data.receiptComponents ? (data.receiptComponents as unknown as Prisma.JsonArray) : undefined,
+            },
+            include: {
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+            },
+          }));
+          remaining -= toNonTerm;
+          nonTermPending -= toNonTerm;
+        }
+      }
+
+      if (remaining > 0) {
+        const terms = [...studentFee.terms].sort((a, b) => a.termNumber - b.termNumber);
+        for (const term of terms) {
+          if (remaining <= 0) break;
+          const termPending = termPendingMap.get(term.termNumber) || 0;
+          if (termPending <= 0) continue;
+          const toTerm = Math.min(remaining, termPending);
+          createdPayments.push(await tx.payment.create({
+            data: {
+              studentFeeId: data.studentFeeId,
+              amount: toTerm,
+              paymentMode: data.paymentMode,
+              paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
+              receiptNo,
+              remarks: data.remarks,
+              termNumber: term.termNumber,
+              status: 'SUCCESS',
+              receiptComponents: data.receiptComponents ? (data.receiptComponents as unknown as Prisma.JsonArray) : undefined,
+            },
+            include: {
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+            },
+          }));
+          remaining -= toTerm;
+          termPendingMap.set(term.termNumber, termPending - toTerm);
+        }
+      }
 
       await this.recalculateTermStatuses(data.studentFeeId, tx);
-      return payment;
+
+      if (createdPayments.length <= 1) return createdPayments[0] || null;
+      return {
+        ...createdPayments[0],
+        splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
+        totalCollected: createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0),
+      };
     });
   }
 
@@ -1295,18 +1393,98 @@ export class FeesService {
   // ACADEMIC YEARS
   // ═══════════════════════════════════════════════
 
-  async getAcademicYears() {
-    // Get all distinct academic years from the student table (ignoring nulls)
-    const students = await this.prisma.student.findMany({
-      select: { academicYear: true },
-      where: { academicYear: { not: null } },
-      distinct: ['academicYear'],
+  private readonly ACADEMIC_YEAR_PATTERN = /^\d{4}-\d{4}$/;
+
+  private validateAcademicYearFormat(year: string): void {
+    const trimmed = year.trim();
+    if (!this.ACADEMIC_YEAR_PATTERN.test(trimmed)) {
+      throw new BadRequestException('Academic year must be in format YYYY-YYYY (e.g. 2026-2027)');
+    }
+    const [start, end] = trimmed.split('-').map(Number);
+    if (end !== start + 1) {
+      throw new BadRequestException('End year must be exactly start year + 1 (e.g. 2026-2027)');
+    }
+  }
+
+  async getAcademicYears(): Promise<string[]> {
+    // Collect years from: dedicated AcademicYear table, FeeStructure, and StudentFee
+    const [dedicated, structures, studentFees] = await Promise.all([
+      this.prisma.academicYear.findMany({ select: { year: true } }),
+      this.prisma.feeStructure.findMany({ select: { academicYear: true }, distinct: ['academicYear'] }),
+      this.prisma.studentFee.findMany({ select: { academicYear: true }, distinct: ['academicYear'] }),
+    ]);
+
+    const allYears = new Set<string>([
+      ...dedicated.map((r) => r.year),
+      ...structures.map((r) => r.academicYear),
+      ...studentFees.map((r) => r.academicYear),
+    ]);
+
+    return Array.from(allYears)
+      .filter(Boolean)
+      .sort((a, b) => b.localeCompare(a));
+  }
+
+  async createAcademicYear(year: string): Promise<{ id: string; year: string }> {
+    const trimmed = year.trim();
+    this.validateAcademicYearFormat(trimmed);
+
+    const existing = await this.prisma.academicYear.findUnique({ where: { year: trimmed } });
+    if (existing) {
+      throw new BadRequestException(`Academic year '${trimmed}' already exists`);
+    }
+
+    return this.prisma.academicYear.create({ data: { year: trimmed } });
+  }
+
+  async updateAcademicYear(
+    currentYear: string,
+    newYear: string,
+  ): Promise<{ year: string; updatedStructures: number; updatedStudentFees: number }> {
+    const trimmedCurrent = decodeURIComponent(currentYear).trim();
+    const trimmedNew = newYear.trim();
+
+    this.validateAcademicYearFormat(trimmedNew);
+
+    // Check current exists (in dedicated table or derived)
+    const years = await this.getAcademicYears();
+    if (!years.includes(trimmedCurrent)) {
+      throw new NotFoundException(`Academic year '${trimmedCurrent}' not found`);
+    }
+
+    if (trimmedCurrent === trimmedNew) {
+      return { year: trimmedNew, updatedStructures: 0, updatedStudentFees: 0 };
+    }
+
+    // Prevent overwriting an existing year
+    if (years.includes(trimmedNew)) {
+      throw new BadRequestException(`Academic year '${trimmedNew}' already exists`);
+    }
+
+    // Cascade rename inside a transaction
+    const [updatedStructures, updatedStudentFees] = await this.prisma.$transaction([
+      this.prisma.feeStructure.updateMany({
+        where: { academicYear: trimmedCurrent },
+        data: { academicYear: trimmedNew },
+      }),
+      this.prisma.studentFee.updateMany({
+        where: { academicYear: trimmedCurrent },
+        data: { academicYear: trimmedNew },
+      }),
+    ]);
+
+    // Update or create dedicated row
+    await this.prisma.academicYear.upsert({
+      where: { year: trimmedCurrent },
+      update: { year: trimmedNew },
+      create: { year: trimmedNew },
     });
-    return students
-      .map((s) => s.academicYear)
-      .filter((y): y is string => !!y)
-      .sort()
-      .reverse();
+
+    return {
+      year: trimmedNew,
+      updatedStructures: updatedStructures.count,
+      updatedStudentFees: updatedStudentFees.count,
+    };
   }
 
   // ═══════════════════════════════════════════════

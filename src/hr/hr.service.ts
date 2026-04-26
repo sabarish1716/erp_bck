@@ -569,7 +569,11 @@ export class HrService {
     if (req.status !== 'PENDING') throw new BadRequestException('Only pending requests can be rejected');
     return this.prisma.permissionRequest.update({
       where: { id },
-      data: { status: 'REJECTED', rejectedBy: dto.rejectedBy, rejectionNote: dto.rejectionNote },
+      data: {
+        status: 'REJECTED',
+        rejectedBy: String(dto.rejectedBy),
+        rejectionNote: dto.rejectionNote ?? dto.reason ?? null,
+      },
     });
   }
 

@@ -31,6 +31,11 @@ export class CollectPaymentDto {
   payments?: TermPaymentDto[];
   @IsOptional()
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TermPaymentDto)
+  splitPayments?: TermPaymentDto[];
+  @IsOptional()
+  @IsArray()
   @IsIn(['transportFee', 'bookFee', 'hostelFee', 'otherFee', 'customItems'], {
     each: true,
   })

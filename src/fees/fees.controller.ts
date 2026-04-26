@@ -163,9 +163,24 @@ export class FeesController {
   }
 
   @Get('academic-years')
-  @Permissions(Permission.FEES_STRUCTURE_READ)
+  @Permissions(Permission.FEES_READ)
   getAcademicYears() {
     return this.feesService.getAcademicYears();
+  }
+
+  @Post('academic-years')
+  @Permissions(Permission.FEES_STRUCTURE_CREATE)
+  createAcademicYear(@Body('academicYear') academicYear: string) {
+    return this.feesService.createAcademicYear(academicYear);
+  }
+
+  @Put('academic-years/:academicYearId')
+  @Permissions(Permission.FEES_STRUCTURE_UPDATE)
+  updateAcademicYear(
+    @Param('academicYearId') academicYearId: string,
+    @Body('academicYear') academicYear: string,
+  ) {
+    return this.feesService.updateAcademicYear(academicYearId, academicYear);
   }
 
   @Post('recalc-transport/:studentId')

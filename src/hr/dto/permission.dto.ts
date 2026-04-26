@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber } from 'class-validator';
 
 export class ApplyPermissionDto {
@@ -14,6 +15,13 @@ export class ApprovePermissionDto {
 }
 
 export class RejectPermissionDto {
-  @IsNotEmpty() @IsString() rejectedBy: string;
+  @IsNotEmpty()
+  @Transform(({ value }) => (value === null || value === undefined ? value : String(value)))
+  @IsString()
+  rejectedBy: string;
+
+  // Frontend often sends `reason`; keep it as alias to avoid whitelist validation errors.
+  @IsOptional() @IsString() reason?: string;
+
   @IsOptional() @IsString() rejectionNote?: string;
 }
