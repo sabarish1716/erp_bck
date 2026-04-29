@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
-import { AcademicStream, ExamSession, Standard } from '@prisma/client';
+import { AcademicStream, ExamSession, PeriodType, Standard } from '@prisma/client';
 
 export class CreateExamDto {
   @IsString()
@@ -55,6 +55,11 @@ export class CreateExamSubjectDto {
   @IsInt()
   @Min(1)
   passMarks?: number;
+
+  /** Staff ID of the teacher assigned to this subject */
+  @IsOptional()
+  @IsString()
+  teacherId?: string;
 }
 
 export class CreateExamHallDto {
@@ -112,6 +117,27 @@ export class CreateExamScheduleDto {
   @IsArray()
   @IsString({ each: true })
   hallIds!: string[];
+
+  /** Starting period number (1–8) */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  periodStart?: number;
+
+  /** Ending period number (1–8) */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(8)
+  periodEnd?: number;
+
+  /** Whether these periods are for Revision or Examination */
+  @IsOptional()
+  @IsEnum(PeriodType)
+  periodType?: PeriodType;
 }
 
 export class GenerateRollNumbersDto {
@@ -139,4 +165,48 @@ export class AssignInvigilatorDto {
   @IsString()
   @IsNotEmpty()
   staffId!: string;
+}
+
+/** Auto-generate period blocks for an exam date based on marks pattern and class group */
+export class AutoGeneratePeriodsDto {
+  @IsString()
+  @IsNotEmpty()
+  subjectId!: string;
+
+  @IsEnum(Standard)
+  standard!: Standard;
+
+  @IsOptional()
+  @IsString()
+  section?: string;
+
+  @IsOptional()
+  @IsEnum(AcademicStream)
+  stream?: AcademicStream;
+
+  @IsDateString()
+  examDate!: string;
+
+  /**
+   * Marks for this exam (determines period split pattern):
+   * 25 → periods 1-2 revision, 3-4 exam
+   * 50 → periods 1-4 revision, 5-8 exam
+   * 100 → full previous day revision + exam day 1-4 revision, 5-8 exam
+   */
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  marks!: number;
+
+  /** For 100-mark exams: the date on which full revision is held */
+  @IsOptional()
+  @IsDateString()
+  revisionDate?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  hallIds!: string[];
+
+  @IsEnum(ExamSession)
+  session!: ExamSession;
 }

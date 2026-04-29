@@ -14,6 +14,10 @@ export class UpdateStatutorySettingsDto {
   @IsOptional() @IsNumber() esiEmployerRate?: number;
   @IsOptional() @IsNumber() esiWageLimit?: number;
   @IsOptional() @IsNumber() esiDailyWageThreshold?: number;
+  // PSF (Professional Services Fund - regional statutory deduction)
+  @IsOptional() @IsBoolean() psfEnabled?: boolean;
+  @IsOptional() @IsNumber() psfEmployeeRate?: number;
+  @IsOptional() @IsNumber() psfWageLimit?: number;
   // Professional Tax
   @IsOptional() @IsBoolean() ptEnabled?: boolean;
   @IsOptional() @IsNumber() ptAmount?: number;
@@ -34,6 +38,7 @@ export class UpdateStaffStatutoryDto {
   @IsOptional() @IsNumber() grossSalary?: number;
   @IsOptional() @IsBoolean() pfEnabled?: boolean;
   @IsOptional() @IsBoolean() esiEnabled?: boolean;
+  @IsOptional() @IsBoolean() psfEnabled?: boolean;
   @IsOptional() @IsBoolean() isStipend?: boolean;
   @IsOptional() @IsNumber() dailyRate?: number;
 }

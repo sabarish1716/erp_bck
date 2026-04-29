@@ -101,6 +101,11 @@ enum ExamSession {
   AN
 }
 
+enum PeriodType {
+  REVISION
+  EXAMINATION
+}
+
 enum ExamStatus {
   DRAFT
   PUBLISHED
@@ -471,9 +476,14 @@ model Staff {
   examInvigilations   ExamInvigilatorAssignment[]
   esslMapping         ESSLStaffMapping?
   advances            StaffAdvance[]
+  salaryIncrements    SalaryIncrement[] @relation("SalaryIncrements")
+  loans               StaffLoan[] @relation("StaffLoans")
 
   // POS relations
   teacherFreeItems    TeacherFreeItem[]
+
+  // Exam subject teaching assignments
+  examSubjectsTeaching ExamSubject[] @relation("SubjectTeacher")
 
   // Staff document records
   documents           StaffDocument[]
@@ -606,13 +616,16 @@ model ExamSubject {
   stream       AcademicStream?
   maxMarks     Int            @default(100)
   passMarks    Int            @default(35)
+  teacherId    String?        // Staff member assigned to teach this subject
   createdAt    DateTime       @default(now())
 
   exam         Exam           @relation(fields: [examId], references: [id], onDelete: Cascade)
+  teacher      Staff?         @relation("SubjectTeacher", fields: [teacherId], references: [id], onDelete: SetNull)
   schedules    ExamSchedule[]
 
   @@unique([examId, code])
   @@index([examId, standard, section])
+  @@index([teacherId])
 }
 
 model ExamHall {
@@ -643,6 +656,10 @@ model ExamSchedule {
   startsAt      DateTime
   endsAt        DateTime
   session       ExamSession
+  // Period-based scheduling (1-8)
+  periodStart   Int?               // Starting period number (1–8)
+  periodEnd     Int?               // Ending period number (1–8)
+  periodType    PeriodType?        // REVISION or EXAMINATION
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
 
@@ -654,6 +671,7 @@ model ExamSchedule {
 
   @@index([examDate, startsAt, endsAt])
   @@index([examId, standard, section])
+  @@index([examDate, periodStart, periodEnd])
 }
 
 model ExamScheduleHall {
@@ -1236,6 +1254,10 @@ model StatutorySettings {
   esiEmployerRate Float    @default(3.25)
   esiWageLimit    Float    @default(21000)
   esiDailyWageThreshold Float @default(176) // ESI skipped if daily wage < this
+  // PSF (Professional Services Fund - regional statutory deduction)
+  psfEnabled      Boolean  @default(false)
+  psfEmployeeRate Float    @default(0)
+  psfWageLimit    Float    @default(0)
   // Professional Tax
   ptEnabled       Boolean  @default(false)
   ptAmount        Float    @default(200)
@@ -1260,6 +1282,7 @@ model StaffStatutory {
   grossSalary   Float?
   pfEnabled     Boolean  @default(true)
   esiEnabled    Boolean  @default(true)
+  psfEnabled    Boolean  @default(true)    // Professional Services Fund (regional statutory deduction)
   isStipend     Boolean  @default(false)  // Stipend staff: no PF (booked as stipend in tally)
   dailyRate     Float?                    // For NON_TEACHING_SECURITY / NON_TEACHING_SPORTS
 
@@ -1267,6 +1290,95 @@ model StaffStatutory {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+}
+
+// ═══════════════════════════════════════════════
+// SALARY INCREMENT MANAGEMENT
+// ═══════════════════════════════════════════════
+
+model SalaryIncrement {
+  id              String   @id @default(uuid())
+  staffId         String
+  fromSalary      Float
+  toSalary        Float
+  incrementAmount Float
+  incrementDate   DateTime                // Date of increment request
+  effectiveDate   DateTime                // From which month/date increment applies
+  reason          String?
+  status          String   @default("PENDING")  // PENDING, APPROVED, REJECTED, APPLIED
+  approvedBy      String?                 // User/Staff ID who approved
+  approvedAt      DateTime?
+  rejectedReason  String?
+  rejectedAt      DateTime?
+
+  staff           Staff    @relation("SalaryIncrements", fields: [staffId], references: [id])
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([staffId, status])
+  @@index([effectiveDate])
+}
+
+// ═══════════════════════════════════════════════
+// STAFF LOAN MANAGEMENT WITH EMI
+// ═══════════════════════════════════════════════
+
+model StaffLoan {
+  id                String   @id @default(uuid())
+  staffId           String
+  loanAmount        Float                 // Total loan amount
+  emiAmount         Float                 // Monthly EMI amount
+  emiFrequency      String   @default("MONTHLY") // MONTHLY, BI_WEEKLY
+  startMonth        String                // YYYY-MM format (month from which EMI starts)
+  endMonth          String?               // YYYY-MM format (expected end month)
+  status            String   @default("ACTIVE")  // ACTIVE, PAUSED, PRE_CLOSED, CLOSED, REJECTED
+  
+  totalPaid         Float    @default(0)  // Total amount paid so far
+  balanceRemaining  Float                 // Remaining to pay
+  
+  // Pre-closure details
+  preClosureDate    DateTime?
+  preClosureAmount  Float?
+  preClosureReason  String?
+  
+  // Skip/Pause tracking (JSON array of YYYY-MM months to skip)
+  skipMonths        String   @default("[]")  // JSON array like ["2026-03", "2026-04"]
+  
+  reason            String?
+  approvedBy        String?
+  approvedAt        DateTime?
+  rejectedAt        DateTime?
+  rejectionReason   String?
+
+  staff             Staff    @relation("StaffLoans", fields: [staffId], references: [id])
+  emiTransactions   LoanEMITransaction[]
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([staffId, status])
+  @@index([startMonth])
+}
+
+model LoanEMITransaction {
+  id              String   @id @default(uuid())
+  loanId          String
+  month           String                 // YYYY-MM format
+  emiDue          Float
+  emiPaid         Float    @default(0)
+  status          String   @default("PENDING")  // PENDING, PAID, SKIPPED, PAUSED
+  paidAt          DateTime?
+  payrollId       String?                // Reference to payroll record where EMI was deducted
+  notes           String?
+
+  loan            StaffLoan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([loanId, month])
+  @@index([loanId, status])
 }
 
 model ESSLDevice {
@@ -1357,10 +1469,13 @@ model Payroll {
   esiBase                Float    @default(0)  // 80% of gross (ESI calculated on this)
   pfDeduction            Float    @default(0)  // employee PF
   esiDeduction           Float    @default(0)  // employee ESI
+  psfDeduction           Float    @default(0)  // PSF (Professional Services Fund)
   ptDeduction            Float    @default(0)
   employerPfContribution Float    @default(0)
   employerEsiContribution Float   @default(0)
   ctc                    Float    @default(0)  // Gross + Employer PF + Employer ESI
+  // Loan deductions
+  loanEMIDeduction       Float    @default(0)  // Loan EMI monthly deduction
   // Advance deductions
   fixedAdvanceDeduction  Float    @default(0)
   salaryAdvanceDeduction Float    @default(0)
@@ -1370,7 +1485,7 @@ model Payroll {
   bonusIncentive         Float    @default(0)
   // Totals
   totalDeductions        Float    @default(0)
-  netSalary              Float    @default(0)  // Gross − LOP − Employee PF − Employee ESI − Advances
+  netSalary              Float    @default(0)  // Gross − LOP − Employee PF − Employee ESI − PSF − Loan EMI − Advances
   status                 String   @default("generated")
 
   staff                  Staff    @relation(fields: [staffId], references: [id])

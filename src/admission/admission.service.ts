@@ -1007,7 +1007,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       ? { admissionDate: { gte: previousDateRange.start, lte: previousDateRange.end } }
       : undefined;
 
-    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal] = await Promise.all([
+    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal, recentAdmissions] = await Promise.all([
       this.prisma.admission.count({ where }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: true } }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: false } }),
@@ -1018,6 +1018,26 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       }),
       this.prisma.appSetting.findUnique({ where: { key: 'admission.standardSeats' } }),
       previousWhere ? this.prisma.admission.count({ where: previousWhere }) : Promise.resolve(0),
+      this.prisma.admission.findMany({
+        where,
+        orderBy: { admissionDate: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          admissionNo: true,
+          admissionDate: true,
+          standard: true,
+          isApproved: true,
+          student: {
+            select: {
+              id: true,
+              name: true,
+              gender: true,
+              section: true,
+            },
+          },
+        },
+      }),
     ]);
 
     // Sort byStandard by standard ascending
@@ -1101,6 +1121,17 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       },
       milestones,
       upcomingMilestones: milestones.filter((milestone) => !milestone.achieved).slice(0, 3),
+      recentApplicants: recentAdmissions.map((a) => ({
+        id: a.id,
+        admissionNo: a.admissionNo,
+        admissionDate: a.admissionDate,
+        standard: a.standard,
+        isApproved: a.isApproved,
+        studentId: a.student.id,
+        studentName: a.student.name,
+        gender: a.student.gender,
+        section: a.student.section,
+      })),
     };
   }
 

@@ -8,6 +8,8 @@ import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from '.
 import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
 import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
 import { GeneratePayrollDto, ApprovePayrollDto, UpdatePayrollDto } from './dto/payroll.dto';
+import { CreateIncrementDto, ApproveIncrementDto, RejectIncrementDto } from './dto/increment.dto';
+import { CreateLoanDto, ApproveLoanDto, RejectLoanDto, SkipLoanEMIDto, ResumeLoanEMIDto, PreCloseLoanDto } from './dto/loan.dto';
 
 type LeavePermissionPolicy = {
   permissionHoursLimit: number;
@@ -48,6 +50,21 @@ const NON_TEACHING_POLICY: LeavePermissionPolicy = {
 @Injectable()
 export class HrService {
   constructor(private prisma: PrismaService) {}
+
+  async getStaffList() {
+    return this.prisma.staff.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        employeeId: true,
+        name: true,
+        department: true,
+        designation: true,
+        salary: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
 
   private isSelfServiceRole(role?: string | Role | null) {
     return role === Role.STAFF || role === Role.TEACHER;
@@ -738,9 +755,9 @@ export class HrService {
       return { success: true, message: 'Sync completed', history };
     } catch (error) {
       await this.prisma.eSSLSyncHistory.create({
-        data: { deviceId, status: 'failed', error: error.message },
+        data: { deviceId, status: 'failed', error: error?.message },
       });
-      throw new BadRequestException('Sync failed: ' + error.message);
+      throw new BadRequestException('Sync failed: ' + (error?.message || 'Unknown error'));
     }
   }
 
@@ -752,7 +769,7 @@ export class HrService {
         const result = await this.syncDevice(device.id);
         results.push({ deviceId: device.id, name: device.name, ...result });
       } catch (e) {
-        results.push({ deviceId: device.id, name: device.name, success: false, error: e.message });
+        results.push({ deviceId: device.id, name: device.name, success: false, error: e?.message || 'Unknown error' });
       }
     }
     return results;
@@ -961,6 +978,52 @@ export class HrService {
       // ── Prof Tax ────────────────────────────────────────────────────────
       const ptDeduction = isActingDriver ? 0 : (settings.ptEnabled ? settings.ptAmount : 0);
 
+      // ── PSF (Professional Services Fund) ────────────────────────────────
+      let psfDeduction = 0;
+      const psfEligible = !isActingDriver && (statutory?.psfEnabled !== false);
+      if ((settings as any).psfEnabled && psfEligible) {
+        const psfBase = basicSalary; // PSF typically on basic salary like PF
+        const psfWageLimit = (settings as any).psfWageLimit ?? 0;
+        if (psfWageLimit > 0 && psfBase <= psfWageLimit) {
+          psfDeduction = Math.round(psfBase * ((settings as any).psfEmployeeRate ?? 0) / 100);
+        } else if (psfWageLimit === 0) {
+          psfDeduction = Math.round(psfBase * ((settings as any).psfEmployeeRate ?? 0) / 100);
+        }
+      }
+
+      // ── Loan EMI deductions ─────────────────────────────────────────────
+      let loanEMIDeduction = 0;
+      const staffLoans = isActingDriver
+        ? []
+        : await this.prisma.staffLoan.findMany({
+            where: { staffId: staff.id, status: 'ACTIVE' },
+            include: { emiTransactions: true },
+          });
+
+      for (const loan of staffLoans) {
+        // Check if current month is in skipMonths
+        const skipMonths = JSON.parse(loan.skipMonths || '[]');
+        const currentMonth = `${y}-${String(m).padStart(2, '0')}`;
+        if (!skipMonths.includes(currentMonth)) {
+          // Find or create EMI transaction for this month
+          let emiTxn = loan.emiTransactions.find((t) => t.month === currentMonth);
+          if (!emiTxn) {
+            // Create new EMI transaction if not found
+            emiTxn = await this.prisma.loanEMITransaction.create({
+              data: {
+                loanId: loan.id,
+                month: currentMonth,
+                emiDue: loan.emiAmount,
+                status: 'PENDING',
+              },
+            });
+          }
+          if (emiTxn.status === 'PENDING') {
+            loanEMIDeduction += loan.emiAmount;
+          }
+        }
+      }
+
       // ── Advance deductions ──────────────────────────────────────────────
       let fixedAdvanceDeduction = 0;
       let salaryAdvanceDeduction = 0;
@@ -982,12 +1045,13 @@ export class HrService {
       }
 
       // ── Net / Take-Home & CTC ───────────────────────────────────────────
-      // Net = Gross − LOP − Employee PF − Employee ESI − Advances
+      // Net = Gross − LOP − Employee PF − Employee ESI − PSF − Loan EMI − Advances
       const totalDeductions = isActingDriver
         ? 0
         : Math.round(
             lopDeduction + permissionLopDeduction +
-            pfDeduction + esiDeduction + ptDeduction +
+            pfDeduction + esiDeduction + psfDeduction + ptDeduction +
+            loanEMIDeduction +
             fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
           );
       const netSalary = isActingDriver
@@ -1005,8 +1069,9 @@ export class HrService {
           totalWorkingDays, presentDays, lopDays, lopDeduction,
           permissionHoursUsed, permissionLopDays, permissionLopDeduction,
           pfBase, esiBase,
-          pfDeduction, esiDeduction, ptDeduction,
+          pfDeduction, esiDeduction, psfDeduction, ptDeduction,
           employerPfContribution, employerEsiContribution, ctc,
+          loanEMIDeduction,
           fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
           extraAllowance: 0,
           totalDeductions, netSalary,
@@ -1018,8 +1083,9 @@ export class HrService {
           totalWorkingDays, presentDays, lopDays, lopDeduction,
           permissionHoursUsed, permissionLopDays, permissionLopDeduction,
           pfBase, esiBase,
-          pfDeduction, esiDeduction, ptDeduction,
+          pfDeduction, esiDeduction, psfDeduction, ptDeduction,
           employerPfContribution, employerEsiContribution, ctc,
+          loanEMIDeduction,
           fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
           extraAllowance: 0,
           totalDeductions, netSalary,
@@ -1306,6 +1372,381 @@ export class HrService {
     };
 
     return { rows, grandTotal, payrolls };
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── SALARY INCREMENT ──────────────────────────
+  // ═══════════════════════════════════════════════
+
+  async createIncrement(dto: any) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+    if (!staff) throw new NotFoundException('Staff not found');
+         const toSalary = parseFloat(dto.toSalary);
+
+    return this.prisma.salaryIncrement.create({
+      data: {
+        staffId: dto.staffId,
+        fromSalary: parseFloat(dto.fromSalary),
+        toSalary: toSalary,
+        // convert this to float 
+        incrementAmount: toSalary - parseFloat(dto.fromSalary),
+        incrementDate: new Date(dto.incrementDate),
+        effectiveDate: new Date(dto.effectiveDate),
+        reason: dto.reason,
+        status: 'PENDING',
+      },
+      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+    });
+  }
+
+  async approveIncrement(id: string, dto: any) {
+    const increment = await this.prisma.salaryIncrement.findUnique({ where: { id } });
+    if (!increment) throw new NotFoundException('Increment not found');
+    if (increment.status !== 'PENDING') throw new BadRequestException('Only pending increments can be approved');
+
+    // Update staff salary to new salary
+    const staff = await this.prisma.staff.findUnique({ where: { id: increment.staffId } });
+    if (staff) {
+      await this.prisma.staff.update({
+        where: { id: increment.staffId },
+        data: { salary: increment.toSalary },
+      });
+    }
+
+    return this.prisma.salaryIncrement.update({
+      where: { id },
+      data: {
+        status: 'APPLIED',
+        approvedBy: dto.approvedBy,
+        approvedAt: new Date(),
+      },
+      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+    });
+  }
+
+  async rejectIncrement(id: string, dto: any) {
+    const increment = await this.prisma.salaryIncrement.findUnique({ where: { id } });
+    if (!increment) throw new NotFoundException('Increment not found');
+    if (increment.status !== 'PENDING') throw new BadRequestException('Only pending increments can be rejected');
+
+    return this.prisma.salaryIncrement.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectedReason: dto.rejectionReason,
+      },
+    });
+  }
+
+  async getIncrementHistory(staffId: string, status?: string) {
+    return this.prisma.salaryIncrement.findMany({
+      where: {
+        staffId,
+        ...(status ? { status } : {}),
+      },
+      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      orderBy: { incrementDate: 'desc' },
+    });
+  }
+
+  async getAllIncrements(status?: string) {
+    return this.prisma.salaryIncrement.findMany({
+      where: status ? { status } : {},
+      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, salary: true } } },
+      orderBy: { incrementDate: 'desc' },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── STAFF LOAN MANAGEMENT ─────────────────────
+  // ═══════════════════════════════════════════════
+
+  async createLoan(dto: any) {
+    const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+    if (!staff) throw new NotFoundException('Staff not found');
+
+    // Calculate number of EMIs
+    const [startYear, startMonth] = dto.startMonth.split('-').map(Number);
+    const loanAmount = dto.loanAmount;
+    const emiAmount = dto.emiAmount;
+    const numEMIs = Math.ceil(loanAmount / emiAmount);
+    
+    // Calculate end month
+    let endYear = startYear;
+    let endMonth = startMonth + numEMIs - 1;
+    if (endMonth > 12) {
+      endYear += Math.floor(endMonth / 12);
+      endMonth = endMonth % 12 || 12;
+    }
+    const endMonthStr = `${endYear}-${String(endMonth).padStart(2, '0')}`;
+
+    const loan = await this.prisma.staffLoan.create({
+      data: {
+        staffId: dto.staffId,
+        loanAmount: dto.loanAmount,
+        emiAmount: dto.emiAmount,
+        emiFrequency: dto.emiFrequency || 'MONTHLY',
+        startMonth: dto.startMonth,
+        endMonth: endMonthStr,
+        balanceRemaining: dto.loanAmount,
+        status: 'ACTIVE',
+        reason: dto.reason,
+      },
+      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+    });
+
+    // Create EMI transaction records for each month
+    for (let i = 0; i < numEMIs; i++) {
+      let m = startMonth + i;
+      let y = startYear;
+      if (m > 12) {
+        y += Math.floor(m / 12);
+        m = m % 12 || 12;
+      }
+      const month = `${y}-${String(m).padStart(2, '0')}`;
+      await this.prisma.loanEMITransaction.create({
+        data: {
+          loanId: loan.id,
+          month,
+          emiDue: emiAmount,
+          status: 'PENDING',
+        },
+      });
+    }
+
+    return loan;
+  }
+
+  async approveLoan(id: string, dto: any) {
+    const loan = await this.prisma.staffLoan.findUnique({ where: { id } });
+    if (!loan) throw new NotFoundException('Loan not found');
+    if (loan.status !== 'ACTIVE') throw new BadRequestException('Only active loans can be approved');
+
+    return this.prisma.staffLoan.update({
+      where: { id },
+      data: {
+        approvedBy: dto.approvedBy,
+        approvedAt: new Date(),
+      },
+    });
+  }
+
+  async rejectLoan(id: string, dto: any) {
+    const loan = await this.prisma.staffLoan.findUnique({ where: { id } });
+    if (!loan) throw new NotFoundException('Loan not found');
+
+    return this.prisma.staffLoan.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectionReason: dto.rejectionReason,
+      },
+    });
+  }
+
+  async getLoans(staffId: string, status?: string) {
+    return this.prisma.staffLoan.findMany({
+      where: {
+        staffId,
+        ...(status ? { status } : {}),
+      },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        emiTransactions: { orderBy: { month: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getLoanDetail(id: string) {
+    const loan = await this.prisma.staffLoan.findUnique({
+      where: { id },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        emiTransactions: { orderBy: { month: 'asc' } },
+      },
+    });
+    if (!loan) throw new NotFoundException('Loan not found');
+    return loan;
+  }
+
+  async skipLoanEMI(loanId: string, dto: any) {
+    const loan = await this.prisma.staffLoan.findUnique({ where: { id: loanId } });
+    if (!loan) throw new NotFoundException('Loan not found');
+
+    // Parse skipMonths from JSON
+    const skipMonths: string[] = JSON.parse(loan.skipMonths || '[]');
+    if (!skipMonths.includes(dto.month)) {
+      skipMonths.push(dto.month);
+      skipMonths.sort();
+    }
+
+    // Update loan record
+    const updated = await this.prisma.staffLoan.update({
+      where: { id: loanId },
+      data: { skipMonths: JSON.stringify(skipMonths) },
+    });
+
+    // Update EMI transaction status to SKIPPED
+    await this.prisma.loanEMITransaction.updateMany({
+      where: { loanId, month: dto.month },
+      data: { status: 'SKIPPED' },
+    });
+
+    return updated;
+  }
+
+  async resumeLoanEMI(loanId: string, dto: any) {
+    const loan = await this.prisma.staffLoan.findUnique({ where: { id: loanId } });
+    if (!loan) throw new NotFoundException('Loan not found');
+
+    // Parse skipMonths from JSON
+    const skipMonths: string[] = JSON.parse(loan.skipMonths || '[]');
+    const index = skipMonths.indexOf(dto.month);
+    if (index > -1) {
+      skipMonths.splice(index, 1);
+    }
+
+    // Update loan record
+    const updated = await this.prisma.staffLoan.update({
+      where: { id: loanId },
+      data: { skipMonths: JSON.stringify(skipMonths) },
+    });
+
+    // Update EMI transaction status back to PENDING
+    await this.prisma.loanEMITransaction.updateMany({
+      where: { loanId, month: dto.month },
+      data: { status: 'PENDING' },
+    });
+
+    return updated;
+  }
+
+  async preCloseLoan(loanId: string, dto: any) {
+    const loan = await this.prisma.staffLoan.findUnique({
+      where: { id: loanId },
+      include: { emiTransactions: true },
+    });
+    if (!loan) throw new NotFoundException('Loan not found');
+
+    const balanceRemaining = loan.balanceRemaining;
+    const preClosureAmount = dto.partialAmount || balanceRemaining;
+
+    if (preClosureAmount > balanceRemaining) {
+      throw new BadRequestException('Pre-closure amount cannot exceed remaining balance');
+    }
+
+    const newBalance = balanceRemaining - preClosureAmount;
+    const status = newBalance <= 0 ? 'PRE_CLOSED' : 'ACTIVE';
+
+    return this.prisma.staffLoan.update({
+      where: { id: loanId },
+      data: {
+        preClosureDate: new Date(),
+        preClosureAmount: preClosureAmount,
+        preClosureReason: dto.reason,
+        balanceRemaining: Math.max(0, newBalance),
+        status,
+      },
+    });
+  }
+
+  async getLoansByStatus(status: string) {
+    return this.prisma.staffLoan.findMany({
+      where: { status },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        emiTransactions: { orderBy: { month: 'asc' } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── STATUTORY REPORTS ──────────────────────────
+  // ═══════════════════════════════════════════════
+
+  async getPFStaffReport(month?: string) {
+    const where: any = { staff: { staffStatutory: { pfEnabled: true } } };
+    
+    if (month) {
+      where.month = month;
+    }
+
+    const payrolls = await this.prisma.payroll.findMany({
+      where,
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            staffStatutory: true,
+          },
+        },
+      },
+      orderBy: [{ month: 'desc' }, { staff: { department: 'asc' } }],
+    });
+
+    return payrolls.map((p) => ({
+      staffId: p.staff.id,
+      employeeId: p.staff.employeeId,
+      name: p.staff.name,
+      department: p.staff.department,
+      designation: p.staff.designation,
+      month: p.month,
+      grossSalary: p.grossSalary,
+      pfBase: p.pfBase,
+      pfDeduction: p.pfDeduction,
+      pfNumber: p.staff.staffStatutory?.pfNumber || 'N/A',
+      uanNumber: p.staff.staffStatutory?.uanNumber || 'N/A',
+    }));
+  }
+
+  async getNonPFStaffReport(month?: string) {
+    const where: any = {
+      OR: [
+        { staff: { staffStatutory: { pfEnabled: false } } },
+        { staff: { staffStatutory: null } },
+      ],
+    };
+
+    if (month) {
+      where.month = month;
+    }
+
+    const payrolls = await this.prisma.payroll.findMany({
+      where,
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            staffStatutory: true,
+          },
+        },
+      },
+      orderBy: [{ month: 'desc' }, { staff: { department: 'asc' } }],
+    });
+
+    return payrolls.map((p) => ({
+      staffId: p.staff.id,
+      employeeId: p.staff.employeeId,
+      name: p.staff.name,
+      department: p.staff.department,
+      designation: p.staff.designation,
+      month: p.month,
+      grossSalary: p.grossSalary,
+      pfBase: p.pfBase,
+      reason: p.staff.staffStatutory?.isStipend ? 'Stipend' : 'PSF Disabled',
+    }));
   }
 
   // ═══════════════════════════════════════════════

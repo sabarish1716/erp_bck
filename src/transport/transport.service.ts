@@ -895,10 +895,19 @@ export class TransportService {
   }
 
   async getAllDrivers() {
-    return this.prisma.driver.findMany({
+    const drivers = await this.prisma.driver.findMany({
       include: { bus: { include: { route: true } }, _count: { select: { locations: true } } },
       orderBy: { name: 'asc' },
     });
+
+    return drivers.map((d) => ({
+      ...d,
+      assignedBusId: d.bus?.id ?? null,
+      assignedBusNumber: d.bus?.number ?? null,
+      assignedRouteId: d.bus?.route?.id ?? null,
+      assignedRouteName: d.bus?.route?.routeName ?? null,
+      assignedRouteNo: d.bus?.route?.routeNo ?? null,
+    }));
   }
 
   async getDriver(id: string) {
@@ -913,7 +922,14 @@ export class TransportService {
       },
     });
     if (!driver) throw new NotFoundException('Driver not found');
-    return driver;
+    return {
+      ...driver,
+      assignedBusId: driver.bus?.id ?? null,
+      assignedBusNumber: driver.bus?.number ?? null,
+      assignedRouteId: driver.bus?.route?.id ?? null,
+      assignedRouteName: driver.bus?.route?.routeName ?? null,
+      assignedRouteNo: driver.bus?.route?.routeNo ?? null,
+    };
   }
 
   async deleteDriver(id: string) {

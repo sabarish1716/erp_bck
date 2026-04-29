@@ -14,6 +14,11 @@ import { Permission } from '../auth/permission.enum';
 export class HrController {
   constructor(private readonly hrService: HrService) {}
 
+  @Get('staff-list')
+  getStaffList() {
+    return this.hrService.getStaffList();
+  }
+
   // ─── DASHBOARD ─────────────────────────────
   @Get('dashboard')
   @Permissions(Permission.HR_DASHBOARD)
@@ -371,5 +376,113 @@ export class HrController {
   @Permissions(Permission.HR_PAYROLL_MANAGE)
   disburseAdvance(@Param('id') id: string) {
     return this.hrService.disburseAdvance(id);
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── SALARY INCREMENT ──────────────────────────
+  // ═══════════════════════════════════════════════
+
+  @Post('increment')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  createIncrement(@Body() dto: any) {
+    return this.hrService.createIncrement(dto);
+  }
+
+  @Get('increment/history/:staffId')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getIncrementHistory(@Param('staffId') staffId: string, @Query('status') status?: string) {
+    return this.hrService.getIncrementHistory(staffId, status);
+  }
+
+  @Get('increment/all')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getAllIncrements(@Query('status') status?: string) {
+    return this.hrService.getAllIncrements(status);
+  }
+
+  @Put('increment/:id/approve')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  approveIncrement(@Param('id') id: string, @Body() dto: any) {
+    return this.hrService.approveIncrement(id, dto);
+  }
+
+  @Put('increment/:id/reject')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  rejectIncrement(@Param('id') id: string, @Body() dto: any) {
+    return this.hrService.rejectIncrement(id, dto);
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── STAFF LOAN MANAGEMENT ─────────────────────
+  // ═══════════════════════════════════════════════
+
+  @Post('loan')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  createLoan(@Body() dto: any) {
+    return this.hrService.createLoan(dto);
+  }
+
+  @Get('loan/staff/:staffId')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getLoans(@Param('staffId') staffId: string, @Query('status') status?: string) {
+    return this.hrService.getLoans(staffId, status);
+  }
+
+  @Get('loan/:id')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getLoanDetail(@Param('id') id: string) {
+    return this.hrService.getLoanDetail(id);
+  }
+
+  @Put('loan/:id/approve')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  approveLoan(@Param('id') id: string, @Body() dto: any) {
+    return this.hrService.approveLoan(id, dto);
+  }
+
+  @Put('loan/:id/reject')
+  @Permissions(Permission.HR_PAYROLL_APPROVE)
+  rejectLoan(@Param('id') id: string, @Body() dto: any) {
+    return this.hrService.rejectLoan(id, dto);
+  }
+
+  @Put('loan/:id/skip-emi')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  skipLoanEMI(@Param('id') loanId: string, @Body() dto: any) {
+    return this.hrService.skipLoanEMI(loanId, dto);
+  }
+
+  @Put('loan/:id/resume-emi')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  resumeLoanEMI(@Param('id') loanId: string, @Body() dto: any) {
+    return this.hrService.resumeLoanEMI(loanId, dto);
+  }
+
+  @Put('loan/:id/pre-close')
+  @Permissions(Permission.HR_PAYROLL_MANAGE)
+  preCloseLoan(@Param('id') loanId: string, @Body() dto: any) {
+    return this.hrService.preCloseLoan(loanId, dto);
+  }
+
+  @Get('loan-by-status/:status')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getLoansByStatus(@Param('status') status: string) {
+    return this.hrService.getLoansByStatus(status);
+  }
+
+  // ═══════════════════════════════════════════════
+  // ─── STATUTORY REPORTS ──────────────────────────
+  // ═══════════════════════════════════════════════
+
+  @Get('report/pf-staff')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getPFStaffReport(@Query('month') month?: string) {
+    return this.hrService.getPFStaffReport(month);
+  }
+
+  @Get('report/non-pf-staff')
+  @Permissions(Permission.HR_PAYROLL_READ)
+  getNonPFStaffReport(@Query('month') month?: string) {
+    return this.hrService.getNonPFStaffReport(month);
   }
 }

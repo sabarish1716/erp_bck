@@ -1,7 +1,9 @@
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Standard } from '@prisma/client';
 import { ExamService } from './exam.service';
 import {
   AssignInvigilatorDto,
+  AutoGeneratePeriodsDto,
   CreateExamDto,
   CreateExamHallDto,
   CreateExamScheduleDto,
@@ -103,5 +105,30 @@ export class ExamController {
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
   assignInvigilator(@Param('scheduleId') scheduleId: string, @Body() dto: AssignInvigilatorDto) {
     return this.examService.assignInvigilator(scheduleId, dto);
+  }
+
+  /** Get timetable for a specific class */
+  @Get(':examId/timetable/class/:standard')
+  @Permissions(Permission.EXAM_READ)
+  getClassTimetable(
+    @Param('examId') examId: string,
+    @Param('standard') standard: Standard,
+    @Query('section') section?: string,
+  ) {
+    return this.examService.getClassTimetable(examId, standard, section);
+  }
+
+  /** Get timetable for a specific teacher */
+  @Get(':examId/timetable/teacher/:staffId')
+  @Permissions(Permission.EXAM_READ)
+  getTeacherTimetable(@Param('examId') examId: string, @Param('staffId') staffId: string) {
+    return this.examService.getTeacherTimetable(examId, staffId);
+  }
+
+  /** Auto-generate period blocks for a subject based on marks pattern and class group */
+  @Post(':examId/timetable/auto-generate-periods')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  autoGeneratePeriods(@Param('examId') examId: string, @Body() dto: AutoGeneratePeriodsDto) {
+    return this.examService.autoGeneratePeriods(examId, dto);
   }
 }
