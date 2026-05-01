@@ -1,3 +1,4 @@
+
 generator client {
   provider   = "prisma-client-js"
   engineType = "binary"
@@ -408,8 +409,7 @@ model PaymentLink {
 //   createdAt DateTime @default(now())
 // }
 
-// model Bus {
-//   id          String   @id @default(uuid())
+    // taluk and district removed as per request
 //   number      String   // e.g. TN-01-1234
 //   routeName   String?
 //   capacity    Int?
@@ -457,12 +457,15 @@ model Staff {
   bankName      String?
   bankAccountNo String?
   bankIfsc      String?
+  bankBranch    String?
   pfJoiningDate DateTime? // Date when PF started
   city          String?
-  area String?
-  pincode String?
-  doorno String?
-  state String?
+  area          String?
+  pincode       String?
+  doorno        String?
+  state         String?
+  taluk         String?
+  district      String?
 
   // Link to children studying here (for teacher discount)
   children      Student[] @relation("StaffChildren")

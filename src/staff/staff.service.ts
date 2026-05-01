@@ -149,7 +149,10 @@ export class StaffService {
             pincode:data.pincode,
             area:data.area,
             doorno:data.doorNo,
-            state:data.state
+            state:data.state,
+            bankBranch: data.bankBranch,
+            taluk:data.taluk,
+            district:data.district,
             // state:data.state
           },
           include: {
@@ -415,7 +418,10 @@ export class StaffService {
             doorno:data.doorNo,
             pincode:data.pincode,
             area:data.area,
-            state:data.state
+            state:data.state,
+            bankBranch: data.bankBranch,
+            taluk:data.taluk,
+            district:data.district,
           },
           include: {
             children: { select: { id: true, name: true, standard: true } },

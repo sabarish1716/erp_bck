@@ -12,34 +12,43 @@ import {
 import { Role } from '@prisma/client';
 
 export class CreateStaffDto {
-  @IsOptional() @IsString() employeeId?: string;
-  @IsNotEmpty() @IsString() name: string;
-  @IsNotEmpty() @IsEmail() email: string;
-  @IsOptional() @IsString() phone?: string;
-  @IsNotEmpty() @IsString() designation: string;
-  @IsOptional() @IsString() department?: string;
-  @IsOptional() @IsString() qualification?: string;
-  @IsOptional() @IsDateString() joiningDate?: string;
-  @IsOptional() @IsNumber() salary?: number;
+  // BASIC DETAILS
+  @IsOptional() @IsString() employeeId?: string; // EMPLOYEE ID
+  @IsNotEmpty() @IsString()
+  name!: string; // FULL NAME
+  @IsNotEmpty() @IsEmail()
+  email!: string; // WORK EMAIL
+  @IsOptional() @IsString() phone?: string; // CONTACT NUMBER
+  @IsOptional() @IsString() password?: string; // PASSWORD
+
+  // JOB DETAILS
+  @IsNotEmpty() @IsString()
+  designation!: string; // JOB TITLE
+  @IsOptional() @IsString() department?: string; // DEPARTMENT / SPECIALIZATION
+  @IsOptional() @IsString() category?: string; // CATEGORY / DEPARTMENT
+  @IsOptional() @IsNumber() salary?: number; // MONTHLY SALARY
+  @IsOptional() @IsDateString()                                                                                                                                                                                                                                                                                                                                                                                                                                                        joiningDate?: string; // JOINING DATE
   @IsOptional() @IsBoolean() isActive?: boolean;
-  @IsOptional() @IsString() @MinLength(6) password?: string;
-  @IsOptional() @IsString() category?: string;
-  @IsOptional() @IsString() paymentMode?: string;
-  @IsOptional() @IsString() bankName?: string;
-  @IsOptional() @IsString() bankAccountNo?: string;
-  @IsOptional() @IsString() bankIfsc?: string;
-  @IsOptional() @IsDateString() pfJoiningDate?: string;
   @IsOptional() @IsEnum(Role) role?: Role;
-    // "property doorNo should not exist",
-    //     "property area should not exist",
-    //     "property city should not exist",
-    //     "property state should not exist",
-    //     "property pincode should not exist"
-  @IsOptional() @IsString() doorNo?:string;
-  @IsOptional() @IsString() area?:string;
-  @IsOptional() @IsString() city?:string;
-  @IsOptional() @IsString() state?:string;
-  @IsOptional() @IsString() pincode?:string;
+  @IsOptional() @IsString() qualification?: string;
   @IsOptional() @IsNumber() perDaySalary?: number;
 
+  // ADDRESS DETAILS
+  @IsOptional() @IsString() doorNo?: string; // DOOR NO
+  @IsOptional() @IsString() area?: string; // AREA / UNIT
+  @IsOptional() @IsString() town?: string; // TOWN
+  @IsOptional() @IsString() taluk?: string; // TALUK
+  @IsOptional() @IsString() district?: string; // DISTRICT
+  @IsOptional() @IsString() state?: string; // STATE
+  @IsOptional() @IsString() pincode?: string; // PIN CODE
+
+  // BANK DETAILS
+  @IsOptional() @IsString() paymentMode?: string; // PAYMENT METHOD
+  @IsOptional() @IsString() bankName?: string; // BANK NAME
+  @IsOptional() @IsString() bankAccountNo?: string; // ACCOUNT NUMBER
+  @IsOptional() @IsString() bankIfsc?: string; // IFSC CODE
+  @IsOptional() @IsString() bankBranch?: string; // BRANCH NAME
+
+  @IsOptional() @IsDateString() pfJoiningDate?: string;
+  @IsOptional() @IsString() city?: string; // CITY
 }

@@ -587,6 +587,15 @@ async function main() {
     prisma.leaveType.create({
       data: { name: 'Earned Leave', code: 'EL', maxPerYear: 15, carryForward: true },
     }),
+    prisma.leaveType.create({
+      data: { name: 'Maternity Leave', code: 'ML', maxPerYear: 180, carryForward: false },
+    }),
+    prisma.leaveType.create({
+      data: { name: 'Paternity Leave', code: 'PL', maxPerYear: 15, carryForward: false },
+    }),
+    prisma.leaveType.create({
+      data: { name: 'Loss of Pay', code: 'LOP', maxPerYear: 999, carryForward: false },
+    }),
   ]);
 
   for (const staff of staffRecords) {
