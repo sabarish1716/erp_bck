@@ -791,7 +791,7 @@ export class HrService {
   // ═══════════════════════════════════════════════
 
   async generatePayroll(dto: GeneratePayrollDto) {
-    const month = dto.month; // "2026-03"
+    const month = dto.month || ''; // "2026-03"
     const [y, m] = month.split('-').map(Number);
     const startDate = new Date(y, m - 1, 1);
     const endDate = new Date(y, m, 1);
@@ -1063,7 +1063,7 @@ export class HrService {
         : Math.round(grossSalary + employerPfContribution + employerEsiContribution);
 
       const payroll = await this.prisma.payroll.upsert({
-        where: { staffId_month: { staffId: staff.id, month } },
+        where: { staffId_month: { staffId: staff.id, month: month || '' } },
         update: {
           basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
           totalWorkingDays, presentDays, lopDays, lopDeduction,
@@ -1078,7 +1078,7 @@ export class HrService {
           status: 'generated',
         },
         create: {
-          staffId: staff.id, month,
+          staffId: staff.id, month: month || '',
           basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
           totalWorkingDays, presentDays, lopDays, lopDeduction,
           permissionHoursUsed, permissionLopDays, permissionLopDeduction,

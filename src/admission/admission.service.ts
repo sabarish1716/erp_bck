@@ -1309,122 +1309,135 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     pendingAmount: number;
   }> = [];
 
-  for (const student of students) {
-    const nextStandard = getNextStandard(student.standard);
+    for (const student of students) {
+      const nextStandard = getNextStandard(student.standard);
 
-    const currentYearFee = feeByStudentId.get(student.id);
-    if (currentYearFee) {
-      const totalPaid = currentYearFee.payments.reduce((sum, payment) => sum + getEffectivePaid(payment), 0);
-      const pendingAmount = Math.max(Number(currentYearFee.netFee || 0) - totalPaid, 0);
-      if (pendingAmount > 0) {
-        studentsWithPreviousYearPending.push({
-          studentId: student.id,
-          name: student.name,
-          admissionNo: student.admission?.admissionNo || null,
-          currentStandard: student.standard,
-          promotedToStandard: nextStandard,
-          previousAcademicYear: academicYear,
-          pendingAmount: Math.round(pendingAmount * 100) / 100,
-        });
+      const currentYearFee = feeByStudentId.get(student.id);
+      if (currentYearFee) {
+        const totalPaid = currentYearFee.payments.reduce((sum, payment) => sum + getEffectivePaid(payment), 0);
+        const pendingAmount = Math.max(Number(currentYearFee.netFee || 0) - totalPaid, 0);
+        if (pendingAmount > 0) {
+          studentsWithPreviousYearPending.push({
+            studentId: student.id,
+            name: student.name,
+            admissionNo: student.admission?.admissionNo || null,
+            currentStandard: student.standard,
+            promotedToStandard: nextStandard,
+            previousAcademicYear: academicYear,
+            pendingAmount: Math.round(pendingAmount * 100) / 100,
+          });
+        }
       }
-    }
 
-    await this.prisma.student.update({
-      where: { id: student.id },
-      data: {
-        standard: nextStandard,
-        academicYear: newAcademicYear,
-      },
-    });
-
-    if (isPromotableStandard(nextStandard)) {
-      const existingTargetYearFee = await this.prisma.studentFee.findFirst({
-        where: {
-          studentId: student.id,
+      // Update student standard and academicYear
+      await this.prisma.student.update({
+        where: { id: student.id },
+        data: {
+          standard: nextStandard,
           academicYear: newAcademicYear,
         },
-        select: { id: true },
       });
 
-      if (!existingTargetYearFee) {
-        const structure = structureByStandard.get(nextStandard as Standard);
-        if (!structure) {
-          throw new BadRequestException(`Fee structure not found for ${nextStandard} in ${newAcademicYear}`);
-        }
+      // Update admission record's standard
+      await this.prisma.admission.updateMany({
+        where: { studentId: student.id },
+        data: { standard: nextStandard },
+      });
 
-        const tuitionFee = Number(structure.tuitionFee || 0);
-        const transportFee = Number(structure.transportFee || 0);
-        const bookFee = Number(structure.bookFee || 0);
-        const hostelFee = Number(structure.hostelFee || 0);
-        const otherFee = Number(structure.otherFee || 0);
-        const customItems = structure.customItems || [];
-        const customTotal = customItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-        const totalFee = tuitionFee + transportFee + bookFee + hostelFee + otherFee + customTotal;
+      // Update studentTransport record's academicYear (if exists)
+      await this.prisma.studentTransport.updateMany({
+        where: { studentId: student.id },
+        data: { academicYear: newAcademicYear },
+      });
 
-        const splitEvenly = (value: number, count: number) => {
-          const perTerm = Math.round((value / count) * 100) / 100;
-          return Array.from({ length: count }, (_, index) =>
-            index === count - 1
-              ? Math.round((value - perTerm * (count - 1)) * 100) / 100
-              : perTerm,
-          );
-        };
-
-        const numberOfTerms = structure.numberOfTerms || 1;
-        const tuitionSplit = splitEvenly(tuitionFee, numberOfTerms);
-        const transportSplit = splitEvenly(transportFee, numberOfTerms);
-
-        const termTemplates = structure.terms?.length > 0
-          ? structure.terms
-          : Array.from({ length: numberOfTerms }, (_, index) => ({
-              termNumber: index + 1,
-              termName: numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
-              dueDate: null,
-            }));
-
-        await this.prisma.studentFee.create({
-          data: {
+      if (isPromotableStandard(nextStandard)) {
+        const existingTargetYearFee = await this.prisma.studentFee.findFirst({
+          where: {
             studentId: student.id,
             academicYear: newAcademicYear,
-            tuitionFee,
-            transportFee,
-            bookFee,
-            hostelFee,
-            otherFee,
-            totalFee,
-            discount: 0,
-            netFee: totalFee,
-            numberOfTerms,
-            customItems: customItems.length > 0
-              ? {
-                  create: customItems.map((item) => ({
-                    name: item.name,
-                    amount: Number(item.amount || 0),
-                  })),
-                }
-              : undefined,
-            terms: {
-              create: termTemplates.map((template, index) => ({
-                termNumber: template.termNumber,
-                termName: template.termName,
-                dueDate: template.dueDate || null,
-                amount: (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
-                tuitionAmount: tuitionSplit[index] || 0,
-                transportAmount: transportSplit[index] || 0,
-                bookAmount: 0,
-                hostelAmount: 0,
-                otherAmount: 0,
-              })),
-            },
           },
+          select: { id: true },
         });
 
-        autoFeeAssignedCount++;
-      }
-    }
+        if (!existingTargetYearFee) {
+          const structure = structureByStandard.get(nextStandard as Standard);
+          if (!structure) {
+            throw new BadRequestException(`Fee structure not found for ${nextStandard} in ${newAcademicYear}`);
+          }
 
-    updatedCount++;
-  }
+          const tuitionFee = Number(structure.tuitionFee || 0);
+          const transportFee = Number(structure.transportFee || 0);
+          const bookFee = Number(structure.bookFee || 0);
+          const hostelFee = Number(structure.hostelFee || 0);
+          const otherFee = Number(structure.otherFee || 0);
+          const customItems = structure.customItems || [];
+          const customTotal = customItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+          const totalFee = tuitionFee + transportFee + bookFee + hostelFee + otherFee + customTotal;
+
+          const splitEvenly = (value: number, count: number) => {
+            const perTerm = Math.round((value / count) * 100) / 100;
+            return Array.from({ length: count }, (_, index) =>
+              index === count - 1
+                ? Math.round((value - perTerm * (count - 1)) * 100) / 100
+                : perTerm,
+            );
+          };
+
+          const numberOfTerms = structure.numberOfTerms || 1;
+          const tuitionSplit = splitEvenly(tuitionFee, numberOfTerms);
+          const transportSplit = splitEvenly(transportFee, numberOfTerms);
+
+          const termTemplates = structure.terms?.length > 0
+            ? structure.terms
+            : Array.from({ length: numberOfTerms }, (_, index) => ({
+                termNumber: index + 1,
+                termName: numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                dueDate: null,
+              }));
+
+          await this.prisma.studentFee.create({
+            data: {
+              studentId: student.id,
+              academicYear: newAcademicYear,
+              tuitionFee,
+              transportFee,
+              bookFee,
+              hostelFee,
+              otherFee,
+              totalFee,
+              discount: 0,
+              netFee: totalFee,
+              numberOfTerms,
+              customItems: customItems.length > 0
+                ? {
+                    create: customItems.map((item) => ({
+                      name: item.name,
+                      amount: Number(item.amount || 0),
+                    })),
+                  }
+                : undefined,
+              terms: {
+                create: termTemplates.map((template, index) => ({
+                  termNumber: template.termNumber,
+                  termName: template.termName,
+                  dueDate: template.dueDate || null,
+                  amount: (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
+                  tuitionAmount: tuitionSplit[index] || 0,
+                  transportAmount: transportSplit[index] || 0,
+                  bookAmount: 0,
+                  hostelAmount: 0,
+                  otherAmount: 0,
+                })),
+              },
+            },
+          });
+
+          autoFeeAssignedCount++;
+        }
+      }
+
+      updatedCount++;
+    }
 
   return {
     updatedCount,
