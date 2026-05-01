@@ -31,6 +31,29 @@ function toStandardEnum(val?: string): Standard {
   return Standard.STD_1;
 }
 
+// Map legacy/group-style stream values (e.g. GROUP_2) to Prisma AcademicStream enum.
+function toAcademicStreamEnum(val?: string | null): AcademicStream | null {
+  if (!val) return null;
+
+  const normalized = String(val)
+    .trim()
+    .toUpperCase()
+    .replace(/[-\s]+/g, '_');
+
+  if (Object.values(AcademicStream).includes(normalized as AcademicStream)) {
+    return normalized as AcademicStream;
+  }
+
+  const aliases: Record<string, AcademicStream> = {
+    GROUP_1: AcademicStream.BIO_MATHS,
+    GROUP_2: AcademicStream.CS_MATHS,
+    GROUP_3: AcademicStream.BIO_CS,
+    GROUP_4: AcademicStream.COMMERCE,
+  };
+
+  return aliases[normalized] ?? null;
+}
+
 function getAcademicYearDateRange(academicYear?: string) {
   if (!academicYear) return null;
   const match = academicYear.match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
@@ -69,13 +92,50 @@ function getPreviousAcademicYear(academicYear?: string | null) {
   const [startYear] = normalized.split('-').map((value) => parseInt(value, 10));
   return `${startYear - 1}-${startYear}`;
 }
-
 function getNextAcademicYear(academicYear?: string | null) {
   const normalized = normalizeAcademicYear(academicYear);
   if (!normalized) return null;
 
   const [, endYear] = normalized.split('-').map((value) => parseInt(value, 10));
   return `${endYear}-${endYear + 1}`;
+}
+
+function asOptionalString(value: unknown) {
+  if (value === null || value === undefined) return undefined;
+  const text = String(value).trim();
+  return text ? text : undefined;
+}
+
+function parseBooleanFlag(value: unknown) {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  return ['true', 'yes', '1', 'y'].includes(normalized);
+}
+
+function parseOptionalNumber(value: unknown) {
+  if (value === null || value === undefined || value === '') return undefined;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : undefined;
+}
+
+function parseSubjectsJson(value: unknown) {
+  const raw = asOptionalString(value);
+  if (!raw) return [];
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .map((subject) => ({
+        subjectName: asOptionalString(subject?.subjectName ?? subject?.subject ?? subject?.name),
+        maxMarks: parseOptionalNumber(subject?.maxMarks ?? subject?.maxMark),
+        obtainedMarks: parseOptionalNumber(subject?.obtainedMarks ?? subject?.marksObtained ?? subject?.score),
+      }))
+      .filter((subject) => subject.subjectName && subject.maxMarks != null && subject.obtainedMarks != null);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -235,61 +295,102 @@ export class AdmissionService {
       try {
         const admissionNo = await this.generateAdmissionNo();
 
-        await this.prisma.student.create({
-          data: {
-            name: row.name || 'Unknown',
-            standard: toStandardEnum(row.standard),
-            gender: row.gender === 'FEMALE' ? 'FEMALE' : 'MALE',
-            dob: row.dob ? new Date(row.dob) : new Date(),
-            religion: row.religion || null,
-            community: row.community || 'OTHERS',
-            caste: row.caste || null,
-            motherTongue: row.motherTongue || null,
-            aadharNo: row.aadharNo || null,
-            bloodGroup: row.bloodGroup || null,
-            previousSchool: row.previousSchool || null,
-            transportMode: row.transportMode || null,
-            rte: row.rte === 'true' || row.rte === true,
+        const rowAcademicYear = normalizeAcademicYear(asOptionalString(row.academicYear)) || undefined;
+        const rowSubjects = parseSubjectsJson(row.subjectsJson);
+        const boardExamType = asOptionalString(row.boardExamType);
+        const boardName = boardExamType === 'Other'
+          ? asOptionalString(row.boardName)
+          : (asOptionalString(row.boardName) || 'State Board');
 
-            family: row.fatherName || row.motherName ? {
-              create: {
-                fatherName: row.fatherName || null,
-                fatherPhone: row.fatherPhone || null,
-                motherName: row.motherName || null,
-                motherPhone: row.motherPhone || null,
-              },
-            } : undefined,
-
-            address: row.address ? {
-              create: {
-                line1: row.address || 'Pending',
-                pin: row.pin || '000000',
-              },
-            } : undefined,
-
-            admission: {
-              create: {
-                admissionNo,
-                admissionDate: row.admissionDate ? new Date(row.admissionDate) : new Date(),
-                standard: toStandardEnum(row.standard),
-              },
-            },
-
-            users: {
-              create: {
-                name: row.name || 'Unknown',
-                email: row.email || `student_${Date.now()}_${i}@school.local`,
-                password: 'defaultpassword',
-                role: 'STUDENT',
-              },
-            },
+        await this.createAdmission({
+          name: asOptionalString(row.name) || 'Unknown',
+          standard: asOptionalString(row.standard),
+          gender: asOptionalString(row.gender) === 'FEMALE' ? 'FEMALE' : 'MALE',
+          dob: asOptionalString(row.dob),
+          religion: asOptionalString(row.religion),
+          community: asOptionalString(row.community) || 'OTHERS',
+          customCommunity: asOptionalString(row.communityOther) || asOptionalString(row.customCommunity),
+          caste: asOptionalString(row.caste),
+          motherTongue: asOptionalString(row.motherTongue),
+          aadharNo: asOptionalString(row.aadharNo),
+          bloodGroup: asOptionalString(row.bloodGroup),
+          identification1: asOptionalString(row.identityMark1),
+          identification2: asOptionalString(row.identityMark2),
+          previousSchool: asOptionalString(row.previouslyStudied) || asOptionalString(row.previousSchool),
+          transportMode: asOptionalString(row.transportMode) || (parseBooleanFlag(row.vanNeeded) ? 'Van' : undefined),
+          rte: parseBooleanFlag(row.rte) || parseBooleanFlag(row.rteApplied),
+          section: asOptionalString(row.section),
+          academicYear: rowAcademicYear,
+          academicStream: (asOptionalString(row.academicStream) as AcademicStream | undefined) || undefined,
+          preferredPhone: asOptionalString(row.preferredPhone),
+          parentsEmail: asOptionalString(row.parentsEmail) || asOptionalString(row.email),
+          family: {
+            fatherName: asOptionalString(row.fatherName),
+            fatherPhone: asOptionalString(row.fatherPhone),
+            fatherWhatsapp: asOptionalString(row.fatherWhatsAppNo) || asOptionalString(row.fatherWhatsapp),
+            fatherAadhar: asOptionalString(row.fatherAadharNo) || asOptionalString(row.fatherAadhar),
+            fatherOccupation: asOptionalString(row.fatherOccupation),
+            motherName: asOptionalString(row.motherName),
+            motherPhone: asOptionalString(row.motherPhone),
+            motherWhatsapp: asOptionalString(row.motherWhatsAppNo) || asOptionalString(row.motherWhatsapp),
+            motherAadhar: asOptionalString(row.motherAadharNo) || asOptionalString(row.motherAadhar),
+            motherOccupation: asOptionalString(row.motherOccupation),
+            familyIncome: parseOptionalNumber(row.familyIncome) as any,
+            siblings: asOptionalString(row.siblingsCount) || asOptionalString(row.sibblings),
+            hostelRequired: parseBooleanFlag(row.hostelRequired),
+            isSingleParent: parseBooleanFlag(row.isSingleParent),
+            guardianName: asOptionalString(row.guardianName),
+            guardianPhone: asOptionalString(row.guardianPhone),
+            guardianWhatsapp: asOptionalString(row.guardianWhatsapp),
+            guardianAadhar: asOptionalString(row.guardianAadhar),
+            guardianOccupation: asOptionalString(row.guardianOccupation),
+            guardianRelation: asOptionalString(row.guardianRelation),
+            sibling1Name: asOptionalString(row.sibling1Name),
+            sibling1Standard: asOptionalString(row.sibling1Standard),
+            sibling1School: asOptionalString(row.sibling1School),
+            sibling2Name: asOptionalString(row.sibling2Name),
+            sibling2Standard: asOptionalString(row.sibling2Standard),
+            sibling2School: asOptionalString(row.sibling2School),
           },
-        });
+          address: {
+            doorNo: asOptionalString(row.doorNo),
+            street: asOptionalString(row.street),
+            landmark: asOptionalString(row.landmark),
+            city: asOptionalString(row.city),
+            state: asOptionalString(row.state),
+            pin: asOptionalString(row.pin),
+            line1: asOptionalString(row.doorNo) || asOptionalString(row.line1),
+            line2: asOptionalString(row.street) || asOptionalString(row.line2),
+            line3: asOptionalString(row.line3),
+          },
+          academics: (rowSubjects.length > 0 || asOptionalString(row.examName) || asOptionalString(row.registerNo) || asOptionalString(row.monthYear) || asOptionalString(row.academicStream))
+            ? [{
+                examName: asOptionalString(row.examName),
+                boardName,
+                registerNo: asOptionalString(row.registerNo),
+                monthYear: asOptionalString(row.monthYear),
+                totalMaxMarks: parseOptionalNumber(row.totalMaxMarks),
+                totalObtainedMarks: parseOptionalNumber(row.totalObtainedMarks),
+                totalPercentage: parseOptionalNumber(row.totalPercentage),
+                stream: (asOptionalString(row.academicStream) as AcademicStream | undefined) || undefined,
+                subjects: rowSubjects as any,
+              }]
+            : undefined,
+          admission: {
+            admissionNo,
+            admissionDate: asOptionalString(row.admissionDate),
+            standard: asOptionalString(row.standard),
+            admissionFrom: asOptionalString(row.admissionFrom),
+            admissionTo: asOptionalString(row.admissionTo),
+            principalSignature: 'Pending',
+          },
+          email: asOptionalString(row.email) || `student_${Date.now()}_${i}@school.local`,
+        } as CreateAdmissionDto);
 
         results.push({ row: i + 1, status: 'success', admissionNo });
-      }catch (error: any) {
-  throw new Error(error.message);
-}
+      } catch (error: any) {
+        results.push({ row: i + 1, status: 'error', error: error?.message || 'Upload failed' });
+      }
     }
 
     const successCount = results.filter(r => r.status === 'success').length;
@@ -328,7 +429,7 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
       previousSchool: data.previousSchool,
       transportMode: data.transportMode,
       rte: data.rte || false,
-      academicStream: data.academicStream ?? null,
+      academicStream: toAcademicStreamEnum(data.academicStream),
       section: data.section || null,
       academicYear: data.academicYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       staffParentId: data.staffParentId || null,
@@ -474,7 +575,7 @@ parentsEmail: data.parentsEmail,
                   totalMaxMarks: totals.totalMaxMarks,
                   totalObtainedMarks: totals.totalObtainedMarks,
                   totalPercentage: totals.totalPercentage,
-                  stream: acad.stream || null,
+                  stream: toAcademicStreamEnum(acad.stream),
                   subjects: acad.subjects && acad.subjects.length > 0
                     ? {
                         create: acad.subjects.map((s) => ({
@@ -707,7 +808,7 @@ parentsEmail: data.parentsEmail,
       previousSchool: data.previousSchool,
       transportMode: data.transportMode,
       rte: typeof data.rte === 'boolean' ? data.rte : false,
-      academicStream: data.academicStream ?? null,
+      academicStream: toAcademicStreamEnum(data.academicStream),
       section: data.section ?? undefined,
       academicYear: data.academicYear ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       staffParentId: data.staffParentId ?? undefined,
@@ -917,7 +1018,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
             totalMaxMarks: totals.totalMaxMarks,
             totalObtainedMarks: totals.totalObtainedMarks,
             totalPercentage: totals.totalPercentage,
-            stream: acad.stream || null,
+            stream: toAcademicStreamEnum(acad.stream),
             subjects: acad.subjects && acad.subjects.length > 0
               ? {
                   create: acad.subjects.map((s) => ({
@@ -1298,6 +1399,18 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     },
   });
 
+  // Also fetch fee structures for the OLD academic year so we can flag
+  // students whose fees were never assigned (no studentFee record exists)
+  const currentYearStandards = Array.from(new Set(students.map((s) => s.standard)));
+  const oldYearStructures = await this.prisma.feeStructure.findMany({
+    where: {
+      academicYear,
+      standard: { in: currentYearStandards as Standard[] },
+    },
+    select: { standard: true, tuitionFee: true, transportFee: true, bookFee: true, hostelFee: true, otherFee: true },
+  });
+  const oldStructureByStandard = new Map(oldYearStructures.map((s) => [s.standard, s]));
+
   const feeByStudentId = new Map(currentYearFees.map((fee) => [fee.studentId, fee]));
   const studentsWithPreviousYearPending: Array<{
     studentId: string;
@@ -1307,6 +1420,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     promotedToStandard: string;
     previousAcademicYear: string;
     pendingAmount: number;
+    feeNotAssigned?: boolean;
   }> = [];
 
   for (const student of students) {
@@ -1326,6 +1440,28 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           previousAcademicYear: academicYear,
           pendingAmount: Math.round(pendingAmount * 100) / 100,
         });
+      }
+    } else {
+      // No fee record assigned — check if a fee structure existed for their standard
+      const oldStructure = oldStructureByStandard.get(student.standard as Standard);
+      if (oldStructure) {
+        const fullFee = Number(oldStructure.tuitionFee || 0)
+          + Number(oldStructure.transportFee || 0)
+          + Number(oldStructure.bookFee || 0)
+          + Number(oldStructure.hostelFee || 0)
+          + Number(oldStructure.otherFee || 0);
+        if (fullFee > 0) {
+          studentsWithPreviousYearPending.push({
+            studentId: student.id,
+            name: student.name,
+            admissionNo: student.admission?.admissionNo || null,
+            currentStandard: student.standard,
+            promotedToStandard: nextStandard,
+            previousAcademicYear: academicYear,
+            pendingAmount: Math.round(fullFee * 100) / 100,
+            feeNotAssigned: true,
+          });
+        }
       }
     }
 

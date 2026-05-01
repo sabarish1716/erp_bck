@@ -7,6 +7,26 @@ import { UpdateUserPermissionsDto } from './update-user-permissions.dto';
 const SETTINGS_KEY = 'admin.settings';
 const FEE_RECEIPT_FIELDS_KEY = 'fees.receiptFields';
 
+const DOCUMENT_ASSET_KEYS = [
+  'principalSignature',
+  'hrSignature',
+  'chairmanSignature',
+  'accountantSignature',
+  'managerSignature',
+  'rubberStamp',
+] as const;
+
+type DocumentAssetKey = (typeof DOCUMENT_ASSET_KEYS)[number];
+
+const DEFAULT_DOCUMENT_ASSETS: Record<DocumentAssetKey, string> = {
+  principalSignature: '',
+  hrSignature: '',
+  chairmanSignature: '',
+  accountantSignature: '',
+  managerSignature: '',
+  rubberStamp: '',
+};
+
 const DEFAULT_SETTINGS = {
   schoolName: 'PSF School',
   schoolCode: 'PSF',
@@ -18,6 +38,7 @@ const DEFAULT_SETTINGS = {
   enableStaffModule: true,
   admissionNoAutoGenerate: true,
   enableIndividualDemotion: false,
+  documentAssets: DEFAULT_DOCUMENT_ASSETS,
 };
 
 const DEFAULT_FEE_RECEIPT_FIELDS = {
@@ -47,9 +68,14 @@ export class SettingsService {
 
     if (!row) return DEFAULT_SETTINGS;
 
-    return {
+    const merged = {
       ...DEFAULT_SETTINGS,
       ...(row.value as Record<string, unknown>),
+    };
+
+    return {
+      ...merged,
+      documentAssets: this.normalizeDocumentAssets((merged as Record<string, unknown>).documentAssets),
     };
   }
 
@@ -64,15 +90,22 @@ export class SettingsService {
       ...data,
     };
 
+    const safeDocumentAssets = this.normalizeDocumentAssets((merged as Record<string, unknown>).documentAssets);
+
+    const finalValue = {
+      ...merged,
+      documentAssets: safeDocumentAssets,
+    };
+
     const saved = await this.prisma.appSetting.upsert({
       where: { key: SETTINGS_KEY },
       update: {
-        value: merged,
+        value: finalValue,
         updatedByEmail: updatedByEmail ?? null,
       },
       create: {
         key: SETTINGS_KEY,
-        value: merged,
+        value: finalValue,
         updatedByEmail: updatedByEmail ?? null,
       },
     });
@@ -83,6 +116,18 @@ export class SettingsService {
       updatedByEmail: saved.updatedByEmail,
       updatedAt: saved.updatedAt,
     };
+  }
+
+  private normalizeDocumentAssets(value: unknown): Record<DocumentAssetKey, string> {
+    const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+    const normalized: Record<DocumentAssetKey, string> = { ...DEFAULT_DOCUMENT_ASSETS };
+
+    for (const key of DOCUMENT_ASSET_KEYS) {
+      const raw = input[key];
+      if (typeof raw === 'string') normalized[key] = raw;
+    }
+
+    return normalized;
   }
 
   async getRolePermissionsConfig() {
