@@ -19,6 +19,7 @@ class TermPaymentDto {
 export class CollectPaymentDto {
   @IsNotEmpty() @IsString() studentFeeId: string;
   @IsNotEmpty() @IsNumber() amount: number;
+  @IsOptional() @IsNumber() manualDiscount?: number;
   @IsNotEmpty() @IsString() paymentMode: string; // CASH / UPI / BANK
   @IsOptional() @IsDateString() paymentDate?: string;
   @IsOptional() @IsString() receiptNo?: string;
@@ -36,7 +37,7 @@ export class CollectPaymentDto {
   splitPayments?: TermPaymentDto[];
   @IsOptional()
   @IsArray()
-  @IsIn(['transportFee', 'bookFee', 'hostelFee', 'otherFee', 'customItems'], {
+  @IsIn(['transportFee', 'bookFee', 'hostelFee', 'otherFee', 'customItems', 'manualDiscount'], {
     each: true,
   })
   receiptComponents?: string[];

@@ -971,6 +971,7 @@ model Payment {
   studentFeeId  String
 
   amount        Float
+  manualDiscount Float   @default(0)
   paymentDate   DateTime @default(now())
   paymentMode   String   // CASH / UPI / BANK
   receiptNo     String?

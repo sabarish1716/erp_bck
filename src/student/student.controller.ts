@@ -22,8 +22,8 @@ export class StudentController {
 
   @Get(':id')
   @Permissions(Permission.STUDENT_READ)
-  findOne(@Param('id') id: string) {
-    return this.studentService.findOne(id);
+  async findOne(@Param('id') id: string) {
+    return this.studentService.findOneWithSiblings(id);
   }
 
   @Put(':id')
@@ -36,5 +36,18 @@ export class StudentController {
   @Permissions(Permission.STUDENT_DELETE)
   delete(@Param('id') id: string) {
     return this.studentService.delete(id);
+  }
+
+  // Endpoint to link two students as siblings
+  @Post(':id/link-sibling/:siblingId')
+  @Permissions(Permission.STUDENT_UPDATE)
+  linkSibling(@Param('id') id: string, @Param('siblingId') siblingId: string) {
+    return this.studentService.linkSiblings(id, siblingId);
+  }
+
+  @Post(':id/link-siblings')
+  @Permissions(Permission.STUDENT_UPDATE)
+  linkMultipleSiblings(@Param('id') id: string, @Body() body: { siblingIds: string[] }) {
+    return this.studentService.linkMultipleSiblings(id, body?.siblingIds || []);
   }
 }

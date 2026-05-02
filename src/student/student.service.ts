@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStudentDto } from './create-student.dto';
 import { Standard } from '@prisma/client';
@@ -50,8 +50,60 @@ export class StudentService {
     return this.prisma.student.findMany({ include: { family: true, address: true } });
   }
 
-  findOne(id: string) {
-    return this.prisma.student.findUnique({ where: { id }, include: { family: true, address: true } });
+
+  // Fetch student with siblings (for full bio)
+  async findOneWithSiblings(id: string) {
+    const student = await this.prisma.student.findUnique({ where: { id }, include: { family: true, address: true } });
+    if (!student || !student.siblingGroupId) {
+      return { ...student, siblings: [] };
+    }
+    // Get all students with the same siblingGroupId, excluding self
+    const siblings = await this.prisma.student.findMany({
+      where: { siblingGroupId: student.siblingGroupId, NOT: { id } },
+      include: { family: true, address: true },
+    });
+    return { ...student, siblings };
+  }
+
+  async linkMultipleSiblings(id: string, siblingIds: string[]) {
+    const targetIds = [...new Set((siblingIds || []).filter(Boolean).filter((sid) => sid !== id))];
+    if (targetIds.length === 0) {
+      throw new BadRequestException('At least one sibling is required');
+    }
+
+    const uniqueIds = [id, ...targetIds];
+    const selectedStudents = await this.prisma.student.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, siblingGroupId: true },
+    });
+
+    if (selectedStudents.length !== uniqueIds.length) {
+      throw new BadRequestException('One or more students not found');
+    }
+
+    const existingGroupIds = [...new Set(selectedStudents.map((s) => s.siblingGroupId).filter(Boolean) as string[])];
+    const siblingGroupId = existingGroupIds[0] || `SIB-${Date.now()}`;
+
+    const idsToLink = new Set(uniqueIds);
+    if (existingGroupIds.length > 0) {
+      const existingGroupMembers = await this.prisma.student.findMany({
+        where: { siblingGroupId: { in: existingGroupIds } },
+        select: { id: true },
+      });
+      existingGroupMembers.forEach((member) => idsToLink.add(member.id));
+    }
+
+    await this.prisma.student.updateMany({
+      where: { id: { in: [...idsToLink] } },
+      data: { siblingGroupId },
+    });
+
+    return this.findOneWithSiblings(id);
+  }
+
+  // Backward-compatible single sibling link
+  async linkSiblings(id: string, siblingId: string) {
+    return this.linkMultipleSiblings(id, [siblingId]);
   }
 
   update(id: string, data: Partial<CreateStudentDto>) {
