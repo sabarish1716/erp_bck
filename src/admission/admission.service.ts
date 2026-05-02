@@ -1663,11 +1663,20 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
     ];
 
+    // Derive the previous academic year string from e.g. "2026-2027" → "2025-2026"
+    const getPreviousAcademicYear = (year: string): string | null => {
+      const match = year?.match(/^(\d{4})-(\d{4})$/);
+      if (!match) return null;
+      const start = parseInt(match[1], 10);
+      const end = parseInt(match[2], 10);
+      return `${start - 1}-${end - 1}`;
+    };
+
     const results: any[] = [];
     for (const sid of uniqueIds) {
       const student = await this.prisma.student.findUnique({
         where: { id: sid },
-        select: { id: true, name: true, standard: true },
+        select: { id: true, name: true, standard: true, academicYear: true },
       });
 
       if (!student) {
@@ -1684,19 +1693,63 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       }
 
       const prevStd = standardOrder[idx - 1] as Standard;
+      const currentAcademicYear = student.academicYear;
+      const prevAcademicYear = currentAcademicYear
+        ? getPreviousAcademicYear(currentAcademicYear)
+        : null;
 
-      await this.prisma.$transaction([
-        this.prisma.student.update({
-          where: { id: sid },
-          data: { standard: prevStd },
-        }),
-        this.prisma.admission.update({
+      // Update student standard and academic year
+      await this.prisma.student.update({
+        where: { id: sid },
+        data: {
+          standard: prevStd,
+          ...(prevAcademicYear ? { academicYear: prevAcademicYear } : {}),
+        },
+      });
+
+      // Update admission record
+      await this.prisma.admission.updateMany({
+        where: { studentId: sid },
+        data: { standard: prevStd },
+      });
+
+      // Switch StudentFee active flags (no create/delete — just toggle isActive)
+      if (currentAcademicYear) {
+        await this.prisma.studentFee.updateMany({
+          where: { studentId: sid, academicYear: currentAcademicYear },
+          data: { isActive: false },
+        });
+      }
+      if (prevAcademicYear) {
+        const prevFee = await this.prisma.studentFee.findFirst({
+          where: { studentId: sid, academicYear: prevAcademicYear },
+          select: { id: true },
+        });
+        if (prevFee) {
+          await this.prisma.studentFee.updateMany({
+            where: { studentId: sid, academicYear: prevAcademicYear },
+            data: { isActive: true },
+          });
+        }
+      }
+
+      // Revert StudentTransport to previous academic year (single record per student)
+      if (prevAcademicYear) {
+        await this.prisma.studentTransport.updateMany({
           where: { studentId: sid },
-          data: { standard: prevStd },
-        }),
-      ]);
+          data: { academicYear: prevAcademicYear },
+        });
+      }
 
-      results.push({ id: sid, name: student.name, status: 'success', from: currentStd, to: prevStd });
+      results.push({
+        id: sid,
+        name: student.name,
+        status: 'success',
+        from: currentStd,
+        to: prevStd,
+        academicYearFrom: currentAcademicYear,
+        academicYearTo: prevAcademicYear,
+      });
     }
 
     return {

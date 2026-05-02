@@ -901,6 +901,7 @@ model StudentFee {
   id            String   @id @default(uuid())
   studentId     String
   academicYear  String
+  isActive      Boolean  @default(true)   // false when a higher class is active (demotion support)
 
   tuitionFee    Float   @default(0)
   transportFee  Float   @default(0)
