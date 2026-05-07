@@ -32,21 +32,56 @@ export class FeesService {
 
   private getEffectivePaymentAmount(payment: {
     amount: number;
+    manualDiscount?: number | null;
     status?: string | null;
     refundAmount?: number | null;
   }) {
+    const baseAmount = Number(payment.amount || 0);
+    const manualDiscount = Math.max(Number(payment.manualDiscount || 0), 0);
     const status = payment.status || 'SUCCESS';
     if (status === 'CANCELLED') return 0;
     if (status === 'REFUNDED') {
       const refunded = Number(payment.refundAmount ?? payment.amount);
-      return Math.max(Number(payment.amount) - refunded, 0);
+      const netAmount = Math.max(baseAmount - refunded, 0);
+      if (baseAmount <= 0) return 0;
+      const discountShare = manualDiscount * (netAmount / baseAmount);
+      return netAmount + discountShare;
     }
-    return Number(payment.amount);
+    return baseAmount + manualDiscount;
+  }
+
+  private normalizeManualDiscount(value?: number | null): number {
+    const parsed = Number(value ?? 0);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.max(parsed, 0);
+  }
+
+  private buildManualDiscountAllocations(amounts: number[], totalDiscount: number): number[] {
+    if (amounts.length === 0) return [];
+    const normalizedTotal = this.normalizeManualDiscount(totalDiscount);
+    if (normalizedTotal <= 0) return amounts.map(() => 0);
+
+    const sumAmounts = amounts.reduce((s, n) => s + Number(n || 0), 0);
+    if (sumAmounts <= 0) return amounts.map(() => 0);
+
+    const allocations = amounts.map((amount) =>
+      Math.round(((Number(amount || 0) / sumAmounts) * normalizedTotal) * 100) / 100,
+    );
+
+    const allocated = allocations.reduce((s, n) => s + n, 0);
+    const remainder = Math.round((normalizedTotal - allocated) * 100) / 100;
+    if (Math.abs(remainder) > 0 && allocations.length > 0) {
+      allocations[allocations.length - 1] =
+        Math.round((allocations[allocations.length - 1] + remainder) * 100) / 100;
+    }
+
+    return allocations.map((v) => Math.max(v, 0));
   }
 
   private getTotalEffectivePaid(
     payments: Array<{
       amount: number;
+      manualDiscount?: number | null;
       status?: string | null;
       refundAmount?: number | null;
     }>,
@@ -809,16 +844,22 @@ export class FeesService {
 
     const totalPaidOverall = this.getTotalEffectivePaid(studentFee.payments);
     const overallPending = Math.max(Number(studentFee.netFee || 0) - totalPaidOverall, 0);
+    const manualDiscountTotal = this.normalizeManualDiscount(data.manualDiscount);
+    const grossAmount = Number(data.amount || 0);
+    if (manualDiscountTotal > grossAmount + 0.01) {
+      throw new BadRequestException('Manual discount cannot exceed amount');
+    }
+    const netPayableAmount = Math.max(grossAmount - manualDiscountTotal, 0);
 
     // Multi-term payment support
     if (Array.isArray(data.payments) && data.payments.length > 0) {
       // Validate total amount
       const totalSplit = data.payments.reduce((sum, p) => sum + p.amount, 0);
-      if (Math.abs(totalSplit - data.amount) > 0.01) {
-        throw new BadRequestException(`Sum of split term payments (${totalSplit}) does not match total amount (${data.amount})`);
+      if (Math.abs(totalSplit - netPayableAmount) > 0.01) {
+        throw new BadRequestException(`Sum of split term payments (${totalSplit}) does not match net payable amount (${netPayableAmount})`);
       }
-      if (totalSplit > overallPending) {
-        throw new BadRequestException(`Payment amount (${totalSplit}) exceeds pending balance (${overallPending})`);
+      if (grossAmount > overallPending + 0.01) {
+        throw new BadRequestException(`Amount (${grossAmount}) exceeds pending balance (${overallPending})`);
       }
 
       const termPendingMap = new Map<number, number>();
@@ -885,13 +926,19 @@ export class FeesService {
       return this.prisma.$transaction(async (tx) => {
         const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
         const createdPayments: any[] = [];
+        const validAllocations = allocations.filter((a) => a.amount > 0);
+        const manualDiscountAllocations = this.buildManualDiscountAllocations(
+          validAllocations.map((a) => Number(a.amount || 0)),
+          manualDiscountTotal,
+        );
 
-        for (const split of allocations) {
-          if (split.amount <= 0) continue;
+        for (let i = 0; i < validAllocations.length; i++) {
+          const split = validAllocations[i];
           let payment = await tx.payment.create({
             data: {
               studentFeeId: data.studentFeeId,
               amount: split.amount,
+              manualDiscount: manualDiscountAllocations[i] || 0,
               paymentMode: data.paymentMode,
               paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
               receiptNo,
@@ -917,17 +964,32 @@ export class FeesService {
           createdPayments.push(payment);
         }
         await this.recalculateTermStatuses(data.studentFeeId, tx);
-        if (createdPayments.length <= 1) return createdPayments[0] || null;
+        if (createdPayments.length <= 1) {
+          const single = createdPayments[0];
+          if (!single) return null;
+          const netPaidAmount = Number(single.amount || 0);
+          const manualDiscount = Number(single.manualDiscount || 0);
+          return {
+            ...single,
+            netPaidAmount,
+            grossSettledAmount: netPaidAmount + manualDiscount,
+          };
+        }
+        const totalCollected = createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+        const totalManualDiscount = createdPayments.reduce((s, p) => s + Number(p.manualDiscount || 0), 0);
         return {
           ...createdPayments[0],
-          splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
-          totalCollected: createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0),
+          splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, manualDiscount: p.manualDiscount || 0, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
+          totalCollected,
+          totalManualDiscount,
+          netPaidAmount: totalCollected,
+          grossSettledAmount: totalCollected + totalManualDiscount,
         };
       });
     }
 
-    if (Number(data.amount || 0) > overallPending) {
-      throw new BadRequestException(`Payment amount (${data.amount}) exceeds pending balance (${overallPending})`);
+    if (grossAmount > overallPending + 0.01) {
+      throw new BadRequestException(`Amount (${grossAmount}) exceeds pending balance (${overallPending})`);
     }
 
     // If termNumber is specified, validate against term balance
@@ -939,6 +1001,7 @@ export class FeesService {
     return this.prisma.$transaction(async (tx) => {
       const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
       const createdPayments: any[] = [];
+      const createdPaymentAmounts: number[] = [];
 
       const termPendingMap = new Map<number, number>();
       for (const term of studentFee.terms) {
@@ -954,7 +1017,7 @@ export class FeesService {
         .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
       let nonTermPending = Math.max(nonTermTotal - nonTermPaid, 0);
 
-      let remaining = Number(data.amount || 0);
+      let remaining = netPayableAmount;
       if (data.termNumber) {
         const selectedPending = termPendingMap.get(data.termNumber) || 0;
         const toSelected = Math.min(remaining, selectedPending);
@@ -963,6 +1026,7 @@ export class FeesService {
             data: {
               studentFeeId: data.studentFeeId,
               amount: toSelected,
+              manualDiscount: 0,
               paymentMode: data.paymentMode,
               paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
               receiptNo,
@@ -976,6 +1040,7 @@ export class FeesService {
               studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
+          createdPaymentAmounts.push(Number(toSelected));
           remaining -= toSelected;
         }
       }
@@ -987,6 +1052,7 @@ export class FeesService {
             data: {
               studentFeeId: data.studentFeeId,
               amount: toNonTerm,
+              manualDiscount: 0,
               paymentMode: data.paymentMode,
               paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
               receiptNo,
@@ -999,6 +1065,7 @@ export class FeesService {
               studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
+          createdPaymentAmounts.push(Number(toNonTerm));
           remaining -= toNonTerm;
           nonTermPending -= toNonTerm;
         }
@@ -1015,6 +1082,7 @@ export class FeesService {
             data: {
               studentFeeId: data.studentFeeId,
               amount: toTerm,
+              manualDiscount: 0,
               paymentMode: data.paymentMode,
               paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
               receiptNo,
@@ -1027,18 +1095,53 @@ export class FeesService {
               studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
+          createdPaymentAmounts.push(Number(toTerm));
           remaining -= toTerm;
           termPendingMap.set(term.termNumber, termPending - toTerm);
         }
       }
 
+      if (createdPayments.length > 0 && manualDiscountTotal > 0) {
+        const manualDiscountAllocations = this.buildManualDiscountAllocations(
+          createdPaymentAmounts,
+          manualDiscountTotal,
+        );
+        for (let i = 0; i < createdPayments.length; i++) {
+          const allocated = manualDiscountAllocations[i] || 0;
+          if (allocated <= 0) continue;
+          const updated = await tx.payment.update({
+            where: { id: createdPayments[i].id },
+            data: { manualDiscount: allocated },
+            include: {
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+            },
+          });
+          createdPayments[i] = updated;
+        }
+      }
+
       await this.recalculateTermStatuses(data.studentFeeId, tx);
 
-      if (createdPayments.length <= 1) return createdPayments[0] || null;
+      if (createdPayments.length <= 1) {
+        const single = createdPayments[0];
+        if (!single) return null;
+        const netPaidAmount = Number(single.amount || 0);
+        const manualDiscount = Number(single.manualDiscount || 0);
+        return {
+          ...single,
+          netPaidAmount,
+          grossSettledAmount: netPaidAmount + manualDiscount,
+        };
+      }
+      const totalCollected = createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0);
+      const totalManualDiscount = createdPayments.reduce((s, p) => s + Number(p.manualDiscount || 0), 0);
       return {
         ...createdPayments[0],
-        splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
-        totalCollected: createdPayments.reduce((s, p) => s + Number(p.amount || 0), 0),
+        splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, manualDiscount: p.manualDiscount || 0, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
+        totalCollected,
+        totalManualDiscount,
+        netPaidAmount: totalCollected,
+        grossSettledAmount: totalCollected + totalManualDiscount,
       };
     });
   }

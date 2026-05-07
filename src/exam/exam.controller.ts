@@ -1,14 +1,16 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { Standard } from '@prisma/client';
 import { ExamService } from './exam.service';
 import {
   AssignInvigilatorDto,
+  AutoGenerateFullTimetableDto,
   AutoGeneratePeriodsDto,
   CreateExamDto,
   CreateExamHallDto,
   CreateExamScheduleDto,
   CreateExamSubjectDto,
   GenerateRollNumbersDto,
+  UpdateExamScheduleCellDto,
 } from './dto/exam.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
@@ -63,6 +65,40 @@ export class ExamController {
   @Permissions(Permission.EXAM_READ)
   getTimetable(@Param('examId') examId: string) {
     return this.examService.getTimetable(examId);
+  }
+
+  @Post(':examId/auto-full')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  autoGenerateFullTimetable(@Param('examId') examId: string, @Body() dto: AutoGenerateFullTimetableDto) {
+    return this.examService.autoGenerateFullTimetable(examId, dto);
+  }
+
+  @Get(':examId/class')
+  @Permissions(Permission.EXAM_READ)
+  getClassTimetableByQuery(
+    @Param('examId') examId: string,
+    @Query('standard') standard: Standard,
+    @Query('section') section?: string,
+  ) {
+    return this.examService.getClassTimetable(examId, standard, section);
+  }
+
+  @Get(':examId/teacher')
+  @Permissions(Permission.EXAM_READ)
+  getTeacherTimetableByQuery(@Param('examId') examId: string, @Query('teacherId') teacherId: string) {
+    return this.examService.getTeacherTimetable(examId, teacherId);
+  }
+
+  @Patch('schedule/:id')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  updateScheduleCell(@Param('id') id: string, @Body() dto: UpdateExamScheduleCellDto) {
+    return this.examService.updateScheduleCell(id, dto);
+  }
+
+  @Delete(':examId/timetable')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  resetTimetable(@Param('examId') examId: string) {
+    return this.examService.resetTimetable(examId);
   }
 
   @Post(':examId/roll-numbers/generate')

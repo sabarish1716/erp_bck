@@ -3,16 +3,21 @@ import { PeriodType, Standard } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   AssignInvigilatorDto,
+  AutoGenerateFullTimetableDto,
   AutoGeneratePeriodsDto,
   CreateExamDto,
   CreateExamHallDto,
   CreateExamScheduleDto,
   CreateExamSubjectDto,
   GenerateRollNumbersDto,
+  UpdateExamScheduleCellDto,
 } from './dto/exam.dto';
 
 @Injectable()
 export class ExamService {
+
+
+  
   constructor(private readonly prisma: PrismaService) {}
 
   async createExam(dto: CreateExamDto) {
@@ -221,21 +226,26 @@ export class ExamService {
       orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
     });
 
-    // Group by date
-    const byDate = new Map<string, typeof entries>();
+    const byDate = new Map<string, Array<{ period: number; subject: string; teacher: string | null; type: PeriodType | null; scheduleId: string }>>();
     for (const e of entries) {
       const key = e.examDate.toISOString().slice(0, 10);
       if (!byDate.has(key)) byDate.set(key, []);
-      byDate.get(key)!.push(e);
+      byDate.get(key)!.push({
+        period: e.periodStart ?? 0,
+        subject: e.subject.name,
+        teacher: e.subject.teacher?.name ?? null,
+        type: e.periodType ?? null,
+        scheduleId: e.id,
+      });
     }
 
     return {
       examId,
       standard,
       section: section ?? null,
-      days: Array.from(byDate.entries()).map(([date, schedules]) => ({
+      days: Array.from(byDate.entries()).map(([date, periods]) => ({
         date,
-        schedules,
+        periods: periods.sort((a, b) => a.period - b.period),
       })),
     };
   }
@@ -268,10 +278,27 @@ export class ExamService {
       orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
     });
 
+    const byDate = new Map<string, Array<{ period: number; subject: string; standard: Standard; section: string | null; type: PeriodType | null; scheduleId: string }>>();
+    for (const e of entries) {
+      const key = e.examDate.toISOString().slice(0, 10);
+      if (!byDate.has(key)) byDate.set(key, []);
+      byDate.get(key)!.push({
+        period: e.periodStart ?? 0,
+        subject: e.subject.name,
+        standard: e.standard,
+        section: e.section ?? null,
+        type: e.periodType ?? null,
+        scheduleId: e.id,
+      });
+    }
+
     return {
       examId,
       teacher,
-      schedules: entries,
+      days: Array.from(byDate.entries()).map(([date, periods]) => ({
+        date,
+        periods: periods.sort((a, b) => a.period - b.period),
+      })),
     };
   }
 
@@ -409,6 +436,214 @@ export class ExamService {
     };
   }
 
+  async autoGenerateFullTimetable(examId: string, data: AutoGenerateFullTimetableDto) {
+    await this.ensureExamExists(examId);
+
+    if (!data.hallIds?.length) {
+      throw new BadRequestException('At least one hall is required');
+    }
+
+    const halls = await this.prisma.examHall.findMany({
+      where: { id: { in: data.hallIds }, isActive: true },
+      select: { id: true },
+    });
+    if (halls.length !== new Set(data.hallIds ?? []).size) {
+      throw new BadRequestException('One or more hall IDs are invalid or inactive');
+    }
+
+    const subjects = await this.prisma.examSubject.findMany({
+      where: {
+        examId,
+        standard: data.standard,
+        section: data.section,
+        ...(data.stream ? { stream: data.stream } : {}),
+      },
+      orderBy: [{ code: 'asc' }, { name: 'asc' }],
+    });
+
+    if (!subjects.length) {
+      throw new BadRequestException('No subjects found');
+    }
+
+    let currentDate = new Date(data.startDate);
+    if (Number.isNaN(currentDate.getTime())) {
+      throw new BadRequestException('Invalid startDate');
+    }
+
+    const pattern = this.getPattern(data.marks, data.standard);
+    if (pattern.length !== 8) {
+      throw new BadRequestException('Unable to derive period pattern for provided marks/standard');
+    }
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      await tx.examSchedule.deleteMany({
+        where: {
+          examId,
+          standard: data.standard,
+          section: data.section ?? null,
+          stream: data.stream ?? null,
+        },
+      });
+
+      const inserted: any[] = [];
+      for (const subject of subjects) {
+        if (!subject.teacherId) {
+          throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
+        }
+
+        for (let i = 0; i < pattern.length; i++) {
+          const type = pattern[i];
+          if (type === 'F') continue;
+
+          const startHour = 9 + i;
+          const startsAt = new Date(currentDate);
+          startsAt.setHours(startHour, 0, 0, 0);
+          const endsAt = new Date(currentDate);
+          endsAt.setHours(startHour + 1, 0, 0, 0);
+
+          await this.validateClashes({
+            prisma: tx,
+            hallIds: data.hallIds,
+            standard: data.standard,
+            section: data.section,
+            stream: data.stream,
+            examDate: new Date(currentDate),
+            startsAt,
+            endsAt,
+            teacherId: subject.teacherId,
+            periodStart: i + 1,
+            periodEnd: i + 1,
+          });
+
+          const entry = await tx.examSchedule.create({
+            data: {
+              examId,
+              subjectId: subject.id,
+              standard: data.standard,
+              section: data.section,
+              stream: data.stream,
+              examDate: new Date(currentDate),
+              startsAt,
+              endsAt,
+              session: i < 4 ? 'FN' : 'AN',
+              periodStart: i + 1,
+              periodEnd: i + 1,
+              periodType: type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
+              halls: {
+                create: halls.map((h) => ({ hallId: h.id })),
+              },
+            },
+            include: {
+              subject: {
+                include: {
+                  teacher: {
+                    select: { id: true, name: true, employeeId: true, designation: true, department: true },
+                  },
+                },
+              },
+              halls: { include: { hall: true } },
+            },
+          });
+          inserted.push(entry);
+        }
+
+        const nextDate = new Date(currentDate);
+        nextDate.setDate(nextDate.getDate() + 1);
+        currentDate = nextDate;
+      }
+
+      return inserted;
+    });
+
+    return {
+      message: 'Full timetable generated successfully',
+      totalSubjects: subjects.length,
+      totalBlocks: created.length,
+      schedules: created,
+    };
+  }
+
+  async updateScheduleCell(scheduleId: string, dto: UpdateExamScheduleCellDto) {
+    const schedule = await this.prisma.examSchedule.findUnique({
+      where: { id: scheduleId },
+      include: {
+        subject: true,
+        halls: true,
+      },
+    });
+    if (!schedule) {
+      throw new NotFoundException('Schedule not found');
+    }
+
+    const subjectId = dto.subjectId ?? schedule.subjectId;
+    const subject = await this.prisma.examSubject.findUnique({ where: { id: subjectId } });
+    if (!subject || subject.examId !== schedule.examId) {
+      throw new BadRequestException('Invalid subject for this exam');
+    }
+
+    if (dto.teacherId) {
+      const teacher = await this.prisma.staff.findUnique({
+        where: { id: dto.teacherId },
+        select: { id: true, isActive: true },
+      });
+      if (!teacher || !teacher.isActive) {
+        throw new BadRequestException('Assigned teacher is invalid or inactive');
+      }
+    }
+
+    const teacherId = dto.teacherId ?? subject.teacherId ?? undefined;
+    await this.validateClashes({
+      hallIds: schedule.halls.map((h) => h.hallId),
+      standard: schedule.standard,
+      section: schedule.section ?? undefined,
+      stream: schedule.stream ?? undefined,
+      examDate: schedule.examDate,
+      startsAt: schedule.startsAt,
+      endsAt: schedule.endsAt,
+      teacherId,
+      excludeScheduleId: scheduleId,
+      periodStart: schedule.periodStart ?? undefined,
+      periodEnd: schedule.periodEnd ?? undefined,
+    });
+
+    return this.prisma.$transaction(async (tx) => {
+      if (dto.teacherId) {
+        await tx.examSubject.update({
+          where: { id: subjectId },
+          data: { teacherId: dto.teacherId },
+        });
+      }
+
+      return tx.examSchedule.update({
+        where: { id: scheduleId },
+        data: {
+          subjectId,
+          periodType: dto.periodType ?? schedule.periodType,
+        },
+        include: {
+          subject: {
+            include: {
+              teacher: {
+                select: { id: true, name: true, employeeId: true, designation: true, department: true },
+              },
+            },
+          },
+          halls: { include: { hall: true } },
+        },
+      });
+    });
+  }
+
+  async resetTimetable(examId: string) {
+    await this.ensureExamExists(examId);
+    const deleted = await this.prisma.examSchedule.deleteMany({ where: { examId } });
+    return {
+      message: 'Timetable reset successfully',
+      examId,
+      deletedSchedules: deleted.count,
+    };
+  }
+
   /** Returns true if the class group uses the "swapped" pattern (exam first, then revision) */
   private isSwappedClassGroup(standard: Standard): boolean {
     // LKG, UKG, even standards (STD_2, 4, 6, 8, 10, 12) → 1-4 EXAM, 5-8 REVISION
@@ -417,6 +652,97 @@ export class ExamService {
     if (!match) return false;
     const n = parseInt(match[1], 10);
     return n % 2 === 0; // even → swapped
+  }
+
+  private getPattern(marks: number, standard: string): Array<'R' | 'E' | 'F'> {
+    let pattern: Array<'R' | 'E' | 'F'>;
+
+    if (marks === 25) {
+      pattern = ['R', 'R', 'E', 'E', 'F', 'F', 'F', 'F'];
+    } else {
+      // Base pattern for both 50 and 100, and fallback for custom marks.
+      pattern = ['R', 'R', 'R', 'R', 'E', 'E', 'E', 'E'];
+    }
+
+    const std = String(standard);
+    const isLkgUkg = std === 'LKG' || std === 'UKG';
+    const match = std.match(/^STD_(\d+)$/);
+    const n = match ? parseInt(match[1], 10) : NaN;
+
+    const isExamThenRevisionClass = isLkgUkg || n === 2 || n === 4 || n >= 6;
+    if (isExamThenRevisionClass) {
+      return ['E', 'E', 'E', 'E', 'R', 'R', 'R', 'R'];
+    }
+
+    return pattern;
+  }
+
+  private async validateClashes(args: {
+    hallIds: string[];
+    standard: any;
+    section?: string;
+    stream?: any;
+    examDate: Date;
+    startsAt: Date;
+    endsAt: Date;
+    teacherId?: string;
+    excludeScheduleId?: string;
+    periodStart?: number;
+    periodEnd?: number;
+    prisma?: any;
+  }) {
+    const db = args.prisma ?? this.prisma;
+
+    const overlapFilter =
+      args.periodStart !== undefined && args.periodEnd !== undefined
+        ? { periodStart: { lte: args.periodEnd }, periodEnd: { gte: args.periodStart } }
+        : { startsAt: { lt: args.endsAt }, endsAt: { gt: args.startsAt } };
+
+    const hallClash = await db.examSchedule.findFirst({
+      where: {
+        ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
+        examDate: args.examDate,
+        ...overlapFilter,
+        halls: { some: { hallId: { in: args.hallIds } } },
+      },
+      include: { halls: { include: { hall: true } } },
+    });
+    if (hallClash) {
+      throw new BadRequestException('Hall clash detected for this date and period/time slot');
+    }
+
+    const classClash = await db.examSchedule.findFirst({
+      where: {
+        ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
+        standard: args.standard,
+        section: args.section ?? null,
+        stream: args.stream ?? null,
+        examDate: args.examDate,
+        ...overlapFilter,
+      },
+    });
+    if (classClash) {
+      throw new BadRequestException('Class clash detected for this date and period/time slot');
+    }
+
+    if (args.teacherId) {
+      const teacherClash = await db.examSchedule.findFirst({
+        where: {
+          ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
+          examDate: args.examDate,
+          ...overlapFilter,
+          subject: { teacherId: args.teacherId },
+        },
+        include: {
+          subject: { select: { code: true, name: true } },
+        },
+      });
+      if (teacherClash) {
+        throw new BadRequestException(
+          `Teacher clash detected: teacher is already assigned to "${teacherClash.subject.code} - ${teacherClash.subject.name}"`,
+        );
+      }
+    }
   }
 
   async generateRollNumbers(examId: string, dto: GenerateRollNumbersDto) {
@@ -628,6 +954,8 @@ export class ExamService {
         halls: true,
       },
     });
+
+    
 
     if (!schedule) {
       throw new NotFoundException('Schedule not found');

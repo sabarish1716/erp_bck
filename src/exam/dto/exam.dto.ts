@@ -210,3 +210,42 @@ export class AutoGeneratePeriodsDto {
   @IsEnum(ExamSession)
   session!: ExamSession;
 }
+
+export class AutoGenerateFullTimetableDto {
+  @IsEnum(Standard)
+  standard!: Standard;
+
+  @IsOptional()
+  @IsString()
+  section?: string;
+
+  @IsOptional()
+  @IsEnum(AcademicStream)
+  stream?: AcademicStream;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  marks!: number;
+
+  @IsDateString()
+  startDate!: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  hallIds!: string[];
+}
+
+export class UpdateExamScheduleCellDto {
+  @IsOptional()
+  @IsString()
+  subjectId?: string;
+
+  @IsOptional()
+  @IsString()
+  teacherId?: string;
+
+  @IsOptional()
+  @IsEnum(PeriodType)
+  periodType?: PeriodType;
+}

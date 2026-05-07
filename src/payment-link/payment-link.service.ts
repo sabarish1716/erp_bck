@@ -24,15 +24,21 @@ export class PaymentLinkService {
 
   private getEffectivePaymentAmount(payment: {
     amount: number;
+    manualDiscount?: number | null;
     status?: string | null;
     refundAmount?: number | null;
   }): number {
+    const baseAmount = Number(payment.amount || 0);
+    const manualDiscount = Math.max(Number(payment.manualDiscount || 0), 0);
     const status = payment.status || 'SUCCESS';
     if (status === 'CANCELLED') return 0;
     if (status === 'REFUNDED') {
-      return Math.max(Number(payment.amount) - Number(payment.refundAmount ?? payment.amount), 0);
+      const netAmount = Math.max(baseAmount - Number(payment.refundAmount ?? payment.amount), 0);
+      if (baseAmount <= 0) return 0;
+      const discountShare = manualDiscount * (netAmount / baseAmount);
+      return netAmount + discountShare;
     }
-    return Number(payment.amount);
+    return baseAmount + manualDiscount;
   }
 
   /** Recalculate PENDING / PARTIAL / PAID status for each term after a webhook payment. */

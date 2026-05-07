@@ -1637,15 +1637,36 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       throw new BadRequestException('At least 2 students are required to create a sibling group');
     }
 
-    const groupId = siblingGroupId || `SIB-${Date.now()}`;
+    const selectedStudents = await this.prisma.student.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, siblingGroupId: true },
+    });
+
+    if (selectedStudents.length !== uniqueIds.length) {
+      throw new BadRequestException('One or more students not found');
+    }
+
+    const existingGroupIds = [...new Set(selectedStudents.map((s) => s.siblingGroupId).filter(Boolean) as string[])];
+    const groupId = siblingGroupId || existingGroupIds[0] || `SIB-${Date.now()}`;
+
+    const idsToLink = new Set(uniqueIds);
+    if (existingGroupIds.length > 0) {
+      const existingGroupMembers = await this.prisma.student.findMany({
+        where: { siblingGroupId: { in: existingGroupIds } },
+        select: { id: true },
+      });
+      existingGroupMembers.forEach((member) => idsToLink.add(member.id));
+    }
+
+    const mergedIds = [...idsToLink];
 
     await this.prisma.student.updateMany({
-      where: { id: { in: uniqueIds } },
+      where: { id: { in: mergedIds } },
       data: { siblingGroupId: groupId },
     });
 
     const students = await this.prisma.student.findMany({
-      where: { id: { in: uniqueIds } },
+      where: { id: { in: mergedIds } },
       select: { id: true, name: true, standard: true, siblingGroupId: true },
       orderBy: { name: 'asc' },
     });

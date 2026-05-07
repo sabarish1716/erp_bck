@@ -320,6 +320,44 @@ Content-Type: application/json
 }
 ```
 
+## Fees collect payment manual discount
+
+Endpoint:
+
+```http
+POST /erp/api/fees/collect
+Content-Type: application/json
+```
+
+Payload (single payment):
+
+```json
+{
+  "studentFeeId": "student-fee-id",
+  "amount": 12000,
+  "manualDiscount": 500,
+  "paymentMode": "CASH",
+  "paymentDate": "2026-05-02",
+  "receiptComponents": ["transportFee", "manualDiscount"],
+  "remarks": "Collected with concession"
+}
+```
+
+UI behavior:
+
+- Add a numeric input field named Manual Discount in the collect payment form.
+- Treat Amount as gross settlement value (before discount).
+- Net cash paid is computed as Amount - Manual Discount.
+- Manual Discount cannot be greater than Amount.
+- For split-term mode, the term split amounts must sum to the net cash paid value.
+- Receipt Components to Include can include manualDiscount.
+
+Backend behavior:
+
+- Pending validation uses gross Amount.
+- Payment rows store net paid amount in amount and store concession in manualDiscount.
+- Paid history and pending calculations use amount + manualDiscount as effective settlement.
+
 Frontend screen checklist:
 
 - Screen name suggestion: `Acting Driver Salary Setup`.
