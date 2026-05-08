@@ -221,6 +221,12 @@ demoteStudents(@Body() body: PromoteStudentsDto) {
     return this.service.linkSiblings(body.studentIds, body.siblingGroupId);
   }
 
+  @Post('siblings/unlink')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  unlinkSibling(@Body() body: { studentId: string }) {
+    return this.service.unlinkSibling(body.studentId);
+  }
+
   @Get(':id')
   @Permissions(Permission.ADMISSION_READ)
   findOne(@Param('id') id: string) {
@@ -376,6 +382,12 @@ async update(
 
   return this.service.updateStudent(id, parsedBody);
 }
+
+  @Post(':id/unarchive')
+  unarchive(@Param('id') id: string) {
+    return this.service.unarchiveStudent(id);
+  }
+
   @Delete(':id')
   @Permissions(Permission.ADMISSION_DELETE)
   delete(@Param('id') id: string) {

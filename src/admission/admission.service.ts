@@ -1308,6 +1308,19 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
      );
     }
 
+  async unarchiveStudent(id: string) {
+    return this.prisma.student.update({
+      where: { id },
+      data: {
+        users: {
+          update: {
+            isActive: true,
+          },
+        },
+      },
+    });
+  }
+
   async getAdmissionDashboard(academicYear?: string) {
     const settingsRow = await this.prisma.appSetting.findUnique({
       where: { key: 'admin.settings' },
@@ -1521,6 +1534,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       include: {
         family: true,
         admission: true,
+        users: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1531,6 +1545,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       'Standard',
       'Academic Year',
       'Approved',
+      'Status',
       'Admission Date',
       'Father Name',
       'Father Phone',
@@ -1550,6 +1565,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         s.standard,
         academicYear || acad,
         ad?.isApproved ? 'Yes' : 'No',
+        s.users?.isActive === false ? 'Archived' : 'Active',
         ad?.admissionDate ? ad.admissionDate.toISOString().slice(0, 10) : '',
         s.family?.fatherName || '',
         s.family?.fatherPhone || '',
@@ -2029,5 +2045,18 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       successCount: results.filter((r) => r.status === 'success').length,
       results,
     };
+  }
+
+  async unlinkSibling(studentId: string) {
+    if (!studentId) throw new BadRequestException('Student ID is required');
+    const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+    if (!student) throw new BadRequestException('Student not found');
+    
+    await this.prisma.student.update({
+      where: { id: studentId },
+      data: { siblingGroupId: null },
+    });
+
+    return { success: true, message: 'Sibling unlinked successfully' };
   }
 }
