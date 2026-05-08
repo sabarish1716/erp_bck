@@ -8,6 +8,7 @@ import {
   IsNumber,
   ValidateNested,
   IsArray,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Gender, Community } from '@prisma/client';
@@ -15,15 +16,17 @@ import { Gender, Community } from '@prisma/client';
 
 class FamilyDto {
   @IsOptional() @IsString() fatherName?: string;
-  @IsOptional() @IsString() fatherPhone?: string;
+  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) fatherPhone?: string;
   @IsOptional() @IsString() fatherWhatsapp?: string;
-  @IsOptional() @IsString() fatherAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) fatherAadhar?: string;
+
   @IsOptional() @IsString() fatherOccupation?: string;
   
   @IsOptional() @IsString() motherName?: string;
-  @IsOptional() @IsString() motherPhone?: string;
+  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) motherPhone?: string;
   @IsOptional() @IsString() motherWhatsapp?: string;
-  @IsOptional() @IsString() motherAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) motherAadhar?: string;
+
   @IsOptional() @IsString() motherOccupation?: string;
   
   @IsOptional() @IsString() otherWhatsapp?: string;
@@ -34,9 +37,10 @@ class FamilyDto {
   // Single parent & guardian
   @IsOptional() @IsBoolean() isSingleParent?: boolean;
   @IsOptional() @IsString() guardianName?: string;
-  @IsOptional() @IsString() guardianPhone?: string;
+  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) guardianPhone?: string;
   @IsOptional() @IsString() guardianWhatsapp?: string;
-  @IsOptional() @IsString() guardianAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) guardianAadhar?: string;
+
   @IsOptional() @IsString() guardianOccupation?: string;
   @IsOptional() @IsString() guardianRelation?: string;
 
@@ -147,7 +151,8 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() religion?: string;
   @IsOptional() @IsString() caste?: string;
   @IsOptional() @IsString() motherTongue?: string;
-  @IsOptional() @IsString() aadharNo?: string;
+  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) aadharNo?: string;
+
   @IsOptional() @IsString() bloodGroup?: string;
   
   @IsOptional() @IsString() identification1?: string;

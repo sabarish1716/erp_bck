@@ -60,7 +60,9 @@ enum SyncJobStatus {
 enum Gender {
   MALE
   FEMALE
+  OTHERS
 }
+
 
 enum Community {
   SC
@@ -105,6 +107,8 @@ model AcademicStream {
   examSchedules   ExamSchedule[]
   examRollNumbers ExamRollNumber[]
 }
+
+
 
 
 enum ExamSession {
@@ -180,6 +184,8 @@ model Student {
   // 11th/12th higher secondary stream selection
   academicStreamId  String?
   academicStream    AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
+
 
 
   // Discount-related links
@@ -293,6 +299,7 @@ model AcademicDetail {
 
   academicStreamId  String?
   stream            AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
 
 
   subjects           SubjectMark[]
@@ -633,6 +640,7 @@ model ExamSubject {
   academicStreamId String?
   stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
 
+
   maxMarks     Int            @default(100)
   passMarks    Int            @default(35)
   teacherId    String?        // Staff member assigned to teach this subject
@@ -672,6 +680,7 @@ model ExamSchedule {
   section       String?
   academicStreamId String?
   stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
 
   examDate      DateTime
   startsAt      DateTime
@@ -717,6 +726,7 @@ model ExamRollNumber {
   section      String?
   academicStreamId String?
   stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
 
   academicYear String
   createdAt    DateTime        @default(now())

@@ -40,7 +40,7 @@ describe('AdmissionService', () => {
       },
     };
 
-    service = new AdmissionService(prisma, academicStreamService);
+    service = new AdmissionService(prisma);
   });
 
 
