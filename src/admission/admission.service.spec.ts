@@ -1,4 +1,5 @@
 import { AdmissionService } from './admission.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('AdmissionService', () => {
   let service: AdmissionService;
@@ -13,11 +14,24 @@ describe('AdmissionService', () => {
       admission: {
         count: jest.fn(),
         groupBy: jest.fn(),
+        findMany: jest.fn(),
         updateMany: jest.fn(),
       },
       student: {
         findMany: jest.fn(),
+        count: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      feeStructure: {
+        findMany: jest.fn(),
+      },
+      studentFee: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      studentTransport: {
         updateMany: jest.fn(),
       },
     };
@@ -34,9 +48,13 @@ describe('AdmissionService', () => {
       .mockResolvedValueOnce(80)
       .mockResolvedValueOnce(40)
       .mockResolvedValueOnce(100);
+    prisma.admission.findMany
+      .mockResolvedValueOnce([{ studentId: 'stu-1' }])
+      .mockResolvedValueOnce([]);
     prisma.admission.groupBy
       .mockResolvedValueOnce([{ standard: 'STD_10', _count: { _all: 120 } }])
       .mockResolvedValueOnce([{ standard: 'STD_10', _count: { _all: 80 } }]);
+    prisma.student.count.mockResolvedValue(0);
 
     const result = await service.getAdmissionDashboard();
 
@@ -67,10 +85,32 @@ describe('AdmissionService', () => {
   it('promotes all students to next standards for the new academic year', async () => {
     prisma.student.findMany.mockResolvedValue([{ id: 'stu-1', name: 'A', standard: 'STD_9' }]);
     prisma.student.update.mockResolvedValue({ id: 'stu-1', standard: 'STD_10', academicYear: '2026-2027' });
+    prisma.feeStructure.findMany
+      .mockResolvedValueOnce([
+        {
+          standard: 'STD_10',
+          tuitionFee: 10000,
+          transportFee: 0,
+          bookFee: 0,
+          hostelFee: 0,
+          otherFee: 0,
+          numberOfTerms: 1,
+          customItems: [],
+          terms: [],
+        },
+      ])
+      .mockResolvedValueOnce([]);
+    prisma.studentFee.findMany.mockResolvedValue([]);
+    prisma.studentFee.findFirst.mockResolvedValue(null);
+    prisma.studentFee.create.mockResolvedValue({ id: 'fee-1' });
+    prisma.studentTransport.updateMany.mockResolvedValue({ count: 1 });
+    prisma.admission.updateMany.mockResolvedValue({ count: 1 });
 
     const result = await service.promoteAllStudents('2025-2026', '2026-2027');
 
-    expect(prisma.student.findMany).toHaveBeenCalledWith({ where: { academicYear: '2025-2026' } });
+    expect(prisma.student.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { academicYear: '2025-2026' } }),
+    );
     expect(prisma.student.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'stu-1' },
@@ -104,5 +144,26 @@ describe('AdmissionService', () => {
         updatedCount: 1,
       }),
     );
+  });
+
+  it('returns a bulk upload template with expected headers', () => {
+    const csv = service.getBulkUploadTemplateCsv();
+    const [headerLine, sampleLine] = csv.split('\n');
+
+    expect(headerLine).toContain('name,standard,gender,dob');
+    expect(headerLine).toContain('academicYear');
+    expect(headerLine).toContain('admissionDate');
+    expect(sampleLine).toContain('Arun Kumar');
+  });
+
+  it('rejects bulk upload rows that include non-application columns', async () => {
+    await expect(
+      service.bulkCreateFromCsv([
+        {
+          employeeId: 'EMP-1',
+          salary: '25000',
+        },
+      ]),
+    ).rejects.toThrow(BadRequestException);
   });
 });

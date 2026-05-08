@@ -60,6 +60,7 @@ export class HrService {
         name: true,
         department: true,
         designation: true,
+        category: true,
         salary: true,
       },
       orderBy: { name: 'asc' },
@@ -311,15 +312,23 @@ export class HrService {
     });
   }
 
-  async getLeaveApplications(query: { status?: string; staffId?: string }, requester?: RequestUser) {
+  async getLeaveApplications(query: { status?: string; staffId?: string; month?: string }, requester?: RequestUser) {
     const where: any = {};
     if (query.status) where.status = query.status;
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
+    if (query.month) {
+      const [year, month] = query.month.split('-').map(Number);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+        const start = new Date(year, month - 1, 1);
+        const end = new Date(year, month, 1);
+        where.fromDate = { gte: start, lt: end };
+      }
+    }
     return this.prisma.leaveApplication.findMany({
       where,
       include: {
-        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true } },
         leaveType: { select: { id: true, name: true, code: true } },
       },
       orderBy: { createdAt: 'desc' },

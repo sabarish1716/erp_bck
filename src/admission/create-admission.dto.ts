@@ -115,7 +115,8 @@ class AcademicDto {
   @IsOptional() @IsNumber() totalObtainedMarks?: number;
   @IsOptional() @IsNumber() totalPercentage?: number; // overall % (top-right of form)
   // stream for qualifying exam record (e.g. SSLC/Matric/CBSE board)
-  @IsOptional() @IsEnum(AcademicStream) stream?: AcademicStream;
+  @IsOptional() @IsString() stream?: string;
+  @IsOptional() @IsString() streamCustom?: string;
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
@@ -162,7 +163,8 @@ export class CreateAdmissionDto {
 
   // 11th & 12th standard: subject stream selection
   // (Part III: BIO_MATHS, CS_MATHS, BIO_CS, COMMERCE)
-  @IsOptional() @IsEnum(AcademicStream) academicStream?: AcademicStream;
+  @IsOptional() @IsString() academicStream?: string;
+  @IsOptional() @IsString() academicStreamCustom?: string;
 
   // Discount-related
   @IsOptional() @IsString() staffParentId?: string;

@@ -145,7 +145,7 @@ async function main() {
         schoolName: 'PSF Public School',
         schoolCode,
         academicYear: ACADEMIC_YEARS[1],
-        requireApprovalForAdmission: true,
+        requireApprovalForAdmission: false,
         allowAdmissionEditAfterApproval: false,
         enableFeesModule: true,
         enableTransportModule: true,

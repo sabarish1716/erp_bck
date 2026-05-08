@@ -43,6 +43,13 @@ export class DocRequestController {
     return this.service.getStats();
   }
 
+  /** GET /doc-requests/bonafide/templates — Template catalog for the four bonafide scenarios */
+  @Get('bonafide/templates')
+  @Permissions(Permission.DOC_REQUEST_READ)
+  async getBonafideTemplates() {
+    return this.service.getBonafideTemplates();
+  }
+
   /** GET /doc-requests/:id — Get single request */
   @Get(':id')
   @Permissions(Permission.DOC_REQUEST_READ)

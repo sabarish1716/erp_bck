@@ -1,7 +1,51 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateDocRequestDto, ReviewDocRequestDto, IssueDocRequestDto } from './create-doc-request.dto';
+import {
+  CreateDocRequestDto,
+  ReviewDocRequestDto,
+  IssueDocRequestDto,
+  BonafideScenarioType,
+} from './create-doc-request.dto';
 import { SettingsService } from '../settings/settings.service';
+
+const BONAFIDE_TEMPLATE_MAP: Record<
+  BonafideScenarioType,
+  {
+    code: BonafideScenarioType;
+    label: string;
+    title: string;
+    bodyTemplate: string;
+  }
+> = {
+  [BonafideScenarioType.STUDY_PURPOSE]: {
+    code: BonafideScenarioType.STUDY_PURPOSE,
+    label: 'General Study Purpose',
+    title: 'BONAFIDE CERTIFICATE',
+    bodyTemplate:
+      'This is to certify that {{studentName}}, {{parentRef}}, DOB {{dob}}, Admission No {{admissionNo}}, is/was a bonafide student of this school from {{fromStd}} to {{toStd}} during the academic year {{academicYear}}. This certificate is issued for {{purpose}}.',
+  },
+  [BonafideScenarioType.PASSPORT_VISA]: {
+    code: BonafideScenarioType.PASSPORT_VISA,
+    label: 'Passport / Visa',
+    title: 'BONAFIDE CERTIFICATE - PASSPORT / VISA',
+    bodyTemplate:
+      'This is to certify that {{studentName}}, {{parentRef}}, DOB {{dob}}, Admission No {{admissionNo}}, is/was a bonafide student of this school from {{fromStd}} to {{toStd}} during the academic year {{academicYear}}. This certificate is issued for Passport / Visa processing before {{authority}}.',
+  },
+  [BonafideScenarioType.SCHOLARSHIP]: {
+    code: BonafideScenarioType.SCHOLARSHIP,
+    label: 'Scholarship Application',
+    title: 'BONAFIDE CERTIFICATE - SCHOLARSHIP',
+    bodyTemplate:
+      'This is to certify that {{studentName}}, {{parentRef}}, DOB {{dob}}, Admission No {{admissionNo}}, is/was a bonafide student of this school from {{fromStd}} to {{toStd}} during the academic year {{academicYear}}. This certificate is issued for scholarship submission to {{authority}}.',
+  },
+  [BonafideScenarioType.EDUCATION_LOAN]: {
+    code: BonafideScenarioType.EDUCATION_LOAN,
+    label: 'Education Loan',
+    title: 'BONAFIDE CERTIFICATE - EDUCATION LOAN',
+    bodyTemplate:
+      'This is to certify that {{studentName}}, {{parentRef}}, DOB {{dob}}, Admission No {{admissionNo}}, is/was a bonafide student of this school from {{fromStd}} to {{toStd}} during the academic year {{academicYear}}. This certificate is issued for education loan processing at {{authority}}.',
+  },
+};
 
 @Injectable()
 export class DocRequestService {
@@ -53,14 +97,28 @@ export class DocRequestService {
 
     const ticketNo = await this.nextTicketNo();
 
+    if (dto.type === 'BONAFIDE_CERTIFICATE' && !dto.bonafideScenario) {
+      throw new BadRequestException('Bonafide scenario is required for bonafide certificate requests');
+    }
+
+    if (dto.type !== 'BONAFIDE_CERTIFICATE' && dto.bonafideScenario) {
+      throw new BadRequestException('Bonafide scenario can only be used with bonafide certificate requests');
+    }
+
+    const createData: any = {
+      ticketNo,
+      studentId: dto.studentId,
+      type: dto.type,
+      reason: dto.reason,
+      bonafideScenario: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideScenario : undefined,
+      bonafidePurpose: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafidePurpose : undefined,
+      bonafideAuthority: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideAuthority : undefined,
+      bonafideTemplateText: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideTemplateText : undefined,
+      requestedById,
+    };
+
     return this.prisma.docRequest.create({
-      data: {
-        ticketNo,
-        studentId: dto.studentId,
-        type: dto.type,
-        reason: dto.reason,
-        requestedById,
-      },
+      data: createData,
       include: this.INCLUDE_FULL,
     });
   }
@@ -118,7 +176,7 @@ export class DocRequestService {
 
   /** Issue the document: mark as ISSUED, save TC fields, return data for PDF */
   async issue(id: string, dto: IssueDocRequestDto, issuedById: number) {
-    const existing = await this.prisma.docRequest.findUnique({
+    const existing: any = await this.prisma.docRequest.findUnique({
       where: { id },
       include: this.INCLUDE_FULL,
     });
@@ -167,6 +225,26 @@ export class DocRequestService {
       data.lastAttendedDate = dto.lastAttendedDate ? new Date(dto.lastAttendedDate) : undefined;
     }
 
+    if (existing.type === 'BONAFIDE_CERTIFICATE') {
+      if (dto.bonafideScenario) {
+        data.bonafideScenario = dto.bonafideScenario;
+      }
+      if (dto.bonafidePurpose !== undefined) {
+        data.bonafidePurpose = dto.bonafidePurpose;
+      }
+      if (dto.bonafideAuthority !== undefined) {
+        data.bonafideAuthority = dto.bonafideAuthority;
+      }
+      if (dto.bonafideTemplateText !== undefined) {
+        data.bonafideTemplateText = dto.bonafideTemplateText;
+      }
+
+      const finalScenario = (data.bonafideScenario || existing.bonafideScenario) as BonafideScenarioType | undefined;
+      if (!finalScenario) {
+        throw new BadRequestException('Bonafide scenario is required before issuing bonafide certificate');
+      }
+    }
+
     return this.prisma.docRequest.update({
       where: { id },
       data,
@@ -176,9 +254,23 @@ export class DocRequestService {
 
   /** Get data needed for PDF generation (school settings + student + request) */
   async getIssueData(id: string) {
-    const req = await this.findOne(id);
+    const req: any = await this.findOne(id);
     const schoolSettings = await this.settings.getAdminSettings();
-    return { request: req, school: schoolSettings };
+    const selectedTemplate =
+      req.type === 'BONAFIDE_CERTIFICATE' && req.bonafideScenario
+        ? BONAFIDE_TEMPLATE_MAP[req.bonafideScenario as BonafideScenarioType]
+        : null;
+
+    return {
+      request: req,
+      school: schoolSettings,
+      bonafideTemplate: selectedTemplate,
+      bonafideTemplates: this.getBonafideTemplates(),
+    };
+  }
+
+  getBonafideTemplates() {
+    return Object.values(BONAFIDE_TEMPLATE_MAP);
   }
 
   /** Dashboard statistics */

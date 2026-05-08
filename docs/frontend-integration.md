@@ -517,3 +517,148 @@ Notes:
 - `employeeId` is now optional on create.
 - If omitted, the backend auto-generates the next `EMP000x` value.
 - Duplicate email or employee ID errors return HTTP `409` with a readable message.
+
+## HR dashboard UI replacement
+
+New UI file:
+
+```text
+docs/hr-dashboard.html
+```
+
+Production-ready Next.js module:
+
+```text
+hr-dashboard-frontend/
+```
+
+Route page:
+
+```text
+hr-dashboard-frontend/app/hr/page.tsx
+```
+
+This module includes reusable components, typed endpoint catalog, and a runtime API client. Use this when integrating into a real frontend app instead of the static HTML mock.
+
+Additional capabilities now implemented in the Next.js module:
+
+- Persisted frontend session config in browser localStorage:
+  - API base URL
+  - bearer token
+- Access profile bootstrap with `GET /erp/api/auth/me`.
+- Permission-aware route/menu behavior for HR:
+  - route-level check for `hr:dashboard`
+  - sidebar sections filtered using HR permission sets
+  - write actions (POST/PUT/DELETE) blocked when manage/approve permissions are missing
+- Analytics panels added:
+  - attendance trend chart (derived from `GET /hr/attendance?month=YYYY-MM`)
+  - pending leave queue table (from `GET /hr/leave/applications?status=PENDING`)
+
+About "wire into real frontend structure":
+
+- This repository does not include the existing production frontend app structure.
+- Implemented alternative: a complete standalone Next.js frontend module in `hr-dashboard-frontend/` with reusable components, so it can be copied into or merged with your real frontend project directly.
+
+This dashboard replaces the previous HR visual shell with a functional API-driven UI based on the latest backend contracts in `src/hr/hr.controller.ts` and DTO files.
+
+What is implemented in the new UI:
+
+- Styled HR dashboard layout (side nav, top nav, KPI cards, response console).
+- Runtime API base URL input (default `/erp/api`).
+- Optional bearer token input.
+- Endpoint action cards grouped by module with Run buttons.
+- Auto-rendered request/response JSON console.
+- KPI refresh wired to backend data (`GET /hr/dashboard`, `GET /hr/payroll`).
+
+Functional coverage included in frontend:
+
+- Attendance:
+  - `GET /hr/staff-list`
+  - `GET /hr/dashboard`
+  - `GET /hr/attendance?date&month&staffId`
+  - `GET /hr/attendance/monthly-report/:month`
+  - `POST /hr/attendance/mark`
+  - `POST /hr/attendance/bulk-mark`
+  - `PUT /hr/attendance/:id`
+- Leave:
+  - `GET /hr/leave/types`
+  - `POST /hr/leave/types`
+  - `GET /hr/leave/policy?staffId`
+  - `GET /hr/leave/applications?status&staffId`
+  - `POST /hr/leave/apply`
+  - `PUT /hr/leave/:id/approve`
+  - `PUT /hr/leave/:id/reject`
+  - `PUT /hr/leave/:id/cancel`
+  - `GET /hr/leave/balances?staffId&year`
+  - `POST /hr/leave/balances/init`
+- Permission:
+  - `GET /hr/permission?staffId&month&status`
+  - `GET /hr/permission/summary/:month`
+  - `POST /hr/permission/apply`
+  - `PUT /hr/permission/:id/approve`
+  - `PUT /hr/permission/:id/reject`
+- Payroll:
+  - `POST /hr/payroll/generate`
+  - `GET /hr/payroll?month&staffId&status`
+  - `GET /hr/payroll/:id`
+  - `PUT /hr/payroll/approve`
+  - `PUT /hr/payroll/:id/approve`
+  - `GET /hr/payroll/lop-report/:month`
+  - `PUT /hr/payroll/:id/update`
+  - `PUT /hr/payroll/:id/cancel-lop`
+  - `GET /hr/salary-abstract/:month`
+- Statutory (PF/ESI/PSF/PT):
+  - `GET /hr/statutory/settings`
+  - `PUT /hr/statutory/settings`
+  - `GET /hr/statutory/staff`
+  - `PUT /hr/statutory/staff/:staffId`
+  - `GET /hr/statutory/report/:month`
+  - `GET /hr/statutory/all`
+  - `GET /hr/report/pf-staff?month`
+  - `GET /hr/report/non-pf-staff?month`
+- ESSL:
+  - `GET /hr/essl/devices`
+  - `POST /hr/essl/devices`
+  - `PUT /hr/essl/devices/:id`
+  - `DELETE /hr/essl/devices/:id`
+  - `GET /hr/essl/punch-logs?deviceId&date&staffId`
+  - `GET /hr/essl/staff-mappings`
+  - `POST /hr/essl/staff-mappings`
+  - `DELETE /hr/essl/staff-mappings/:staffId`
+  - `POST /hr/essl/sync/:deviceId`
+  - `POST /hr/essl/sync-all`
+  - `GET /hr/essl/sync-history?deviceId`
+- Staff finance operations:
+  - `POST /hr/advance`
+  - `GET /hr/advance?staffId&status&type`
+  - `GET /hr/advance/:id`
+  - `PUT /hr/advance/:id/approve`
+  - `PUT /hr/advance/:id/reject`
+  - `PUT /hr/advance/:id/disburse`
+  - `POST /hr/increment`
+  - `GET /hr/increment/history/:staffId?status`
+  - `GET /hr/increment/all?status`
+  - `PUT /hr/increment/:id/approve`
+  - `PUT /hr/increment/:id/reject`
+  - `POST /hr/loan`
+  - `GET /hr/loan/staff/:staffId?status`
+  - `GET /hr/loan/:id`
+  - `PUT /hr/loan/:id/approve`
+  - `PUT /hr/loan/:id/reject`
+  - `PUT /hr/loan/:id/skip-emi`
+  - `PUT /hr/loan/:id/resume-emi`
+  - `PUT /hr/loan/:id/pre-close`
+  - `GET /hr/loan-by-status/:status`
+
+Missing filters and fields check:
+
+- All query filters present in `HrController` are represented as UI inputs.
+- All path params are represented as UI inputs.
+- Body payloads include DTO fields from:
+  - attendance, leave, permission, statutory, essl, payroll, advance, increment, loan.
+
+Usage notes:
+
+- Open `docs/hr-dashboard.html` in a browser.
+- Set Base URL and token.
+- Use each module tab and run endpoint cards directly.

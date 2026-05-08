@@ -126,6 +126,15 @@ export class FeesService {
   // ═══════════════════════════════════════════════
 
   async createFeeStructure(data: CreateFeeStructureDto) {
+    const existing = await this.prisma.feeStructure.findUnique({
+      where: { standard_academicYear: { standard: toStandardEnum(data.standard), academicYear: data.academicYear } },
+    });
+    if (existing) {
+      throw new BadRequestException(
+        `A fee structure for ${data.standard} – ${data.academicYear} already exists. Use the update endpoint instead.`,
+      );
+    }
+
     const numberOfTerms = data.numberOfTerms || 1;
     const totalBase = data.tuitionFee + (data.transportFee || 0) + (data.bookFee || 0) + (data.hostelFee || 0) + (data.otherFee || 0);
 

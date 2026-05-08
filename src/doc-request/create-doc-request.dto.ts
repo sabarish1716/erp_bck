@@ -9,6 +9,13 @@ export enum DocRequestType {
   OTHER = 'OTHER',
 }
 
+export enum BonafideScenarioType {
+  STUDY_PURPOSE = 'STUDY_PURPOSE',
+  PASSPORT_VISA = 'PASSPORT_VISA',
+  SCHOLARSHIP = 'SCHOLARSHIP',
+  EDUCATION_LOAN = 'EDUCATION_LOAN',
+}
+
 export class CreateDocRequestDto {
   @IsString()
   studentId: string;
@@ -19,6 +26,22 @@ export class CreateDocRequestDto {
   @IsOptional()
   @IsString()
   reason?: string;
+
+  @IsOptional()
+  @IsEnum(BonafideScenarioType)
+  bonafideScenario?: BonafideScenarioType;
+
+  @IsOptional()
+  @IsString()
+  bonafidePurpose?: string;
+
+  @IsOptional()
+  @IsString()
+  bonafideAuthority?: string;
+
+  @IsOptional()
+  @IsString()
+  bonafideTemplateText?: string;
 }
 
 export class ReviewDocRequestDto {
@@ -63,4 +86,21 @@ export class IssueDocRequestDto {
   @IsOptional()
   @IsDateString()
   lastAttendedDate?: string;
+
+  // Bonafide-specific fields
+  @IsOptional()
+  @IsEnum(BonafideScenarioType)
+  bonafideScenario?: BonafideScenarioType;
+
+  @IsOptional()
+  @IsString()
+  bonafidePurpose?: string;
+
+  @IsOptional()
+  @IsString()
+  bonafideAuthority?: string;
+
+  @IsOptional()
+  @IsString()
+  bonafideTemplateText?: string;
 }

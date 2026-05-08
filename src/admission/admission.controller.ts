@@ -42,6 +42,17 @@ export class AdmissionController {
     return this.service.bulkCreateFromCsv(body.rows);
   }
 
+  @Get('bulk-upload/template')
+  @Permissions(Permission.ADMISSION_CREATE)
+  downloadBulkUploadTemplate() {
+    const csv = this.service.getBulkUploadTemplateCsv();
+    return {
+      filename: 'admission-bulk-upload-template.csv',
+      contentType: 'text/csv',
+      csv,
+    };
+  }
+
 @Post()
 @Permissions(Permission.ADMISSION_CREATE)
 @UseInterceptors(
@@ -254,6 +265,19 @@ async update(
     }
   }
 
+  // Normalize documents when frontend sends an array of keyed items.
+  if (Array.isArray(parsedBody.documents)) {
+    const normalizedDocs: Record<string, any> = {};
+    parsedBody.documents.forEach((doc: any) => {
+      if (!doc || typeof doc !== 'object' || !doc.key) return;
+      normalizedDocs[doc.key] = {
+        ...(normalizedDocs[doc.key] || {}),
+        ...doc,
+      };
+    });
+    parsedBody.documents = normalizedDocs;
+  }
+
   // ✅ STEP 0: Fetch existing student
   const existingStudent = await this.service.getStudentById(id);
 
@@ -275,9 +299,13 @@ async update(
     });
   }
 
+  // Frontend uploads profilePhoto, while DB stores it under photo/photoPath.
+  if (uploadedMap.profilePhoto) {
+    uploadedMap.photo = uploadedMap.profilePhoto;
+  }
+
   // ✅ STEP 2: Merge logic (VERY IMPORTANT)
   const docKeys = [
-    'profilePhoto',
     'photo',
     'birthCert',
     'communityCert',
@@ -287,16 +315,7 @@ async update(
     'transferCert',
   ];
 
-  // profilephoto is from frontend but our seid we use photo
-
   docKeys.forEach((key) => {
-    if(key === 'profilePhoto' && uploadedMap['profilePhoto']) {
-       parsedBody.documents['photo'] = {
-        path: uploadedMap[key],
-        uploaded: true
-      };
-    }
-
     if (!parsedBody.documents[key]) {
       parsedBody.documents[key] = {};
     }
@@ -329,6 +348,9 @@ async update(
         existingDocuments[`${key}HardCopy`] ?? false;
     }
   });
+
+  // Remove transient frontend key once mapped to canonical backend key.
+  delete parsedBody.documents.profilePhoto;
 
   // ✅ DEBUG (optional)
   console.log('FINAL DOCUMENTS:', parsedBody.documents);

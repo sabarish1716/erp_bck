@@ -87,8 +87,9 @@ export class HrController {
     @Req() req: any,
     @Query('status') status?: string,
     @Query('staffId') staffId?: string,
+    @Query('month') month?: string,
   ) {
-    return this.hrService.getLeaveApplications({ status, staffId }, req.user);
+    return this.hrService.getLeaveApplications({ status, staffId, month }, req.user);
   }
 
   @Post('leave/apply')

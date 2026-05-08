@@ -138,6 +138,115 @@ function parseSubjectsJson(value: unknown) {
   }
 }
 
+const BULK_UPLOAD_ALLOWED_KEYS = new Set(
+  [
+    'name',
+    'standard',
+    'gender',
+    'dob',
+    'religion',
+    'community',
+    'communityother',
+    'customcommunity',
+    'caste',
+    'mothertongue',
+    'aadharno',
+    'bloodgroup',
+    'identitymark1',
+    'identitymark2',
+    'previouslystudied',
+    'previousschool',
+    'transportmode',
+    'vanneeded',
+    'rte',
+    'rteapplied',
+    'section',
+    'academicyear',
+    'academicstream',
+    'preferredphone',
+    'parentsemail',
+    'email',
+    'fathername',
+    'fatherphone',
+    'fatherwhatsappno',
+    'fatherwhatsapp',
+    'fatheraadharno',
+    'fatheraadhar',
+    'fatheroccupation',
+    'mothername',
+    'motherphone',
+    'motherwhatsappno',
+    'motherwhatsapp',
+    'motheraadharno',
+    'motheraadhar',
+    'motheroccupation',
+    'familyincome',
+    'siblingscount',
+    'sibblings',
+    'hostelrequired',
+    'issingleparent',
+    'guardianname',
+    'guardianphone',
+    'guardianwhatsapp',
+    'guardianaadhar',
+    'guardianoccupation',
+    'guardianrelation',
+    'sibling1name',
+    'sibling1standard',
+    'sibling1school',
+    'sibling2name',
+    'sibling2standard',
+    'sibling2school',
+    'doorno',
+    'street',
+    'landmark',
+    'city',
+    'state',
+    'pin',
+    'line1',
+    'line2',
+    'line3',
+    'examname',
+    'boardexamtype',
+    'boardname',
+    'registerno',
+    'monthyear',
+    'totalmaxmarks',
+    'totalobtainedmarks',
+    'totalpercentage',
+    'subjectsjson',
+    'admissiondate',
+    'admissionfrom',
+    'admissionto',
+  ],
+);
+
+function normalizeBulkUploadKey(key: string): string {
+  return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+const BULK_UPLOAD_TEMPLATE_HEADERS = [
+  'name',
+  'standard',
+  'gender',
+  'dob',
+  'religion',
+  'community',
+  'fatherName',
+  'fatherPhone',
+  'motherName',
+  'motherPhone',
+  'section',
+  'academicYear',
+  'admissionDate',
+  'doorNo',
+  'street',
+  'city',
+  'state',
+  'pin',
+  'email',
+];
+
 /**
  * Process and validate sibling school selection.
  * Logic:
@@ -288,6 +397,8 @@ export class AdmissionService {
    * Bulk create admissions from parsed CSV rows.
    */
   async bulkCreateFromCsv(rows: any[]) {
+    this.validateBulkUploadRows(rows);
+
     const results: { row: number; status: string; admissionNo?: string; error?: string }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
@@ -397,6 +508,52 @@ export class AdmissionService {
     const errorCount = results.filter(r => r.status === 'error').length;
 
     return { total: rows.length, successCount, errorCount, results };
+  }
+
+  getBulkUploadTemplateCsv() {
+    const sampleRow = [
+      'Arun Kumar',
+      'STD_6',
+      'MALE',
+      '2015-03-14',
+      'Hindu',
+      'BC',
+      'Ravi Kumar',
+      '9876543210',
+      'Meena',
+      '9876543211',
+      'A',
+      '2026-2027',
+      '2026-04-10',
+      '12/4',
+      'North Street',
+      'Madurai',
+      'Tamil Nadu',
+      '625001',
+      'arun.kumar@example.com',
+    ].map((cell) => this.escapeCsvCell(cell));
+
+    return [BULK_UPLOAD_TEMPLATE_HEADERS.join(','), sampleRow.join(',')].join('\n');
+  }
+
+  private validateBulkUploadRows(rows: any[]) {
+    rows.forEach((row, index) => {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        throw new BadRequestException(`Row ${index + 1} is invalid. Each row must be an object.`);
+      }
+
+      const keys = Object.keys(row).filter((key) => key.trim() !== '');
+      if (keys.length === 0) {
+        throw new BadRequestException(`Row ${index + 1} is empty.`);
+      }
+
+      const unsupported = keys.filter((key) => !BULK_UPLOAD_ALLOWED_KEYS.has(normalizeBulkUploadKey(key)));
+      if (unsupported.length > 0) {
+        throw new BadRequestException(
+          `Row ${index + 1} contains non-application columns: ${unsupported.join(', ')}. Download and use the bulk upload template.`,
+        );
+      }
+    });
   }
 
 async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
@@ -522,8 +679,8 @@ parentsEmail: data.parentsEmail,
         ? {
             create: [
               {
-                photo: docs.profilePhoto?.uploaded ?? false,
-                photoPath: normalizePath(docs.profilePhoto?.path),
+                photo: docs.profilePhoto?.uploaded ?? docs.photo?.uploaded ?? false,
+                photoPath: normalizePath(docs.profilePhoto?.path || docs.photo?.path),
 
                 birthCert: docs.birthCert?.uploaded ?? false,
                 birthCertPath: normalizePath(docs.birthCert?.path),
@@ -817,6 +974,7 @@ parentsEmail: data.parentsEmail,
     if (data.dob) updateData.dob = new Date(data.dob);
 
     if (data.family) {
+      const familyAny = data.family as any;
       updateData.family = {
         upsert: {
           update: {
@@ -825,6 +983,8 @@ parentsEmail: data.parentsEmail,
             fatherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherWhatsapp,
             fatherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherAadhar,
             fatherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherOccupation,
+            preferredPhone: familyAny.preferredPhone || data.preferredPhone,
+            parentsEmail: familyAny.parentsEmail || data.parentsEmail,
             motherName: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherName,
             motherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherPhone,
             motherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherWhatsapp,
@@ -875,6 +1035,8 @@ parentsEmail: data.parentsEmail,
             fatherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherWhatsapp,
             fatherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherAadhar,
             fatherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherOccupation,
+            preferredPhone: familyAny.preferredPhone || data.preferredPhone,
+            parentsEmail: familyAny.parentsEmail || data.parentsEmail,
             motherName: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherName,
             motherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherPhone,
             motherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherWhatsapp,
@@ -923,25 +1085,36 @@ parentsEmail: data.parentsEmail,
       };
     }
     if (data.address) {
+  const addressAny = data.address as any;
   updateData.address = {
     upsert: {
       update: {
-        line1: data.address.doorNo || data.address.line1 || 'Pending',
-        line2: data.address.street || data.address.line2 || '',
+        doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
+        street: addressAny.street || addressAny.village || addressAny.line2 || '',
+        landmark: addressAny.landmark || addressAny.taluk || '',
+        city: addressAny.city || addressAny.district || '',
+        state: addressAny.state || '',
+        line1: addressAny.doorNo || addressAny.line1 || 'Pending',
+        line2: addressAny.street || addressAny.village || addressAny.line2 || '',
         line3:
-          `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}`.trim() ||
-          data.address.line3 ||
+          `${addressAny.landmark || addressAny.taluk || ''}, ${addressAny.city || addressAny.district || ''}, ${addressAny.state || ''}`.trim() ||
+          addressAny.line3 ||
           '',
-        pin: data.address.pin || '000000',
+        pin: addressAny.pin || '000000',
       },
       create: {
-        line1: data.address.doorNo || data.address.line1 || 'Pending',
-        line2: data.address.street || data.address.line2 || '',
+        doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
+        street: addressAny.street || addressAny.village || addressAny.line2 || '',
+        landmark: addressAny.landmark || addressAny.taluk || '',
+        city: addressAny.city || addressAny.district || '',
+        state: addressAny.state || '',
+        line1: addressAny.doorNo || addressAny.line1 || 'Pending',
+        line2: addressAny.street || addressAny.village || addressAny.line2 || '',
         line3:
-          `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}`.trim() ||
-          data.address.line3 ||
+          `${addressAny.landmark || addressAny.taluk || ''}, ${addressAny.city || addressAny.district || ''}, ${addressAny.state || ''}`.trim() ||
+          addressAny.line3 ||
           '',
-        pin: data.address.pin || '000000',
+        pin: addressAny.pin || '000000',
       },
     },
   };
@@ -1108,7 +1281,17 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       ? { admissionDate: { gte: previousDateRange.start, lte: previousDateRange.end } }
       : undefined;
 
-    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal, recentAdmissions] = await Promise.all([
+    const admissionStudentIds = dateRange
+      ? await this.prisma.admission
+          .findMany({ where, select: { studentId: true } })
+          .then((rows) => rows.map((r) => r.studentId))
+      : null;
+
+    const docsMissingWhere = admissionStudentIds !== null
+      ? { id: { in: admissionStudentIds } }
+      : {};
+
+    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal, docsMissing, recentAdmissions] = await Promise.all([
       this.prisma.admission.count({ where }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: true } }),
       this.prisma.admission.count({ where: { ...(where || {}), isApproved: false } }),
@@ -1119,6 +1302,25 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       }),
       this.prisma.appSetting.findUnique({ where: { key: 'admission.standardSeats' } }),
       previousWhere ? this.prisma.admission.count({ where: previousWhere }) : Promise.resolve(0),
+      this.prisma.student.count({
+        where: {
+          ...docsMissingWhere,
+          OR: [
+            { documents: { none: {} } },
+            {
+              documents: {
+                some: {
+                  OR: [
+                    { birthCert: false, birthCertPath: null },
+                    { communityCert: false, communityCertPath: null },
+                    { aadharStudent: false, aadharStudentPath: null },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      }),
       this.prisma.admission.findMany({
         where,
         orderBy: { admissionDate: 'desc' },
@@ -1202,6 +1404,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       total,
       approved,
       pending,
+      docsMissing,
       byStandard: byStandard.map((s) => ({ standard: s.standard, count: s._count._all })),
       standardSeats: seatMap,
       seatSummary,

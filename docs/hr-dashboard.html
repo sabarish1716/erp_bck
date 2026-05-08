@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>HR Intelligence Dashboard | Curator HR</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;400;500;700;800&family=Public+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              primary: '#00152a',
+              'primary-container': '#102a43',
+              secondary: '#44617d',
+              'secondary-container': '#bfddfe',
+              tertiary: '#001813',
+              'tertiary-fixed-dim': '#44ddc1',
+              background: '#f6fafe',
+              surface: '#f6fafe',
+              'surface-container-lowest': '#ffffff',
+              'surface-container-low': '#f0f4f8',
+              'surface-container-high': '#e4e9ed',
+              'on-surface': '#171c1f',
+              'on-surface-variant': '#43474d',
+              'outline-variant': '#c3c6ce',
+              error: '#ba1a1a',
+            },
+            fontFamily: {
+              headline: ['Manrope', 'sans-serif'],
+              body: ['Public Sans', 'sans-serif'],
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        font-family: 'Public Sans', sans-serif;
+      }
+      h1,
+      h2,
+      h3,
+      h4 {
+        font-family: 'Manrope', sans-serif;
+      }
+      .material-symbols-outlined {
+        font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+      }
+      .action-card textarea {
+        min-height: 120px;
+      }
+      .status-badge {
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+    </style>
+  </head>
+  <body class="bg-surface text-on-surface">
+    <aside class="fixed inset-y-0 left-0 w-64 z-50 bg-primary flex flex-col h-full py-4 shadow-2xl">
+      <div class="text-white font-bold text-xl px-6 py-8">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-tertiary-fixed-dim flex items-center justify-center">
+            <span class="material-symbols-outlined text-primary text-xl">analytics</span>
+          </div>
+          <div>
+            <div class="leading-none">Curator HR</div>
+            <div class="text-[10px] uppercase tracking-widest opacity-60 font-medium mt-1">Enterprise Suite</div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="flex-1 px-4 space-y-1" id="navTabs"></nav>
+
+      <div class="px-6 mt-6">
+        <button
+          class="w-full py-3 px-4 bg-tertiary-fixed-dim hover:bg-[#68fadd] text-primary font-bold rounded-xl transition-all"
+          id="refreshAllBtn"
+          type="button"
+        >
+          Refresh Dashboard
+        </button>
+      </div>
+
+      <div class="mt-auto px-4 space-y-1 pb-4">
+        <a class="flex items-center px-4 py-3 rounded-xl text-[#d1e4ff]/70 hover:text-white hover:bg-[#102a43]" href="#">
+          <span class="material-symbols-outlined mr-3">help_center</span>
+          <span class="font-medium text-sm">Support</span>
+        </a>
+      </div>
+    </aside>
+
+    <header class="fixed top-0 right-0 left-0 z-40 bg-[#f6fafe]/80 backdrop-blur-md h-16 px-6 md:px-8 ml-0 md:ml-64 shadow-[0_20px_40px_rgba(1,29,53,0.06)]">
+      <div class="h-full flex flex-wrap items-center justify-between gap-2">
+        <div class="font-black text-xl md:text-2xl tracking-tight text-primary">HR Intelligence</div>
+        <div class="flex items-center gap-2 w-full md:w-auto">
+          <input
+            class="w-full md:w-64 bg-surface-container-high border-none rounded-full py-1.5 px-4 text-sm focus:ring-2 focus:ring-primary"
+            id="baseUrl"
+            placeholder="Base URL (default /erp/api)"
+            type="text"
+          />
+          <input
+            class="w-full md:w-72 bg-surface-container-high border-none rounded-full py-1.5 px-4 text-sm focus:ring-2 focus:ring-primary"
+            id="token"
+            placeholder="Bearer token (optional)"
+            type="password"
+          />
+        </div>
+      </div>
+    </header>
+
+    <main class="ml-0 md:ml-64 pt-20 p-4 md:p-8 min-h-screen">
+      <section class="mb-8">
+        <div class="flex flex-col mb-6">
+          <h2 class="text-2xl md:text-3xl font-extrabold text-primary tracking-tight">Institutional Overview</h2>
+          <p class="text-on-surface-variant">Live HR operational metrics wired to backend endpoints.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6" id="kpiGrid">
+          <div class="bg-surface-container-lowest p-6 rounded-xl shadow">
+            <p class="text-on-surface-variant text-sm font-semibold">Total Staff</p>
+            <h3 class="text-4xl font-black text-primary" id="kpiTotalStaff">-</h3>
+          </div>
+          <div class="bg-surface-container-lowest p-6 rounded-xl shadow">
+            <p class="text-on-surface-variant text-sm font-semibold">Present Today</p>
+            <h3 class="text-4xl font-black text-primary" id="kpiPresentPct">-</h3>
+          </div>
+          <div class="bg-surface-container-lowest p-6 rounded-xl shadow">
+            <p class="text-on-surface-variant text-sm font-semibold">Pending Leaves</p>
+            <h3 class="text-4xl font-black text-primary" id="kpiPendingLeaves">-</h3>
+          </div>
+          <div class="bg-surface-container-lowest p-6 rounded-xl shadow">
+            <p class="text-on-surface-variant text-sm font-semibold">Draft Payroll Rows</p>
+            <h3 class="text-4xl font-black text-primary" id="kpiDraftPayroll">-</h3>
+          </div>
+        </div>
+      </section>
+
+      <section class="bg-surface-container-lowest rounded-xl shadow p-4 md:p-6 mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-extrabold text-primary">Response Console</h3>
+          <span class="text-xs text-on-surface-variant">All API actions render here</span>
+        </div>
+        <pre class="bg-[#0b2239] text-[#d9ecff] p-4 rounded-lg overflow-auto text-xs" id="responseConsole">No request sent yet.</pre>
+      </section>
+
+      <section id="contentSections" class="space-y-8"></section>
+    </main>
+
+    <template id="actionCardTemplate">
+      <article class="action-card bg-surface-container-lowest rounded-xl border border-outline-variant/40 p-4 shadow">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <h4 class="font-extrabold text-primary text-sm"></h4>
+          <span class="status-badge"></span>
+        </div>
+        <p class="text-xs text-on-surface-variant mb-3 endpoint-path"></p>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 fields-grid"></div>
+        <label class="text-xs font-semibold text-on-surface-variant body-label hidden mb-1">Request Body (JSON)</label>
+        <textarea class="w-full rounded-lg border border-outline-variant bg-white text-xs p-2 hidden body-input"></textarea>
+        <div class="mt-3 flex items-center justify-between">
+          <button type="button" class="px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold run-btn">Run</button>
+          <span class="text-[11px] text-on-surface-variant last-run"></span>
+        </div>
+      </article>
+    </template>
+
+    <script>
+      const navItems = [
+        { id: 'attendance', label: 'Attendance', icon: 'event_available' },
+        { id: 'leave', label: 'Leaves', icon: 'calendar_today' },
+        { id: 'permission', label: 'Permission', icon: 'schedule' },
+        { id: 'payroll', label: 'Payroll', icon: 'payments' },
+        { id: 'statutory', label: 'PF/ESI', icon: 'account_balance' },
+        { id: 'essl', label: 'ESSL', icon: 'fingerprint' },
+        { id: 'staffMgmt', label: 'Staff & Finance Ops', icon: 'group' },
+      ];
+
+      const apiGroups = {
+        attendance: [
+          { title: 'Get Staff List', method: 'GET', path: '/hr/staff-list' },
+          { title: 'Get Dashboard', method: 'GET', path: '/hr/dashboard' },
+          { title: 'Get Attendance', method: 'GET', path: '/hr/attendance', query: ['date', 'month', 'staffId'] },
+          { title: 'Monthly Attendance Report', method: 'GET', path: '/hr/attendance/monthly-report/:month', params: ['month'] },
+          {
+            title: 'Mark Attendance',
+            method: 'POST',
+            path: '/hr/attendance/mark',
+            body: {
+              staffId: '',
+              date: '2026-05-01',
+              status: 'PRESENT',
+              checkIn: '09:10',
+              checkOut: '17:40',
+              punchMethod: 'MANUAL',
+              workingHours: 8,
+              remarks: '',
+            },
+          },
+          {
+            title: 'Bulk Mark Attendance',
+            method: 'POST',
+            path: '/hr/attendance/bulk-mark',
+            body: {
+              date: '2026-05-01',
+              entries: [
+                {
+                  staffId: '',
+                  status: 'PRESENT',
+                  checkIn: '09:05',
+                  checkOut: '17:35',
+                  punchMethod: 'BIOMETRIC',
+                  remarks: '',
+                },
+              ],
+            },
+          },
+          {
+            title: 'Update Attendance',
+            method: 'PUT',
+            path: '/hr/attendance/:id',
+            params: ['id'],
+            body: {
+              status: 'HALF_DAY',
+              checkIn: '10:00',
+              checkOut: '14:30',
+              punchMethod: 'MANUAL',
+              workingHours: 4.5,
+              remarks: '',
+            },
+          },
+        ],
+        leave: [
+          { title: 'Get Leave Types', method: 'GET', path: '/hr/leave/types' },
+          {
+            title: 'Create Leave Type',
+            method: 'POST',
+            path: '/hr/leave/types',
+            body: { name: 'Special Casual Leave', code: 'SCL', maxPerYear: 3, carryForward: false },
+          },
+          { title: 'Get Leave Policy', method: 'GET', path: '/hr/leave/policy', query: ['staffId'] },
+          { title: 'Get Leave Applications', method: 'GET', path: '/hr/leave/applications', query: ['status', 'staffId'] },
+          {
+            title: 'Apply Leave',
+            method: 'POST',
+            path: '/hr/leave/apply',
+            body: {
+              staffId: '',
+              leaveTypeId: '',
+              fromDate: '2026-05-10',
+              toDate: '2026-05-12',
+              days: 3,
+              halfDay: false,
+              reason: 'Medical leave',
+            },
+          },
+          { title: 'Approve Leave', method: 'PUT', path: '/hr/leave/:id/approve', params: ['id'], body: { approvedBy: '' } },
+          {
+            title: 'Reject Leave',
+            method: 'PUT',
+            path: '/hr/leave/:id/reject',
+            params: ['id'],
+            body: { rejectedBy: '', rejectionNote: 'Insufficient balance' },
+          },
+          { title: 'Cancel Leave', method: 'PUT', path: '/hr/leave/:id/cancel', params: ['id'] },
+          { title: 'Get Leave Balances', method: 'GET', path: '/hr/leave/balances', query: ['staffId', 'year'] },
+          { title: 'Init Leave Balance', method: 'POST', path: '/hr/leave/balances/init', body: { staffId: '', year: '2026' } },
+        ],
+        permission: [
+          { title: 'Get Permissions', method: 'GET', path: '/hr/permission', query: ['staffId', 'month', 'status'] },
+          { title: 'Permission Summary', method: 'GET', path: '/hr/permission/summary/:month', params: ['month'] },
+          {
+            title: 'Apply Permission',
+            method: 'POST',
+            path: '/hr/permission/apply',
+            body: { staffId: '', date: '2026-05-05', fromTime: '15:00', toTime: '17:00', hours: 2, reason: 'Personal work' },
+          },
+          { title: 'Approve Permission', method: 'PUT', path: '/hr/permission/:id/approve', params: ['id'], body: { approvedBy: '' } },
+          {
+            title: 'Reject Permission',
+            method: 'PUT',
+            path: '/hr/permission/:id/reject',
+            params: ['id'],
+            body: { rejectedBy: '', reason: 'Peak operations', rejectionNote: 'Cannot spare staff in this shift' },
+          },
+        ],
+        payroll: [
+          { title: 'Generate Payroll', method: 'POST', path: '/hr/payroll/generate', body: { month: '2026-05', staffIds: [] } },
+          { title: 'Get Payrolls', method: 'GET', path: '/hr/payroll', query: ['month', 'staffId', 'status'] },
+          { title: 'Get Payroll Detail', method: 'GET', path: '/hr/payroll/:id', params: ['id'] },
+          { title: 'Approve Payroll Batch', method: 'PUT', path: '/hr/payroll/approve', body: { ids: [] } },
+          { title: 'Approve Payroll Row', method: 'PUT', path: '/hr/payroll/:id/approve', params: ['id'] },
+          { title: 'LOP Report', method: 'GET', path: '/hr/payroll/lop-report/:month', params: ['month'] },
+          {
+            title: 'Update Payroll Manual',
+            method: 'PUT',
+            path: '/hr/payroll/:id/update',
+            params: ['id'],
+            body: { lopCancelled: false, bonusIncentive: 0, extraAllowance: 0 },
+          },
+          { title: 'Cancel Payroll LOP', method: 'PUT', path: '/hr/payroll/:id/cancel-lop', params: ['id'] },
+          { title: 'Salary Abstract', method: 'GET', path: '/hr/salary-abstract/:month', params: ['month'] },
+        ],
+        statutory: [
+          { title: 'Get Statutory Settings', method: 'GET', path: '/hr/statutory/settings' },
+          {
+            title: 'Update Statutory Settings',
+            method: 'PUT',
+            path: '/hr/statutory/settings',
+            body: {
+              pfEnabled: true,
+              pfEmployeeRate: 12,
+              pfEmployerRate: 12,
+              pfWageLimit: 15000,
+              pfAdminCharges: 0.5,
+              pfEdliCharges: 0.5,
+              esiEnabled: true,
+              esiEmployeeRate: 0.75,
+              esiEmployerRate: 3.25,
+              esiWageLimit: 21000,
+              esiDailyWageThreshold: 176,
+              psfEnabled: false,
+              psfEmployeeRate: 0,
+              psfWageLimit: 0,
+              ptEnabled: false,
+              ptAmount: 0,
+              basicRate: 50,
+              hraRate: 20,
+              travelAllowanceRate: 10,
+              otherAllowanceRate: 20,
+              clLapseMonths: 3,
+            },
+          },
+          { title: 'Get Statutory Staff List', method: 'GET', path: '/hr/statutory/staff' },
+          {
+            title: 'Update Staff Statutory',
+            method: 'PUT',
+            path: '/hr/statutory/staff/:staffId',
+            params: ['staffId'],
+            body: {
+              pfNumber: '',
+              uanNumber: '',
+              esiNumber: '',
+              basicSalary: 0,
+              grossSalary: 0,
+              pfEnabled: true,
+              esiEnabled: true,
+              psfEnabled: false,
+              isStipend: false,
+              dailyRate: 0,
+            },
+          },
+          { title: 'Monthly Statutory Report', method: 'GET', path: '/hr/statutory/report/:month', params: ['month'] },
+          { title: 'All Statutory Data', method: 'GET', path: '/hr/statutory/all' },
+          { title: 'PF Staff Report', method: 'GET', path: '/hr/report/pf-staff', query: ['month'] },
+          { title: 'Non-PF Staff Report', method: 'GET', path: '/hr/report/non-pf-staff', query: ['month'] },
+        ],
+        essl: [
+          { title: 'Get Devices', method: 'GET', path: '/hr/essl/devices' },
+          {
+            title: 'Create Device',
+            method: 'POST',
+            path: '/hr/essl/devices',
+            body: {
+              name: 'Main Gate Reader',
+              ipAddress: '192.168.1.20',
+              port: 4370,
+              serialNumber: 'SN123',
+              deviceType: 'ZKTeco',
+              location: 'Main Campus',
+            },
+          },
+          {
+            title: 'Update Device',
+            method: 'PUT',
+            path: '/hr/essl/devices/:id',
+            params: ['id'],
+            body: {
+              name: 'Main Gate Reader',
+              ipAddress: '192.168.1.20',
+              port: 4370,
+              serialNumber: 'SN123',
+              deviceType: 'ZKTeco',
+              location: 'Main Campus',
+              isOnline: true,
+            },
+          },
+          { title: 'Delete Device', method: 'DELETE', path: '/hr/essl/devices/:id', params: ['id'] },
+          { title: 'Get Punch Logs', method: 'GET', path: '/hr/essl/punch-logs', query: ['deviceId', 'date', 'staffId'] },
+          { title: 'Get Staff Mappings', method: 'GET', path: '/hr/essl/staff-mappings' },
+          {
+            title: 'Map Staff Device',
+            method: 'POST',
+            path: '/hr/essl/staff-mappings',
+            body: { staffId: '', deviceId: '', deviceUserId: '' },
+          },
+          { title: 'Remove Staff Mapping', method: 'DELETE', path: '/hr/essl/staff-mappings/:staffId', params: ['staffId'] },
+          { title: 'Sync Single Device', method: 'POST', path: '/hr/essl/sync/:deviceId', params: ['deviceId'] },
+          { title: 'Sync All Devices', method: 'POST', path: '/hr/essl/sync-all' },
+          { title: 'Sync History', method: 'GET', path: '/hr/essl/sync-history', query: ['deviceId'] },
+        ],
+        staffMgmt: [
+          {
+            title: 'Create Advance Request',
+            method: 'POST',
+            path: '/hr/advance',
+            body: { staffId: '', type: 'ADVANCE', amount: 5000, reason: '', monthlyDeduction: 1000 },
+          },
+          { title: 'Get Advance Requests', method: 'GET', path: '/hr/advance', query: ['staffId', 'status', 'type'] },
+          { title: 'Get Advance Detail', method: 'GET', path: '/hr/advance/:id', params: ['id'] },
+          { title: 'Approve Advance', method: 'PUT', path: '/hr/advance/:id/approve', params: ['id'], body: { email: '' } },
+          {
+            title: 'Reject Advance',
+            method: 'PUT',
+            path: '/hr/advance/:id/reject',
+            params: ['id'],
+            body: { email: '', reason: 'Not eligible this month' },
+          },
+          { title: 'Disburse Advance', method: 'PUT', path: '/hr/advance/:id/disburse', params: ['id'] },
+          {
+            title: 'Create Increment',
+            method: 'POST',
+            path: '/hr/increment',
+            body: {
+              staffId: '',
+              fromSalary: 30000,
+              toSalary: 34000,
+              incrementDate: '2026-05-01',
+              effectiveDate: '2026-05-01',
+              reason: 'Annual review',
+            },
+          },
+          { title: 'Increment History', method: 'GET', path: '/hr/increment/history/:staffId', params: ['staffId'], query: ['status'] },
+          { title: 'All Increments', method: 'GET', path: '/hr/increment/all', query: ['status'] },
+          { title: 'Approve Increment', method: 'PUT', path: '/hr/increment/:id/approve', params: ['id'], body: { approvedBy: '', notes: '' } },
+          {
+            title: 'Reject Increment',
+            method: 'PUT',
+            path: '/hr/increment/:id/reject',
+            params: ['id'],
+            body: { rejectedBy: '', rejectionReason: 'Insufficient budget' },
+          },
+          {
+            title: 'Create Loan',
+            method: 'POST',
+            path: '/hr/loan',
+            body: {
+              staffId: '',
+              loanAmount: 50000,
+              emiAmount: 5000,
+              emiFrequency: 'MONTHLY',
+              startMonth: '2026-06',
+              reason: 'Personal',
+            },
+          },
+          { title: 'Get Staff Loans', method: 'GET', path: '/hr/loan/staff/:staffId', params: ['staffId'], query: ['status'] },
+          { title: 'Get Loan Detail', method: 'GET', path: '/hr/loan/:id', params: ['id'] },
+          { title: 'Approve Loan', method: 'PUT', path: '/hr/loan/:id/approve', params: ['id'], body: { approvedBy: '', notes: '' } },
+          {
+            title: 'Reject Loan',
+            method: 'PUT',
+            path: '/hr/loan/:id/reject',
+            params: ['id'],
+            body: { rejectedBy: '', rejectionReason: 'Eligibility check failed' },
+          },
+          { title: 'Skip Loan EMI', method: 'PUT', path: '/hr/loan/:id/skip-emi', params: ['id'], body: { month: '2026-07', reason: '' } },
+          { title: 'Resume Loan EMI', method: 'PUT', path: '/hr/loan/:id/resume-emi', params: ['id'], body: { month: '2026-08' } },
+          { title: 'Pre-Close Loan', method: 'PUT', path: '/hr/loan/:id/pre-close', params: ['id'], body: { partialAmount: 10000, reason: '' } },
+          { title: 'Loans by Status', method: 'GET', path: '/hr/loan-by-status/:status', params: ['status'] },
+        ],
+      };
+
+      const navTabs = document.getElementById('navTabs');
+      const contentSections = document.getElementById('contentSections');
+      const actionCardTemplate = document.getElementById('actionCardTemplate');
+      const responseConsole = document.getElementById('responseConsole');
+
+      function createNav() {
+        navItems.forEach((item, index) => {
+          const a = document.createElement('button');
+          a.type = 'button';
+          a.className =
+            'w-full flex items-center px-4 py-3 rounded-xl duration-200 text-[#d1e4ff]/70 hover:text-white hover:bg-[#102a43]';
+          if (index === 0) {
+            a.classList.add('bg-gradient-to-r', 'from-[#00152a]', 'to-[#102a43]', 'text-white', 'border-l-4', 'border-[#44ddc1]');
+          }
+          a.dataset.tab = item.id;
+          a.innerHTML =
+            '<span class="material-symbols-outlined mr-3">' +
+            item.icon +
+            '</span><span class="font-medium text-sm">' +
+            item.label +
+            '</span>';
+          a.addEventListener('click', () => activateTab(item.id));
+          navTabs.appendChild(a);
+        });
+      }
+
+      function activateTab(tabId) {
+        navTabs.querySelectorAll('button').forEach((btn) => {
+          const isActive = btn.dataset.tab === tabId;
+          btn.className =
+            'w-full flex items-center px-4 py-3 rounded-xl duration-200 text-[#d1e4ff]/70 hover:text-white hover:bg-[#102a43]';
+          if (isActive) {
+            btn.classList.add('bg-gradient-to-r', 'from-[#00152a]', 'to-[#102a43]', 'text-white', 'border-l-4', 'border-[#44ddc1]');
+          }
+        });
+        contentSections.querySelectorAll('[data-section]').forEach((el) => {
+          el.classList.toggle('hidden', el.dataset.section !== tabId);
+        });
+      }
+
+      function methodBadgeClass(method) {
+        if (method === 'GET') return 'bg-[#d7ecff] text-[#0d3655]';
+        if (method === 'POST') return 'bg-[#ddf9ef] text-[#045838]';
+        if (method === 'PUT') return 'bg-[#fff3d6] text-[#7a5000]';
+        if (method === 'DELETE') return 'bg-[#ffe0dc] text-[#7b1f16]';
+        return 'bg-surface-container-high text-on-surface';
+      }
+
+      function createField(label, type, key) {
+        const wrapper = document.createElement('label');
+        wrapper.className = 'block';
+
+        const t = document.createElement('span');
+        t.className = 'text-[11px] font-semibold text-on-surface-variant';
+        t.textContent = label;
+
+        const input = document.createElement('input');
+        input.type = type;
+        input.dataset.key = key;
+        input.className = 'mt-1 w-full rounded-lg border border-outline-variant bg-white text-xs p-2';
+
+        wrapper.appendChild(t);
+        wrapper.appendChild(input);
+        return wrapper;
+      }
+
+      function buildSections() {
+        Object.entries(apiGroups).forEach(([groupId, actions]) => {
+          const section = document.createElement('section');
+          section.dataset.section = groupId;
+          section.className = 'hidden';
+
+          const title = document.createElement('h3');
+          title.className = 'text-xl font-extrabold text-primary mb-3';
+          title.textContent = navItems.find((n) => n.id === groupId).label + ' Actions';
+
+          const subtitle = document.createElement('p');
+          subtitle.className = 'text-sm text-on-surface-variant mb-4';
+          subtitle.textContent = 'Every backend functionality and filter for this module is exposed below.';
+
+          const grid = document.createElement('div');
+          grid.className = 'grid grid-cols-1 xl:grid-cols-2 gap-4';
+
+          actions.forEach((action) => {
+            const card = actionCardTemplate.content.firstElementChild.cloneNode(true);
+            const h4 = card.querySelector('h4');
+            const badge = card.querySelector('.status-badge');
+            const endpointPath = card.querySelector('.endpoint-path');
+            const fieldsGrid = card.querySelector('.fields-grid');
+            const bodyLabel = card.querySelector('.body-label');
+            const bodyInput = card.querySelector('.body-input');
+            const runBtn = card.querySelector('.run-btn');
+            const lastRun = card.querySelector('.last-run');
+
+            h4.textContent = action.title;
+            badge.textContent = action.method;
+            badge.className = 'status-badge ' + methodBadgeClass(action.method);
+            endpointPath.textContent = action.path;
+
+            (action.params || []).forEach((key) => {
+              fieldsGrid.appendChild(createField('Path: ' + key, 'text', 'path:' + key));
+            });
+
+            (action.query || []).forEach((key) => {
+              fieldsGrid.appendChild(createField('Query: ' + key, 'text', 'query:' + key));
+            });
+
+            if (action.body) {
+              bodyLabel.classList.remove('hidden');
+              bodyInput.classList.remove('hidden');
+              bodyInput.value = JSON.stringify(action.body, null, 2);
+            }
+
+            runBtn.addEventListener('click', async () => {
+              runBtn.disabled = true;
+              runBtn.textContent = 'Running...';
+              try {
+                const pathParams = {};
+                const queryParams = {};
+                fieldsGrid.querySelectorAll('input').forEach((input) => {
+                  const value = input.value.trim();
+                  if (!value) return;
+                  const [kind, key] = input.dataset.key.split(':');
+                  if (kind === 'path') pathParams[key] = value;
+                  if (kind === 'query') queryParams[key] = value;
+                });
+
+                let parsedBody;
+                if (action.body) {
+                  parsedBody = bodyInput.value.trim() ? JSON.parse(bodyInput.value) : {};
+                }
+
+                const response = await callApi(action.method, action.path, {
+                  pathParams,
+                  queryParams,
+                  body: parsedBody,
+                });
+
+                lastRun.textContent = 'Last run: ' + new Date().toLocaleTimeString();
+                writeConsole(response);
+              } catch (err) {
+                writeConsole({ error: err.message || String(err) });
+              } finally {
+                runBtn.disabled = false;
+                runBtn.textContent = 'Run';
+              }
+            });
+
+            grid.appendChild(card);
+          });
+
+          section.appendChild(title);
+          section.appendChild(subtitle);
+          section.appendChild(grid);
+          contentSections.appendChild(section);
+        });
+      }
+
+      function resolvePath(path, pathParams) {
+        let resolved = path;
+        Object.entries(pathParams || {}).forEach(([key, value]) => {
+          resolved = resolved.replace(':' + key, encodeURIComponent(value));
+        });
+        return resolved;
+      }
+
+      function toQueryString(queryParams) {
+        const entries = Object.entries(queryParams || {}).filter(([, v]) => v !== '' && v !== undefined && v !== null);
+        if (!entries.length) return '';
+        const usp = new URLSearchParams();
+        entries.forEach(([k, v]) => usp.append(k, String(v)));
+        return '?' + usp.toString();
+      }
+
+      async function callApi(method, path, { pathParams, queryParams, body }) {
+        const baseRaw = (document.getElementById('baseUrl').value || '/erp/api').trim();
+        const token = document.getElementById('token').value.trim();
+        const base = baseRaw.endsWith('/') ? baseRaw.slice(0, -1) : baseRaw;
+
+        const resolvedPath = resolvePath(path, pathParams);
+        const query = toQueryString(queryParams);
+        const url = base + resolvedPath + query;
+
+        const headers = { Accept: 'application/json' };
+        if (token) headers.Authorization = 'Bearer ' + token;
+        if (method !== 'GET' && method !== 'DELETE') headers['Content-Type'] = 'application/json';
+
+        const res = await fetch(url, {
+          method,
+          headers,
+          body: method === 'GET' || method === 'DELETE' ? undefined : JSON.stringify(body || {}),
+        });
+
+        const text = await res.text();
+        let data;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = text;
+        }
+
+        if (!res.ok) {
+          throw new Error(method + ' ' + resolvedPath + ' failed (' + res.status + '): ' + JSON.stringify(data));
+        }
+
+        return { ok: true, status: res.status, method, endpoint: resolvedPath + query, data };
+      }
+
+      function writeConsole(payload) {
+        responseConsole.textContent = JSON.stringify(payload, null, 2);
+      }
+
+      function readCount(dashboard, keys) {
+        if (!dashboard || typeof dashboard !== 'object') return '-';
+        for (const key of keys) {
+          if (dashboard[key] !== undefined && dashboard[key] !== null) return String(dashboard[key]);
+        }
+        return '-';
+      }
+
+      async function refreshKpis() {
+        try {
+          const dashboardRes = await callApi('GET', '/hr/dashboard', { pathParams: {}, queryParams: {} });
+          const payrollRes = await callApi('GET', '/hr/payroll', {
+            pathParams: {},
+            queryParams: { month: new Date().toISOString().slice(0, 7), status: 'DRAFT' },
+          });
+
+          const dashboard = dashboardRes.data;
+          const payrollRows = Array.isArray(payrollRes.data) ? payrollRes.data.length : readCount(payrollRes.data, ['count', 'total']);
+
+          document.getElementById('kpiTotalStaff').textContent = readCount(dashboard, ['totalStaff', 'staffCount', 'totalEmployees']);
+          document.getElementById('kpiPresentPct').textContent = readCount(dashboard, ['presentPercentage', 'attendancePercent', 'presentToday']) +
+            (String(readCount(dashboard, ['presentPercentage', 'attendancePercent'])).includes('%') ? '' : '%');
+          document.getElementById('kpiPendingLeaves').textContent = readCount(dashboard, ['pendingLeave', 'pendingLeaves', 'leavePendingCount']);
+          document.getElementById('kpiDraftPayroll').textContent = String(payrollRows);
+        } catch (err) {
+          writeConsole({ error: 'KPI refresh failed', message: err.message || String(err) });
+        }
+      }
+
+      document.getElementById('refreshAllBtn').addEventListener('click', refreshKpis);
+
+      createNav();
+      buildSections();
+      activateTab('attendance');
+      refreshKpis();
+    </script>
+  </body>
+</html>

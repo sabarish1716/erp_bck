@@ -257,7 +257,7 @@ model Address {
   landmark  String?
   city      String?
   state     String?
-  line1     String
+  line1     String?
   line2     String?
   line3     String?
   pin       String
@@ -1768,6 +1768,13 @@ enum DocRequestType {
   OTHER
 }
 
+enum BonafideScenarioType {
+  STUDY_PURPOSE
+  PASSPORT_VISA
+  SCHOLARSHIP
+  EDUCATION_LOAN
+}
+
 enum DocRequestStatus {
   REQUESTED    // Staff/parent raised request
   IN_REVIEW    // Under admin/principal review
@@ -1785,6 +1792,12 @@ model DocRequest {
   reason          String?                           // why the document is needed
   remarks         String?                           // internal staff notes
   rejectionReason String?
+
+  // Bonafide: scenario/template selection
+  bonafideScenario    BonafideScenarioType?
+  bonafidePurpose     String?
+  bonafideAuthority   String?
+  bonafideTemplateText String?
 
   // Tracking
   requestedById   Int                               // User.id who raised the request

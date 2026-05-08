@@ -31,7 +31,7 @@ const DEFAULT_SETTINGS = {
   schoolName: 'PSF School',
   schoolCode: 'PSF',
   academicYear: '2026-2027',
-  requireApprovalForAdmission: true,
+  requireApprovalForAdmission: false,
   allowAdmissionEditAfterApproval: false,
   enableFeesModule: true,
   enableTransportModule: true,
