@@ -3,9 +3,13 @@ import { BadRequestException } from '@nestjs/common';
 
 describe('AdmissionService', () => {
   let service: AdmissionService;
+  let academicStreamService: any;
   let prisma: any;
 
   beforeEach(() => {
+    academicStreamService = {
+      resolveStreamId: jest.fn(),
+    };
     prisma = {
       appSetting: {
         findUnique: jest.fn(),
@@ -36,8 +40,9 @@ describe('AdmissionService', () => {
       },
     };
 
-    service = new AdmissionService(prisma);
+    service = new AdmissionService(prisma, academicStreamService);
   });
+
 
   it('returns year comparison and milestone data for dashboard summary', async () => {
     prisma.appSetting.findUnique

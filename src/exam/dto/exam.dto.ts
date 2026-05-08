@@ -1,6 +1,7 @@
 import { Type } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
-import { AcademicStream, ExamSession, PeriodType, Standard } from '@prisma/client';
+import { ExamSession, PeriodType, Standard } from '@prisma/client';
+
 
 export class CreateExamDto {
   @IsString()
@@ -43,8 +44,10 @@ export class CreateExamSubjectDto {
   section?: string;
 
   @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
+  @IsString()
+  academicStreamId?: string;
+
+
 
   @IsOptional()
   @IsInt()
@@ -99,8 +102,10 @@ export class CreateExamScheduleDto {
   section?: string;
 
   @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
+  @IsString()
+  academicStreamId?: string;
+
+
 
   @IsDateString()
   examDate!: string;
@@ -149,8 +154,10 @@ export class GenerateRollNumbersDto {
   section?: string;
 
   @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
+  @IsString()
+  academicStreamId?: string;
+
+
 
   @IsOptional()
   @IsString()
@@ -181,8 +188,10 @@ export class AutoGeneratePeriodsDto {
   section?: string;
 
   @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
+  @IsString()
+  academicStreamId?: string;
+
+
 
   @IsDateString()
   examDate!: string;
@@ -220,8 +229,10 @@ export class AutoGenerateFullTimetableDto {
   section?: string;
 
   @IsOptional()
-  @IsEnum(AcademicStream)
-  stream?: AcademicStream;
+  @IsString()
+  academicStreamId?: string;
+
+
 
   @Type(() => Number)
   @IsInt()

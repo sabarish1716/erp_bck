@@ -60,15 +60,17 @@ export class ExamService {
 
     return this.prisma.examSubject.create({
       data: {
-        examId: dto.examId,
+        exam: { connect: { id: dto.examId } },
         name: dto.name.trim(),
         code: dto.code.trim().toUpperCase(),
         standard: dto.standard,
         section: dto.section?.trim(),
-        stream: dto.stream,
+        stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+
         maxMarks: dto.maxMarks ?? 100,
         passMarks: dto.passMarks ?? 35,
-        teacherId: dto.teacherId ?? null,
+        teacher: dto.teacherId ? { connect: { id: dto.teacherId } } : undefined,
+
       },
       include: {
         teacher: {
@@ -138,7 +140,8 @@ export class ExamService {
     }
 
     await this.ensureNoHallOverlap(dto.hallIds, examDate, startsAt, endsAt);
-    await this.ensureNoClassOverlap(dto.standard, dto.section, dto.stream, examDate, startsAt, endsAt);
+    await this.ensureNoClassOverlap(dto.standard, dto.section, dto.academicStreamId, examDate, startsAt, endsAt);
+
 
     // Teacher clash check: if the subject has an assigned teacher, ensure they are not
     // already teaching another subject/class at the same date + overlapping time slot.
@@ -157,11 +160,12 @@ export class ExamService {
 
     return this.prisma.examSchedule.create({
       data: {
-        examId: dto.examId,
-        subjectId: dto.subjectId,
+        exam: { connect: { id: dto.examId } },
+        subject: { connect: { id: dto.subjectId } },
         standard: dto.standard,
         section: dto.section?.trim(),
-        stream: dto.stream,
+        stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+
         examDate,
         startsAt,
         endsAt,
@@ -169,6 +173,7 @@ export class ExamService {
         periodStart: dto.periodStart ?? null,
         periodEnd: dto.periodEnd ?? null,
         periodType: dto.periodType ?? null,
+
         halls: {
           create: halls.map((h) => ({ hallId: h.id })),
         },
@@ -392,18 +397,20 @@ export class ExamService {
       dayEnd.setUTCHours(23, 59, 59, 999);
 
       await this.ensureNoHallOverlapForPeriod(dto.hallIds, p.date, p.periodStart, p.periodEnd);
-      await this.ensureNoClassOverlapForPeriod(dto.standard, dto.section, dto.stream, p.date, p.periodStart, p.periodEnd);
+      await this.ensureNoClassOverlapForPeriod(dto.standard, dto.section, dto.academicStreamId, p.date, p.periodStart, p.periodEnd);
+
       if (subject.teacherId) {
         await this.ensureNoTeacherClash(subject.teacherId, p.date, dayStart, dayEnd, undefined, p.periodStart, p.periodEnd);
       }
 
       const entry = await this.prisma.examSchedule.create({
         data: {
-          examId: examId,
-          subjectId: dto.subjectId,
+          exam: { connect: { id: examId } },
+          subject: { connect: { id: dto.subjectId } },
           standard: dto.standard,
           section: dto.section?.trim(),
-          stream: dto.stream,
+          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+
           examDate: p.date,
           startsAt: dayStart,
           endsAt: dayEnd,
@@ -411,6 +418,7 @@ export class ExamService {
           periodStart: p.periodStart,
           periodEnd: p.periodEnd,
           periodType: p.periodType,
+
           halls: {
             create: halls.map((h) => ({ hallId: h.id })),
           },
@@ -456,7 +464,9 @@ export class ExamService {
         examId,
         standard: data.standard,
         section: data.section,
-        ...(data.stream ? { stream: data.stream } : {}),
+        ...(data.academicStreamId ? { academicStreamId: data.academicStreamId } : {}),
+
+
       },
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
@@ -481,7 +491,9 @@ export class ExamService {
           examId,
           standard: data.standard,
           section: data.section ?? null,
-          stream: data.stream ?? null,
+          academicStreamId: data.academicStreamId ?? null,
+
+
         },
       });
 
@@ -506,7 +518,9 @@ export class ExamService {
             hallIds: data.hallIds,
             standard: data.standard,
             section: data.section,
-            stream: data.stream,
+            academicStreamId: data.academicStreamId,
+
+
             examDate: new Date(currentDate),
             startsAt,
             endsAt,
@@ -517,11 +531,12 @@ export class ExamService {
 
           const entry = await tx.examSchedule.create({
             data: {
-              examId,
-              subjectId: subject.id,
+              exam: { connect: { id: examId } },
+              subject: { connect: { id: subject.id } },
               standard: data.standard,
               section: data.section,
-              stream: data.stream,
+              stream: data.academicStreamId ? { connect: { id: data.academicStreamId } } : undefined,
+
               examDate: new Date(currentDate),
               startsAt,
               endsAt,
@@ -529,6 +544,7 @@ export class ExamService {
               periodStart: i + 1,
               periodEnd: i + 1,
               periodType: type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
+
               halls: {
                 create: halls.map((h) => ({ hallId: h.id })),
               },
@@ -596,7 +612,8 @@ export class ExamService {
       hallIds: schedule.halls.map((h) => h.hallId),
       standard: schedule.standard,
       section: schedule.section ?? undefined,
-      stream: schedule.stream ?? undefined,
+      academicStreamId: schedule.academicStreamId ?? undefined,
+
       examDate: schedule.examDate,
       startsAt: schedule.startsAt,
       endsAt: schedule.endsAt,
@@ -681,7 +698,8 @@ export class ExamService {
     hallIds: string[];
     standard: any;
     section?: string;
-    stream?: any;
+    academicStreamId?: any;
+
     examDate: Date;
     startsAt: Date;
     endsAt: Date;
@@ -716,7 +734,9 @@ export class ExamService {
         ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
         standard: args.standard,
         section: args.section ?? null,
-        stream: args.stream ?? null,
+        academicStreamId: args.academicStreamId ?? null,
+
+
         examDate: args.examDate,
         ...overlapFilter,
       },
@@ -754,7 +774,9 @@ export class ExamService {
         standard: dto.standard,
         section: dto.section,
         academicYear,
-        ...(dto.stream ? { academicStream: dto.stream } : {}),
+        ...(dto.academicStreamId ? { academicStreamId: dto.academicStreamId } : {}),
+
+
       },
       include: { admission: { select: { admissionNo: true } } },
     });
@@ -785,17 +807,21 @@ export class ExamService {
           rollNumber,
           standard: dto.standard,
           section: dto.section,
-          stream: dto.stream,
+          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+
           academicYear,
+
         },
         create: {
-          examId,
-          studentId: student.id,
+          exam: { connect: { id: examId } },
+          student: { connect: { id: student.id } },
           rollNumber,
           standard: dto.standard,
           section: dto.section,
-          stream: dto.stream,
+          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+
           academicYear,
+
         },
       });
     });
@@ -851,7 +877,8 @@ export class ExamService {
         examId: schedule.examId,
         standard: schedule.standard,
         section: schedule.section,
-        stream: schedule.stream ?? undefined,
+        academicStreamId: schedule.academicStreamId ?? undefined,
+
       },
       orderBy: { rollNumber: 'asc' },
     });
@@ -1080,7 +1107,8 @@ export class ExamService {
   private async ensureNoClassOverlap(
     standard: any,
     section: string | undefined,
-    stream: any,
+    academicStreamId: any,
+
     examDate: Date,
     startsAt: Date,
     endsAt: Date,
@@ -1089,7 +1117,8 @@ export class ExamService {
       where: {
         standard,
         section: section ?? null,
-        stream: stream ?? null,
+        academicStreamId: academicStreamId ?? null,
+
         examDate,
         startsAt: { lt: endsAt },
         endsAt: { gt: startsAt },
@@ -1104,7 +1133,8 @@ export class ExamService {
   private async ensureNoClassOverlapForPeriod(
     standard: any,
     section: string | undefined,
-    stream: any,
+    academicStreamId: any,
+
     examDate: Date,
     periodStart: number,
     periodEnd: number,
@@ -1113,7 +1143,8 @@ export class ExamService {
       where: {
         standard,
         section: section ?? null,
-        stream: stream ?? null,
+        academicStreamId: academicStreamId ?? null,
+
         examDate,
         periodStart: { lte: periodEnd },
         periodEnd: { gte: periodStart },

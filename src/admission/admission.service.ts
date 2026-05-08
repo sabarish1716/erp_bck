@@ -1,7 +1,9 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdmissionDto } from './create-admission.dto';
-import { Standard, AcademicStream } from '@prisma/client';
+import { Standard } from '@prisma/client';
+import { AcademicStreamService } from './academic-stream.service';
+
 
 // Calculates TOTAL row values for the qualifying examination table.
 // Uses explicit values if provided by the frontend; falls back to summing subjects.
@@ -32,27 +34,7 @@ function toStandardEnum(val?: string): Standard {
 }
 
 // Map legacy/group-style stream values (e.g. GROUP_2) to Prisma AcademicStream enum.
-function toAcademicStreamEnum(val?: string | null): AcademicStream | null {
-  if (!val) return null;
 
-  const normalized = String(val)
-    .trim()
-    .toUpperCase()
-    .replace(/[-\s]+/g, '_');
-
-  if (Object.values(AcademicStream).includes(normalized as AcademicStream)) {
-    return normalized as AcademicStream;
-  }
-
-  const aliases: Record<string, AcademicStream> = {
-    GROUP_1: AcademicStream.BIO_MATHS,
-    GROUP_2: AcademicStream.CS_MATHS,
-    GROUP_3: AcademicStream.BIO_CS,
-    GROUP_4: AcademicStream.COMMERCE,
-  };
-
-  return aliases[normalized] ?? null;
-}
 
 function getAcademicYearDateRange(academicYear?: string) {
   if (!academicYear) return null;
@@ -163,7 +145,9 @@ const BULK_UPLOAD_ALLOWED_KEYS = new Set(
     'section',
     'academicyear',
     'academicstream',
+    'academicstreamcustom',
     'preferredphone',
+
     'parentsemail',
     'email',
     'fathername',
@@ -292,7 +276,33 @@ function processSiblingSchoolSelection(
 
 @Injectable()
 export class AdmissionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private academicStreamService: AcademicStreamService
+  ) {}
+
+  private async resolveStreamId(streamName?: string, customName?: string): Promise<string | null> {
+    if (!streamName) return null;
+
+    let targetName = streamName;
+    let targetLabel = streamName;
+
+    // Handle "OTHER" or custom stream logic
+    if (streamName.toUpperCase() === 'OTHER' || streamName.toUpperCase() === 'OTHERS') {
+      if (!customName) return null;
+      targetName = customName.trim().toUpperCase().replace(/[-\s]+/g, '_');
+      targetLabel = customName.trim();
+    } else {
+      // Normalize existing names if needed (e.g. "BIO-MATHS" -> "BIO_MATHS")
+      targetName = streamName.trim().toUpperCase().replace(/[-\s]+/g, '_');
+      // For default streams, we might want to keep their pretty labels from the DB if they exist
+      // findOrCreate will handle finding them by name
+    }
+
+    const stream = await this.academicStreamService.findOrCreate(targetName, targetLabel);
+    return stream.id;
+  }
+
    // 👇 your methods here
 
   async saveFamily(data: any) {
@@ -432,7 +442,10 @@ export class AdmissionService {
           rte: parseBooleanFlag(row.rte) || parseBooleanFlag(row.rteApplied),
           section: asOptionalString(row.section),
           academicYear: rowAcademicYear,
-          academicStream: (asOptionalString(row.academicStream) as AcademicStream | undefined) || undefined,
+          academicStream: asOptionalString(row.academicStream) || undefined,
+          academicStreamCustom: asOptionalString(row.academicStreamCustom) || undefined,
+
+
           preferredPhone: asOptionalString(row.preferredPhone),
           parentsEmail: asOptionalString(row.parentsEmail) || asOptionalString(row.email),
           family: {
@@ -483,7 +496,10 @@ export class AdmissionService {
                 totalMaxMarks: parseOptionalNumber(row.totalMaxMarks),
                 totalObtainedMarks: parseOptionalNumber(row.totalObtainedMarks),
                 totalPercentage: parseOptionalNumber(row.totalPercentage),
-                stream: (asOptionalString(row.academicStream) as AcademicStream | undefined) || undefined,
+                stream: asOptionalString(row.academicStream) || undefined,
+                streamCustom: asOptionalString(row.academicStreamCustom) || undefined,
+
+
                 subjects: rowSubjects as any,
               }]
             : undefined,
@@ -568,6 +584,8 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
   // ✅ Safe fallback
   const docs = data.documents || {};
 
+  const academicStreamId = await this.resolveStreamId(data.academicStream, data.academicStreamCustom);
+  
   return this.prisma.student.create({
     data: {
   name: data.name ?? '',   // ✅ fix
@@ -586,10 +604,14 @@ async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
       previousSchool: data.previousSchool,
       transportMode: data.transportMode,
       rte: data.rte || false,
-      academicStream: toAcademicStreamEnum(data.academicStream),
+      academicStream: academicStreamId ? { connect: { id: academicStreamId } } : undefined,
+
+
       section: data.section || null,
+
       academicYear: data.academicYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-      staffParentId: data.staffParentId || null,
+      staffParent: data.staffParentId ? { connect: { id: data.staffParentId } } : undefined,
+
       siblingGroupId: data.siblingGroupId || null,
 
       // ✅ FAMILY
@@ -716,14 +738,14 @@ parentsEmail: data.parentsEmail,
       academics:
         data.academics && data.academics.length > 0
           ? {
-              create: data.academics.map((acad) => {
+              create: await Promise.all(data.academics.map(async (acad) => {
                 const totals = calcAcademicTotals({
-  ...acad,
-  subjects: acad.subjects?.map(s => ({
-    maxMarks: s.maxMarks ?? 0,
-    obtainedMarks: s.obtainedMarks ?? 0
-  }))
-});
+                  ...acad,
+                  subjects: acad.subjects?.map(s => ({
+                    maxMarks: s.maxMarks ?? 0,
+                    obtainedMarks: s.obtainedMarks ?? 0
+                  }))
+                });
                 return {
                   examName: acad.examName,
                   boardName: acad.boardName || 'State Board',
@@ -732,25 +754,28 @@ parentsEmail: data.parentsEmail,
                   totalMaxMarks: totals.totalMaxMarks,
                   totalObtainedMarks: totals.totalObtainedMarks,
                   totalPercentage: totals.totalPercentage,
-                  stream: toAcademicStreamEnum(acad.stream),
+                  academicStreamId: await this.resolveStreamId(acad.stream, acad.streamCustom),
+
                   subjects: acad.subjects && acad.subjects.length > 0
                     ? {
                         create: acad.subjects.map((s) => ({
-                          subjectName: s.subjectName,
-                          maxMarks: s.maxMarks,
-                          obtainedMarks: s.obtainedMarks,
-                         percentage: s.percentage ?? (
-  (s.maxMarks ?? 0) > 0
-    ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
-    : 0
-),
+                          subjectName: s.subjectName || 'N/A',
+                          maxMarks: s.maxMarks ?? 0,
+                          obtainedMarks: s.obtainedMarks ?? 0,
+                          percentage: s.percentage ?? (
+                            (s.maxMarks ?? 0) > 0
+                              ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
+                              : 0
+                          ),
                         })),
                       }
                     : undefined,
+
                 };
-              }),
+              })),
             }
           : undefined,
+
 
       // ✅ ADMISSION (auto-generate admission number if not provided or 'AUTO')
      admission: data.admission
@@ -949,6 +974,8 @@ parentsEmail: data.parentsEmail,
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid update data: expected an object');
     }
+    const academicStreamId = await this.resolveStreamId(data.academicStream, data.academicStreamCustom);
+
     const updateData: any = {
       name: data.name ?? '',
       standard: toStandardEnum(data.standard),
@@ -965,12 +992,14 @@ parentsEmail: data.parentsEmail,
       previousSchool: data.previousSchool,
       transportMode: data.transportMode,
       rte: typeof data.rte === 'boolean' ? data.rte : false,
-      academicStream: toAcademicStreamEnum(data.academicStream),
+      academicStream: academicStreamId ? { connect: { id: academicStreamId } } : { disconnect: true },
       section: data.section ?? undefined,
       academicYear: data.academicYear ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-      staffParentId: data.staffParentId ?? undefined,
+      staffParent: data.staffParentId ? { connect: { id: data.staffParentId } } : { disconnect: true },
       siblingGroupId: data.siblingGroupId ?? undefined,
     };
+
+
     if (data.dob) updateData.dob = new Date(data.dob);
 
     if (data.family) {
@@ -1175,14 +1204,15 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         });
       }
       updateData.academics = {
-        create: data.academics.map((acad) => {
+        create: await Promise.all(data.academics.map(async (acad) => {
           const totals = calcAcademicTotals({
-  ...acad,
-  subjects: acad.subjects?.map(s => ({
-    maxMarks: s.maxMarks ?? 0,
-    obtainedMarks: s.obtainedMarks ?? 0
-  }))
-});
+            ...acad,
+            subjects: acad.subjects?.map(s => ({
+              maxMarks: s.maxMarks ?? 0,
+              obtainedMarks: s.obtainedMarks ?? 0
+            }))
+          });
+          const streamId = await this.resolveStreamId(acad.stream, acad.streamCustom);
           return {
             examName: acad.examName,
             boardName: acad.boardName || 'State Board',
@@ -1191,24 +1221,26 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
             totalMaxMarks: totals.totalMaxMarks,
             totalObtainedMarks: totals.totalObtainedMarks,
             totalPercentage: totals.totalPercentage,
-            stream: toAcademicStreamEnum(acad.stream),
+            academicStreamId: streamId,
             subjects: acad.subjects && acad.subjects.length > 0
               ? {
                   create: acad.subjects.map((s) => ({
-                    subjectName: s.subjectName,
-                    maxMarks: s.maxMarks,
-                    obtainedMarks: s.obtainedMarks,
-                   percentage: s.percentage ?? (
-  (s.maxMarks ?? 0) > 0
-    ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
-    : 0
-),
+                    subjectName: s.subjectName || 'N/A',
+                    maxMarks: s.maxMarks ?? 0,
+                    obtainedMarks: s.obtainedMarks ?? 0,
+                    percentage: s.percentage ?? (
+                      (s.maxMarks ?? 0) > 0
+                        ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
+                        : 0
+                    ),
                   })),
+
                 }
               : undefined,
           };
-        }),
+        })),
       };
+
     }
     if (data.admission) {
       updateData.admission = {

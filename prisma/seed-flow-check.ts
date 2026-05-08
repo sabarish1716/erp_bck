@@ -96,6 +96,25 @@ async function upsertFlowFeeStructure(year: string) {
   });
 }
 
+async function upsertAcademicStreams() {
+  const streams = [
+    { name: 'BIO_MATHS', label: 'Biology & Mathematics' },
+    { name: 'CS_MATHS', label: 'Computer Science & Mathematics' },
+    { name: 'BIO_CS', label: 'Biology & Computer Science' },
+    { name: 'COMMERCE', label: 'Commerce' },
+    { name: 'HUMANITIES', label: 'Humanities' },
+  ];
+
+  for (const stream of streams) {
+    await prisma.academicStream.upsert({
+      where: { name: stream.name },
+      update: { label: stream.label },
+      create: { name: stream.name, label: stream.label, isCustom: false },
+    });
+  }
+}
+
+
 async function main() {
   console.log('Seeding flow-check data...');
 
@@ -103,6 +122,8 @@ async function main() {
   await upsertAcademicYears();
   await upsertFlowFeeStructure('2026-2027');
   await upsertFlowFeeStructure('2025-2026');
+  await upsertAcademicStreams();
+
 
   const flowStaff = await prisma.staff.upsert({
     where: { email: 'flowcheck.staff.parent@school.com' },
@@ -136,7 +157,8 @@ async function main() {
       dob: new Date('2012-08-12T00:00:00.000Z'),
       community: Community.OBC,
       siblingGroupId: 'FLOW-SIB-G1',
-      staffParentId: flowStaff.id,
+      staffParent: { connect: { id: flowStaff.id } },
+
     },
   });
 

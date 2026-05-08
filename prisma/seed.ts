@@ -3,7 +3,6 @@ import {
   Role,
   Gender,
   Community,
-  AcademicStream,
   ExamSession,
   Standard,
   DiscountType,
@@ -1338,7 +1337,8 @@ async function main() {
       community: Community.BC,
       academicYear: '2025-2026',
       transportMode: 'VAN',
-      stream: AcademicStream.CS_MATHS,
+      stream: 'CS_MATHS',
+
       email: 'arun.kumar@student.com',
       father: 'Ravi Kumar',
       mother: 'Lakshmi Ravi',
@@ -1380,7 +1380,8 @@ async function main() {
       community: Community.SC,
       academicYear: '2025-2026',
       transportMode: 'VAN',
-      stream: AcademicStream.BIO_MATHS,
+      stream: 'BIO_MATHS',
+
       email: 'sneha.devi@student.com',
       father: 'Devan',
       mother: 'Uma Devi',
@@ -1394,7 +1395,8 @@ async function main() {
       community: Community.OBC,
       academicYear: '2026-2027',
       transportMode: 'VAN',
-      stream: AcademicStream.CS_MATHS,
+      stream: 'CS_MATHS',
+
       email: 'kiran.raj@student.com',
       father: 'Rajesh',
       mother: 'Priya Rajesh',
@@ -1436,7 +1438,8 @@ async function main() {
       community: Community.BC,
       academicYear: '2026-2027',
       transportMode: 'VAN',
-      stream: AcademicStream.COMMERCE,
+      stream: 'COMMERCE',
+
       email: 'nisha.paul@student.com',
       father: 'Paulraj',
       mother: 'Mary Paul',
@@ -1464,8 +1467,12 @@ async function main() {
         previousSchool: 'City Public School',
         transportMode: blueprint.transportMode,
         rte: blueprint.community === Community.SC || blueprint.community === Community.ST,
-        academicStream: blueprint.stream,
-        staffParentId: blueprint.name === 'Divya Raj' ? staffRecords[0].id : null,
+        academicStream: blueprint.stream ? { connect: { name: blueprint.stream } } : undefined,
+
+
+
+        staffParent: blueprint.name === 'Divya Raj' ? { connect: { id: staffRecords[0].id } } : undefined,
+
         siblingGroupId: blueprint.siblingsGroup,
 
         users: {
@@ -1516,7 +1523,10 @@ async function main() {
             totalMaxMarks: 500,
             totalObtainedMarks: 390 + blueprint.admissionIndex * 10,
             totalPercentage: Number(((390 + blueprint.admissionIndex * 10) / 5).toFixed(2)),
-            stream: blueprint.stream,
+            stream: blueprint.stream ? ({ connect: { name: blueprint.stream } } as any) : undefined,
+
+
+
             subjects: {
               create: [
                 { subjectName: 'Mathematics', maxMarks: 100, obtainedMarks: 82 + blueprint.admissionIndex, percentage: 82 + blueprint.admissionIndex },

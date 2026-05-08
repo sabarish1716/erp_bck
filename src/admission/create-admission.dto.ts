@@ -10,9 +10,8 @@ import {
   IsArray,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { Gender, Community, AcademicStream } from '@prisma/client';
+import { Gender, Community } from '@prisma/client';
 
-export { AcademicStream };
 
 class FamilyDto {
   @IsOptional() @IsString() fatherName?: string;

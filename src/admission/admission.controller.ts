@@ -12,10 +12,29 @@ import { PromoteStudentsDto } from './promote-students.dto';
 import { LinkSiblingsDto } from './link-siblings.dto';
 import { UpdateStandardSeatsDto } from './standard-seats.dto';
 import { DemoteIndividualDto } from './demote-individual.dto';
+import { CreateAcademicStreamDto } from './create-academic-stream.dto';
+import { AcademicStreamService } from './academic-stream.service';
+
 
 @Controller('admissions')
 export class AdmissionController {
-  constructor(private readonly service: AdmissionService) {}
+  constructor(
+    private readonly service: AdmissionService,
+    private readonly academicStreamService: AcademicStreamService
+  ) {}
+
+  @Get('streams')
+  @Permissions(Permission.ADMISSION_READ)
+  async findAllStreams() {
+    return this.academicStreamService.findAll();
+  }
+
+  @Post('streams')
+  @Permissions(Permission.ADMISSION_CREATE)
+  async createStream(@Body() data: CreateAcademicStreamDto) {
+    return this.academicStreamService.create(data);
+  }
+
 
   @Get('next-admission-no')
   @Permissions(Permission.ADMISSION_CREATE)

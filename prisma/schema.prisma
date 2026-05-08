@@ -90,12 +90,22 @@ enum Standard {
   STD_12
 }
 
-enum AcademicStream {
-  BIO_MATHS        // Physics, Chemistry, Maths, Biology
-  CS_MATHS         // Physics, Chemistry, Maths, Computer Science
-  BIO_CS           // Physics, Chemistry, Biology, Computer Science
-  COMMERCE         // Commerce, Economics, Accountancy, Computer Application
+model AcademicStream {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  label     String
+  isCustom  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students        Student[]
+  academicDetails AcademicDetail[]
+  examSubjects    ExamSubject[]
+  examSchedules   ExamSchedule[]
+  examRollNumbers ExamRollNumber[]
 }
+
 
 enum ExamSession {
   FN
@@ -168,7 +178,9 @@ model Student {
   academicYear      String?  // e.g. "2026-2027"
 
   // 11th/12th higher secondary stream selection
-  academicStream    AcademicStream?
+  academicStreamId  String?
+  academicStream    AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
 
   // Discount-related links
   staffParentId     String?  // If parent is a staff member → teacher discount
@@ -279,7 +291,9 @@ model AcademicDetail {
   totalObtainedMarks Int?      // sum of Marks Obtained
   totalPercentage    Float?    // overall % (top-right of form)
 
-  stream             AcademicStream?
+  academicStreamId  String?
+  stream            AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
 
   subjects           SubjectMark[]
 
@@ -616,7 +630,9 @@ model ExamSubject {
   code         String
   standard     Standard
   section      String?
-  stream       AcademicStream?
+  academicStreamId String?
+  stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
   maxMarks     Int            @default(100)
   passMarks    Int            @default(35)
   teacherId    String?        // Staff member assigned to teach this subject
@@ -654,7 +670,9 @@ model ExamSchedule {
   subjectId     String
   standard      Standard
   section       String?
-  stream        AcademicStream?
+  academicStreamId String?
+  stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
   examDate      DateTime
   startsAt      DateTime
   endsAt        DateTime
@@ -697,7 +715,9 @@ model ExamRollNumber {
   rollNumber   String
   standard     Standard
   section      String?
-  stream       AcademicStream?
+  academicStreamId String?
+  stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
+
   academicYear String
   createdAt    DateTime        @default(now())
 
