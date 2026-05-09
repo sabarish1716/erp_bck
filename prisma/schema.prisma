@@ -511,6 +511,7 @@ model Staff {
 
   // Staff document records
   documents           StaffDocument[]
+  docRequests         DocRequest[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1810,6 +1811,9 @@ enum DocRequestType {
   CONDUCT_CERTIFICATE
   STUDY_CERTIFICATE
   FEE_CERTIFICATE
+  STAFF_RECOGNITION
+  STAFF_EXPERIENCE
+  STAFF_SALARY
   OTHER
 }
 
@@ -1831,7 +1835,8 @@ enum DocRequestStatus {
 model DocRequest {
   id              String           @id @default(uuid())
   ticketNo        String           @unique          // e.g. DOC-2026-00001
-  studentId       String
+  studentId       String?
+  staffId         String?
   type            DocRequestType
   status          DocRequestStatus @default(REQUESTED)
   reason          String?                           // why the document is needed
@@ -1843,6 +1848,10 @@ model DocRequest {
   bonafidePurpose     String?
   bonafideAuthority   String?
   bonafideTemplateText String?
+
+  // Generic customization
+  templateText        String?
+  customFields        Json?
 
   // Tracking
   requestedById   Int                               // User.id who raised the request
@@ -1864,7 +1873,8 @@ model DocRequest {
   dateOfLeaving   DateTime?
   lastAttendedDate DateTime?
 
-  student         Student          @relation(fields: [studentId], references: [id])
+  student         Student?         @relation(fields: [studentId], references: [id])
+  staff           Staff?           @relation(fields: [staffId], references: [id])
   requestedBy     User             @relation("DocRequestedBy", fields: [requestedById], references: [id])
   reviewedBy      User?            @relation("DocReviewedBy", fields: [reviewedById], references: [id])
   issuedBy        User?            @relation("DocIssuedBy", fields: [issuedById], references: [id])
@@ -1873,6 +1883,7 @@ model DocRequest {
   updatedAt       DateTime         @updatedAt
 
   @@index([studentId])
+  @@index([staffId])
   @@index([status])
   @@index([type])
 }

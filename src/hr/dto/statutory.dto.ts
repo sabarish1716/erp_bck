@@ -41,4 +41,5 @@ export class UpdateStaffStatutoryDto {
   @IsOptional() @IsBoolean() psfEnabled?: boolean;
   @IsOptional() @IsBoolean() isStipend?: boolean;
   @IsOptional() @IsNumber() dailyRate?: number;
+  @IsOptional() @IsString() pfJoiningDate?: string;
 }

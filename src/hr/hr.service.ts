@@ -49,7 +49,7 @@ const NON_TEACHING_POLICY: LeavePermissionPolicy = {
 
 @Injectable()
 export class HrService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async getStaffList() {
     return this.prisma.staff.findMany({
@@ -655,15 +655,24 @@ export class HrService {
 
   async getStaffStatutoryList() {
     return this.prisma.staffStatutory.findMany({
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, salary: true } } },
+      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, salary: true, pfJoiningDate: true, joiningDate: true } } },
     });
   }
 
   async updateStaffStatutory(staffId: string, dto: UpdateStaffStatutoryDto) {
+    const { pfJoiningDate, ...statutoryData } = dto;
+
+    if (pfJoiningDate !== undefined) {
+      await this.prisma.staff.update({
+        where: { id: staffId },
+        data: { pfJoiningDate: pfJoiningDate ? new Date(pfJoiningDate) : null },
+      });
+    }
+
     return this.prisma.staffStatutory.upsert({
       where: { staffId },
-      update: dto,
-      create: { staffId, ...dto },
+      update: statutoryData,
+      create: { staffId, ...statutoryData },
     });
   }
 
@@ -811,8 +820,8 @@ export class HrService {
     });
     const actingDriverDayOverridesStore =
       actingDriverDayOverridesRecord &&
-      typeof actingDriverDayOverridesRecord.value === 'object' &&
-      !Array.isArray(actingDriverDayOverridesRecord.value)
+        typeof actingDriverDayOverridesRecord.value === 'object' &&
+        !Array.isArray(actingDriverDayOverridesRecord.value)
         ? (actingDriverDayOverridesRecord.value as Record<string, Record<string, number>>)
         : {};
     const monthDayOverrides = actingDriverDayOverridesStore[month] || {};
@@ -882,30 +891,30 @@ export class HrService {
         basicSalary = Math.round(grossSalary * basicRate / 100);
         hra = Math.round(grossSalary * hraRate / 100);
         travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
-        otherAllowances = Math.round(grossSalary * otherAllowanceRate / 100);
+        otherAllowances = grossSalary - basicSalary - hra - travelAllowance;
       } else {
         // Salaried staff: gross is stored; break it down by structure
         grossSalary = statutory?.grossSalary ?? staff.salary ?? 0;
         basicSalary = Math.round(grossSalary * basicRate / 100);
         hra = Math.round(grossSalary * hraRate / 100);
         travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
-        otherAllowances = Math.round(grossSalary * otherAllowanceRate / 100);
+        otherAllowances = grossSalary - basicSalary - hra - travelAllowance;
       }
 
       // ── Attendance & LOP ────────────────────────────────────────────────
       const attendances = isDailyRate
         ? [] // already fetched above, but re-use the block below for deductions
         : await this.prisma.attendance.findMany({
-            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
-          });
+          where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+        });
 
       const allAttendances = isDailyRate
         ? await this.prisma.attendance.findMany({
-            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
-          })
+          where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+        })
         : attendances;
 
-      const totalWorkingDays = this.getWorkingDaysInMonth(y, m);
+      const totalWorkingDays = 30; // Standardized to 30 days as requested
       let presentDays = 0;
       let lopDays = 0;
 
@@ -1005,9 +1014,9 @@ export class HrService {
       const staffLoans = isActingDriver
         ? []
         : await this.prisma.staffLoan.findMany({
-            where: { staffId: staff.id, status: 'ACTIVE' },
-            include: { emiTransactions: true },
-          });
+          where: { staffId: staff.id, status: 'ACTIVE' },
+          include: { emiTransactions: true },
+        });
 
       for (const loan of staffLoans) {
         // Check if current month is in skipMonths
@@ -1041,8 +1050,8 @@ export class HrService {
       const activeAdvances = isActingDriver
         ? []
         : await this.prisma.staffAdvance.findMany({
-            where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
-          });
+          where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
+        });
 
       if (!isActingDriver) {
         for (const adv of activeAdvances) {
@@ -1058,14 +1067,23 @@ export class HrService {
       const totalDeductions = isActingDriver
         ? 0
         : Math.round(
-            lopDeduction + permissionLopDeduction +
-            pfDeduction + esiDeduction + psfDeduction + ptDeduction +
-            loanEMIDeduction +
-            fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
-          );
+          lopDeduction + permissionLopDeduction +
+          pfDeduction + esiDeduction + psfDeduction + ptDeduction +
+          loanEMIDeduction +
+          fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
+        );
+      // Fetch existing record to preserve manual edits like extraAllowance and bonusIncentive
+      const existingPayroll = await this.prisma.payroll.findUnique({
+        where: { staffId_month: { staffId: staff.id, month: month || '' } },
+        select: { extraAllowance: true, bonusIncentive: true },
+      });
+      const preservedExtraAllowance = existingPayroll?.extraAllowance ?? 0;
+      const preservedBonusIncentive = existingPayroll?.bonusIncentive ?? 0;
+
       const netSalary = isActingDriver
         ? Math.round(grossSalary)
-        : Math.round(grossSalary - totalDeductions);
+        : Math.round(grossSalary - totalDeductions + preservedExtraAllowance + preservedBonusIncentive);
+
       // CTC = Gross + Employer PF + Employer ESI
       const ctc = isActingDriver
         ? Math.round(grossSalary)
@@ -1082,7 +1100,8 @@ export class HrService {
           employerPfContribution, employerEsiContribution, ctc,
           loanEMIDeduction,
           fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
-          extraAllowance: 0,
+          extraAllowance: preservedExtraAllowance,
+          bonusIncentive: preservedBonusIncentive,
           totalDeductions, netSalary,
           status: 'generated',
         },
@@ -1145,12 +1164,15 @@ export class HrService {
       updates.netSalary = Math.round(payroll.grossSalary - newTotalDeductions);
     }
 
-    if (dto.bonusIncentive !== undefined) {
-      updates.bonusIncentive = dto.bonusIncentive;
-    }
+    if (dto.bonusIncentive !== undefined || dto.extraAllowance !== undefined) {
+      const bonus = dto.bonusIncentive !== undefined ? dto.bonusIncentive : (updates.bonusIncentive ?? payroll.bonusIncentive);
+      const extra = dto.extraAllowance !== undefined ? dto.extraAllowance : (updates.extraAllowance ?? payroll.extraAllowance);
 
-    if (dto.extraAllowance !== undefined) {
-      updates.extraAllowance = dto.extraAllowance;
+      updates.bonusIncentive = bonus;
+      updates.extraAllowance = extra;
+
+      const currentDeductions = updates.totalDeductions !== undefined ? updates.totalDeductions : payroll.totalDeductions;
+      updates.netSalary = Math.round(payroll.grossSalary - currentDeductions + bonus + extra);
     }
 
     return this.prisma.payroll.update({ where: { id }, data: updates });
@@ -1390,7 +1412,7 @@ export class HrService {
   async createIncrement(dto: any) {
     const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
     if (!staff) throw new NotFoundException('Staff not found');
-         const toSalary = parseFloat(dto.toSalary);
+    const toSalary = parseFloat(dto.toSalary);
 
     return this.prisma.salaryIncrement.create({
       data: {
@@ -1480,7 +1502,7 @@ export class HrService {
     const loanAmount = dto.loanAmount;
     const emiAmount = dto.emiAmount;
     const numEMIs = Math.ceil(loanAmount / emiAmount);
-    
+
     // Calculate end month
     let endYear = startYear;
     let endMonth = startMonth + numEMIs - 1;
@@ -1679,7 +1701,7 @@ export class HrService {
 
   async getPFStaffReport(month?: string) {
     const where: any = { staff: { staffStatutory: { pfEnabled: true } } };
-    
+
     if (month) {
       where.month = month;
     }
@@ -1769,7 +1791,7 @@ export class HrService {
     return `${year - 1}-${year}`;
   }
 
-    async approvePayroll(id: string) {
+  async approvePayroll(id: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll record not found');
     return this.prisma.payroll.update({ where: { id }, data: { status: 'approved' } });

@@ -6,6 +6,9 @@ export enum DocRequestType {
   CONDUCT_CERTIFICATE = 'CONDUCT_CERTIFICATE',
   STUDY_CERTIFICATE = 'STUDY_CERTIFICATE',
   FEE_CERTIFICATE = 'FEE_CERTIFICATE',
+  STAFF_RECOGNITION = 'STAFF_RECOGNITION',
+  STAFF_EXPERIENCE = 'STAFF_EXPERIENCE',
+  STAFF_SALARY = 'STAFF_SALARY',
   OTHER = 'OTHER',
 }
 
@@ -17,8 +20,13 @@ export enum BonafideScenarioType {
 }
 
 export class CreateDocRequestDto {
+  @IsOptional()
   @IsString()
-  studentId: string;
+  studentId?: string;
+
+  @IsOptional()
+  @IsString()
+  staffId?: string;
 
   @IsEnum(DocRequestType)
   type: DocRequestType;
@@ -42,6 +50,13 @@ export class CreateDocRequestDto {
   @IsOptional()
   @IsString()
   bonafideTemplateText?: string;
+
+  @IsOptional()
+  @IsString()
+  templateText?: string;
+
+  @IsOptional()
+  customFields?: any;
 }
 
 export class ReviewDocRequestDto {
@@ -103,4 +118,11 @@ export class IssueDocRequestDto {
   @IsOptional()
   @IsString()
   bonafideTemplateText?: string;
+
+  @IsOptional()
+  @IsString()
+  templateText?: string;
+
+  @IsOptional()
+  customFields?: any;
 }

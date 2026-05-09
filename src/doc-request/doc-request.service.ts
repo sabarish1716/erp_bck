@@ -63,6 +63,7 @@ export class DocRequestService {
         academics: { include: { subjects: true } },
       },
     },
+    staff: true,
     requestedBy: { select: { id: true, name: true, email: true, role: true } },
     reviewedBy: { select: { id: true, name: true, email: true, role: true } },
     issuedBy: { select: { id: true, name: true, email: true, role: true } },
@@ -90,10 +91,15 @@ export class DocRequestService {
 
   /** Create a new document request (ticket) */
   async create(dto: CreateDocRequestDto, requestedById: number) {
-    const student = await this.prisma.student.findUnique({
-      where: { id: dto.studentId },
-    });
-    if (!student) throw new NotFoundException('Student not found');
+    if (dto.studentId) {
+      const student = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
+      if (!student) throw new NotFoundException('Student not found');
+    } else if (dto.staffId) {
+      const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+      if (!staff) throw new NotFoundException('Staff not found');
+    } else {
+      throw new BadRequestException('Either studentId or staffId is required');
+    }
 
     const ticketNo = await this.nextTicketNo();
 
@@ -101,19 +107,18 @@ export class DocRequestService {
       throw new BadRequestException('Bonafide scenario is required for bonafide certificate requests');
     }
 
-    if (dto.type !== 'BONAFIDE_CERTIFICATE' && dto.bonafideScenario) {
-      throw new BadRequestException('Bonafide scenario can only be used with bonafide certificate requests');
-    }
-
     const createData: any = {
       ticketNo,
       studentId: dto.studentId,
+      staffId: dto.staffId,
       type: dto.type,
       reason: dto.reason,
       bonafideScenario: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideScenario : undefined,
       bonafidePurpose: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafidePurpose : undefined,
       bonafideAuthority: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideAuthority : undefined,
       bonafideTemplateText: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideTemplateText : undefined,
+      templateText: dto.templateText,
+      customFields: dto.customFields,
       requestedById,
     };
 
@@ -124,11 +129,12 @@ export class DocRequestService {
   }
 
   /** Get all requests (optionally filtered) */
-  async findAll(filters?: { status?: string; type?: string; studentId?: string }) {
+  async findAll(filters?: { status?: string; type?: string; studentId?: string; staffId?: string }) {
     const where: any = {};
     if (filters?.status) where.status = filters.status;
     if (filters?.type) where.type = filters.type;
     if (filters?.studentId) where.studentId = filters.studentId;
+    if (filters?.staffId) where.staffId = filters.staffId;
 
     return this.prisma.docRequest.findMany({
       where,
@@ -243,6 +249,13 @@ export class DocRequestService {
       if (!finalScenario) {
         throw new BadRequestException('Bonafide scenario is required before issuing bonafide certificate');
       }
+    }
+
+    if (dto.templateText !== undefined) {
+      data.templateText = dto.templateText;
+    }
+    if (dto.customFields !== undefined) {
+      data.customFields = dto.customFields;
     }
 
     return this.prisma.docRequest.update({
