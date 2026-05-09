@@ -7,6 +7,7 @@ import {
   IsInt,
   IsBoolean,
   ValidateNested,
+  Matches,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -17,8 +18,8 @@ class TransportStopDto {
   @IsNotEmpty() @IsInt() stopOrder: number;
   @Type(() => Number)
   @IsOptional() @IsNumber() distanceKm?: number;
-  @IsOptional() @IsString() pickupTime?: string;
-  @IsOptional() @IsString() dropTime?: string;
+  @IsOptional() @IsString() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'pickupTime must be in HH:mm format' }) pickupTime?: string;
+  @IsOptional() @IsString() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'dropTime must be in HH:mm format' }) dropTime?: string;
   @Type(() => Number)
   @IsOptional() @IsNumber() fee?: number;
 }
@@ -32,7 +33,7 @@ export class CreateTransportRouteDto {
   @IsOptional() @IsNumber() splClassFee?: number;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() conductorName?: string;
-  @IsOptional() @IsString() conductorPhone?: string;
+  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'conductorPhone must be exactly 10 digits' }) conductorPhone?: string;
 
   @IsOptional()
   @IsArray()

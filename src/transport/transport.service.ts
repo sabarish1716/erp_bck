@@ -12,6 +12,7 @@ import {
   UpdateBusDto,
 } from './dto/transport.dto';
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
+import { BulkAssignTransportDto } from './dto/bulk-assign.dto';
 import * as ExcelJS from 'exceljs';
 import PDFDocument = require('pdfkit');
 
@@ -131,7 +132,7 @@ export class TransportService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
-  ) {}
+  ) { }
 
   private async buildWorkbookBuffer(workbook: ExcelJS.Workbook) {
     const buffer = await workbook.xlsx.writeBuffer();
@@ -206,7 +207,7 @@ export class TransportService {
     return bus;
   }
 
-  private async getConfiguredAcademicYear() {
+  private async getConfiguredAcademicYear(): Promise<string> {
     const settingsRow = await this.prisma.appSetting.findUnique({
       where: { key: 'admin.settings' },
       select: { value: true },
@@ -588,40 +589,40 @@ export class TransportService {
     try {
       const assignment = existingAssignment
         ? await this.prisma.studentTransport.update({
-            where: { studentId: data.studentId },
-            data: {
-              routeId: data.routeId,
-              stopId: data.stopId || null,
-              academicYear,
-              busno: data.busno || null,
-              isSplClass: data.isSplClass || false,
-              splClassStartDate: data.isSplClass ? new Date() : null,
-              splClassEndDate: null,
-              splClassDaysUsed: null,
-              totalWorkingDays: null,
-            },
-            include: {
-              route: true,
-              stop: true,
-              student: { select: { id: true, name: true, standard: true } },
-            },
-          })
+          where: { studentId: data.studentId },
+          data: {
+            routeId: data.routeId,
+            stopId: data.stopId || null,
+            academicYear,
+            busno: data.busno || null,
+            isSplClass: data.isSplClass || false,
+            splClassStartDate: data.isSplClass ? new Date() : null,
+            splClassEndDate: null,
+            splClassDaysUsed: null,
+            totalWorkingDays: null,
+          },
+          include: {
+            route: true,
+            stop: true,
+            student: { select: { id: true, name: true, standard: true } },
+          },
+        })
         : await this.prisma.studentTransport.create({
-            data: {
-              studentId: data.studentId,
-              routeId: data.routeId,
-              stopId: data.stopId || null,
-              academicYear,
-              busno: data.busno || null,
-              isSplClass: data.isSplClass || false,
-              splClassStartDate: data.isSplClass ? new Date() : null,
-            },
-            include: {
-              route: true,
-              stop: true,
-              student: { select: { id: true, name: true, standard: true } },
-            },
-          });
+          data: {
+            studentId: data.studentId,
+            routeId: data.routeId,
+            stopId: data.stopId || null,
+            academicYear,
+            busno: data.busno || null,
+            isSplClass: data.isSplClass || false,
+            splClassStartDate: data.isSplClass ? new Date() : null,
+          },
+          include: {
+            route: true,
+            stop: true,
+            student: { select: { id: true, name: true, standard: true } },
+          },
+        });
 
       return this.resolveAssignmentResponse(
         assignment,
@@ -630,6 +631,74 @@ export class TransportService {
     } catch (error) {
       this.handleTransportWriteError(error);
     }
+  }
+
+  async bulkAssignTransport(dto: BulkAssignTransportDto) {
+    const academicYear = normalizeAcademicYear(dto.academicYear) || await this.getConfiguredAcademicYear();
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as string[],
+    };
+
+    // Pre-fetch all routes with stops for matching
+    const allRoutes = await this.prisma.transportRoute.findMany({
+      include: { stops: true },
+    });
+
+    for (const item of dto.items) {
+      try {
+        // 1. Find Student by Admission No
+        const admission = await this.prisma.admission.findFirst({
+          where: { admissionNo: item.admissionNo },
+          select: { studentId: true },
+        });
+
+        if (!admission?.studentId) {
+          throw new Error(`Student with admission number ${item.admissionNo} not found`);
+        }
+
+        // 2. Find Route by Route No
+        const route = allRoutes.find(r => r.routeNo === item.routeNo);
+        if (!route) {
+          throw new Error(`Route number ${item.routeNo} not found`);
+        }
+
+        // 3. Find Stop by Name (Optional)
+        let stopId: string | undefined = undefined;
+        if (item.stopName) {
+          const stop = route.stops.find(s => s.stopName.toLowerCase() === item.stopName?.toLowerCase());
+          if (stop) {
+            stopId = stop.id;
+          }
+        }
+
+        // 4. Create or Update Assignment
+        await this.prisma.studentTransport.upsert({
+          where: { studentId: admission.studentId },
+          update: {
+            routeId: route.id,
+            stopId: stopId || null,
+            busno: item.busNo || null,
+            academicYear,
+          },
+          create: {
+            studentId: admission.studentId,
+            routeId: route.id,
+            stopId: stopId || null,
+            busno: item.busNo || null,
+            academicYear,
+          },
+        });
+
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`${item.admissionNo}: ${err.message}`);
+      }
+    }
+
+    return results;
   }
 
   async getStudentTransport(studentId: string) {
@@ -712,9 +781,11 @@ export class TransportService {
       where: { academicYear: resolvedAcademicYear },
       include: {
         route: {
-          include: {buses:{
+          include: {
+            buses: {
               include: { route: true }
-          } ,stops: { orderBy: { stopOrder: 'asc' } } },
+            }, stops: { orderBy: { stopOrder: 'asc' } }
+          },
         },
         stop: true,
         student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
@@ -868,7 +939,7 @@ export class TransportService {
     if (data.address !== undefined) updateData.address = data.address || null;
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
     if (data.status !== undefined) updateData.status = data.status;
-    if(data.route !== undefined) {
+    if (data.route !== undefined) {
       const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
       if (bus) {
         updateData.busId = bus.id;
@@ -970,9 +1041,9 @@ export class TransportService {
       const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos((schoolLat * Math.PI) / 180) *
-          Math.cos((lastLocation.latitude * Math.PI) / 180) *
-          Math.sin(dLon / 2) *
-          Math.sin(dLon / 2);
+        Math.cos((lastLocation.latitude * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
       distanceToSchool = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
       insideGeofence = distanceToSchool <= radiusM;
     }
@@ -1102,13 +1173,13 @@ export class TransportService {
   async assignDriverToRoute(driverId: string, routeId: string) {
     const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
     if (!driver) throw new NotFoundException('Driver not found');
-    
+
     const route = await this.prisma.transportRoute.findUnique({
       where: { id: routeId },
       include: { buses: true },
     });
     if (!route) throw new NotFoundException('Route not found');
-    
+
     if (!route.buses || route.buses.length === 0) {
       throw new BadRequestException(`Route "${route.routeName}" has no buses assigned. Create a bus for this route first.`);
     }
@@ -1169,7 +1240,7 @@ export class TransportService {
 
 
 
-    // ═══════════════════════════════════════════════
+  // ═══════════════════════════════════════════════
   // VEHICLE-DRIVER MAPPING
   // ═══════════════════════════════════════════════
 
@@ -1181,7 +1252,7 @@ export class TransportService {
       },
       orderBy: { number: 'asc' },
     });
-    
+
     const mappings: any[] = [];
     for (const bus of buses) {
       if (bus.number && bus.drivers && bus.drivers.length > 0) {
@@ -1282,10 +1353,10 @@ export class TransportService {
       where: { number: plateNo },
       include: { drivers: true },
     });
-    
+
     if (bus && bus.drivers.length > 0) {
       // Unassign all drivers from this bus
-      const updatePromises = bus.drivers.map(driver => 
+      const updatePromises = bus.drivers.map(driver =>
         this.prisma.driver.update({
           where: { id: driver.id },
           data: { busId: null }
@@ -1304,26 +1375,26 @@ export class TransportService {
   /** Create a mileage snapshot for a bus/driver */
   async createMileageSnapshot(dto: any) {
     if (dto.snapshots && Array.isArray(dto.snapshots)) {
-          const results: any[] = [];
+      const results: any[] = [];
       for (const snap of dto.snapshots) {
         if (!snap.plateNo || snap.odometer == null) continue;
-        
+
         // Find bus by plateNo
         const bus = await this.prisma.bus.findFirst({
           where: { number: snap.plateNo },
           include: { drivers: true }
         });
-        
+
         if (!bus || bus.drivers.length === 0) continue; // driverId is required by schema
         const driverId = bus.drivers[0].id; // Use currently assigned driver
-        
+
         // Prevent duplicate odometer spamming
         const existing = await this.prisma.mileage.findFirst({
-           where: { busId: bus.id, odometer: Number(snap.odometer) }
+          where: { busId: bus.id, odometer: Number(snap.odometer) }
         });
         if (existing) continue;
-        
-        const mileage:any = await this.prisma.mileage.create({
+
+        const mileage: any = await this.prisma.mileage.create({
           data: {
             busId: bus.id,
             driverId: driverId,
@@ -1331,7 +1402,7 @@ export class TransportService {
             snapshotTime: new Date()
           }
         });
-            results.push(mileage);
+        results.push(mileage);
       }
       return { success: true, count: results.length };
     }
@@ -2161,3 +2232,4 @@ export class TransportService {
     };
   }
 }
+

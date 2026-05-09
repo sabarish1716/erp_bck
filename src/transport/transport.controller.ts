@@ -24,6 +24,7 @@ import {
   CreateBusDto,
   UpdateBusDto,
 } from './dto/transport.dto';
+import { BulkAssignTransportDto } from './dto/bulk-assign.dto';
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
@@ -293,6 +294,13 @@ export class TransportController {
   assignStudent(@Body() dto: AssignStudentTransportDto) {
     return this.transportService.assignStudent(dto);
   }
+
+  @Post('bulk-assign')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  bulkAssign(@Body() dto: BulkAssignTransportDto) {
+    return this.transportService.bulkAssignTransport(dto);
+  }
+
 
   @Get('students/pending')
   @Permissions(Permission.TRANSPORT_READ)
