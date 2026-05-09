@@ -891,6 +891,12 @@ model FeeStructure {
 
   numberOfTerms Int    @default(1)  // 1, 2, or 3
 
+  // Special Class fees
+  specialClassFee           Float @default(0)
+  specialClassMonths        Int   @default(0)
+  specialClassTransportFee  Float @default(0)
+  specialClassTransportMonths Int @default(0)
+
   customItems  CustomFeeItem[]
   terms        FeeTermTemplate[]
   kitItems     FeeKitItem[]
@@ -945,6 +951,12 @@ model StudentFee {
 
   numberOfTerms Int     @default(1)
 
+  // Special Class fees
+  specialClassFee           Float @default(0)
+  specialClassMonths        Int   @default(0)
+  specialClassTransportFee  Float @default(0)
+  specialClassTransportMonths Int @default(0)
+
   // Kit tracking: kitAmount is total of kit items issued from POS
   kitAmount     Float   @default(0)
   bookBalance   Float   @default(0)  // bookFee - kitAmount
@@ -992,6 +1004,8 @@ model StudentFeeTerm {
   bookAmount       Float   @default(0)
   hostelAmount     Float   @default(0)
   otherAmount      Float   @default(0)
+  specialClassAmount Float @default(0)
+  specialClassTransportAmount Float @default(0)
 
   studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
 }
@@ -1062,6 +1076,7 @@ model TransportRoute {
   baseFee       Float    // normal fee for this route
   splClassFee   Float    @default(0) // additional surcharge for special/spl class
   description   String?
+  numberOfTerms Int      @default(1) // 1, 2, or 3
 
   // Conductor info
   conductorName  String?

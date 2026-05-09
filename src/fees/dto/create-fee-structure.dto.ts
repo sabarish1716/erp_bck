@@ -39,6 +39,11 @@ export class CreateFeeStructureDto {
   @IsOptional() @IsNumber() bookFee?: number;
   @IsOptional() @IsNumber() hostelFee?: number;
   @IsOptional() @IsNumber() otherFee?: number;
+  
+  @IsOptional() @IsNumber() specialClassFee?: number;
+  @IsOptional() @IsInt() specialClassMonths?: number;
+  @IsOptional() @IsNumber() specialClassTransportFee?: number;
+  @IsOptional() @IsInt() specialClassTransportMonths?: number;
 
   @IsOptional() @IsInt() @Min(1) @Max(4) numberOfTerms?: number;
 

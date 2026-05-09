@@ -34,6 +34,8 @@ export class CreateTransportRouteDto {
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() conductorName?: string;
   @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'conductorPhone must be exactly 10 digits' }) conductorPhone?: string;
+  @Type(() => Number)
+  @IsOptional() @IsInt() @Min(1) @Max(4) numberOfTerms?: number;
 
   @IsOptional()
   @IsArray()

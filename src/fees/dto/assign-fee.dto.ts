@@ -44,6 +44,11 @@ export class AssignFeeDto {
   @IsOptional() @IsNumber() bookFee?: number;
   @IsOptional() @IsNumber() hostelFee?: number;
   @IsOptional() @IsNumber() otherFee?: number;
+  
+  @IsOptional() @IsNumber() specialClassFee?: number;
+  @IsOptional() @IsNumber() specialClassMonths?: number;
+  @IsOptional() @IsNumber() specialClassTransportFee?: number;
+  @IsOptional() @IsNumber() specialClassTransportMonths?: number;
 
   @IsOptional()
   @IsArray()

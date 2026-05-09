@@ -469,6 +469,7 @@ export class TransportService {
           description: data.description,
           conductorName: data.conductorName,
           conductorPhone: data.conductorPhone,
+          numberOfTerms: data.numberOfTerms || 1,
           stops: sanitizedStops.length > 0 ? { create: sanitizedStops } : undefined,
         },
         include: { stops: { orderBy: { stopOrder: 'asc' } } },
@@ -493,6 +494,7 @@ export class TransportService {
           description: data.description,
           conductorName: data.conductorName,
           conductorPhone: data.conductorPhone,
+          numberOfTerms: data.numberOfTerms || 1,
           stops: {
             deleteMany: {},
             create: sanitizedStops,
