@@ -6,6 +6,7 @@ import {
   IsArray,
   IsEnum,
   ValidateNested,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -72,4 +73,8 @@ export class AssignFeeDto {
   @IsOptional() autoTeacherDiscount?: boolean;
   @IsOptional() autoSiblingDiscount?: boolean;
   @IsOptional() autoRteDiscount?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasElgaBooks?: boolean;
 }

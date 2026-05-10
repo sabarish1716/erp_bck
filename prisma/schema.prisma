@@ -901,6 +901,7 @@ model FeeStructure {
   customItems  CustomFeeItem[]
   terms        FeeTermTemplate[]
   kitItems     FeeKitItem[]
+  hasElgaBooks Boolean  @default(false)
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -969,6 +970,7 @@ model StudentFee {
   terms         StudentFeeTerm[]
   paymentLinks  PaymentLink[]
   kitIssues     StudentKitIssue[]
+  hasElgaBooks Boolean  @default(false)
 
   @@unique([studentId, academicYear])
 }
@@ -1595,6 +1597,7 @@ enum ItemCategory {
   FURNITURE
   ID_CARD
   ACCESSORIES
+  ELGA_BOOKS
   OTHER
 }
 

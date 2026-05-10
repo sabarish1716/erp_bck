@@ -9,6 +9,7 @@ import {
   Max,
   ValidateNested,
   IsDateString,
+  IsBoolean,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -21,6 +22,7 @@ class KitItemDto {
   @IsNotEmpty() @IsString() storeItemId: string;
   @IsOptional() @IsInt() @Min(1) quantity?: number;
   @IsOptional() @IsNumber() amount?: number; // override price, else uses sellingPrice × qty
+  @IsOptional() @IsInt() termNumber?: number;
 }
 
 class FeeTermTemplateDto {
@@ -64,4 +66,8 @@ export class CreateFeeStructureDto {
   @ValidateNested({ each: true })
   @Type(() => KitItemDto)
   kitItems?: KitItemDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  hasElgaBooks?: boolean;
 }
