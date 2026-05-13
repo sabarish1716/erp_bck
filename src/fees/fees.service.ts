@@ -126,6 +126,9 @@ export class FeesService {
   // ═══════════════════════════════════════════════
 
   async createFeeStructure(data: CreateFeeStructureDto) {
+    if (!data.standard) throw new BadRequestException('Standard is required');
+    if (!data.academicYear) throw new BadRequestException('Academic year is required');
+
     const existing = await this.prisma.feeStructure.findUnique({
       where: { standard_academicYear: { standard: toStandardEnum(data.standard), academicYear: data.academicYear } },
     });
@@ -135,15 +138,25 @@ export class FeesService {
       );
     }
 
+    const tuitionFee = Number(data.tuitionFee || 0);
+    const transportFee = Number(data.transportFee || 0);
+    const bookFee = Number(data.bookFee || 0);
+    const hostelFee = Number(data.hostelFee || 0);
+    const otherFee = Number(data.otherFee || 0);
+    const specialClassFee = Number(data.specialClassFee || 0);
+    const specialClassMonths = Number(data.specialClassMonths || 0);
+    const specialClassTransportFee = Number(data.specialClassTransportFee || 0);
+    const specialClassTransportMonths = Number(data.specialClassTransportMonths || 0);
+
     const numberOfTerms = data.numberOfTerms || 1;
     const totalBase =
-      data.tuitionFee +
-      (data.transportFee || 0) +
-      (data.bookFee || 0) +
-      (data.hostelFee || 0) +
-      (data.otherFee || 0) +
-      ((data.specialClassFee || 0) * (data.specialClassMonths || 0)) +
-      ((data.specialClassTransportFee || 0) * (data.specialClassTransportMonths || 0));
+      tuitionFee +
+      transportFee +
+      bookFee +
+      hostelFee +
+      otherFee +
+      (specialClassFee * specialClassMonths) +
+      (specialClassTransportFee * specialClassTransportMonths);
 
     // Auto-generate terms if not provided
     let termsData = data.terms || [];
@@ -162,27 +175,37 @@ export class FeesService {
       data: {
         standard: toStandardEnum(data.standard),
         academicYear: data.academicYear,
-        tuitionFee: data.tuitionFee,
-        transportFee: data.transportFee || 0,
-        bookFee: data.bookFee || 0,
-        hostelFee: data.hostelFee || 0,
-        otherFee: data.otherFee || 0,
-        specialClassFee: data.specialClassFee || 0,
-        specialClassMonths: data.specialClassMonths || 0,
-        specialClassTransportFee: data.specialClassTransportFee || 0,
-        specialClassTransportMonths: data.specialClassTransportMonths || 0,
+        tuitionFee,
+        transportFee,
+        bookFee,
+        hostelFee,
+        otherFee,
+        specialClassFee,
+        specialClassMonths,
+        specialClassTransportFee,
+        specialClassTransportMonths,
         numberOfTerms,
         customItems:
           data.customItems && data.customItems.length > 0
-            ? { create: data.customItems }
+            ? { create: data.customItems.map(ci => ({ name: ci.name, amount: ci.amount })) }
             : undefined,
         terms:
           termsData.length > 0
-            ? { create: termsData.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate) : null })) }
+            ? { create: termsData.map((t) => ({ 
+                termNumber: t.termNumber,
+                termName: t.termName,
+                amount: t.amount,
+                dueDate: t.dueDate ? new Date(t.dueDate) : null 
+              })) }
             : undefined,
         kitItems:
           data.kitItems && data.kitItems.length > 0
-            ? { create: data.kitItems.map((ki) => ({ storeItemId: ki.storeItemId, quantity: ki.quantity || 1, amount: ki.amount || 0, termNumber: ki.termNumber || 1 })) }
+            ? { create: data.kitItems.map((ki) => ({ 
+                storeItemId: ki.storeItemId, 
+                quantity: ki.quantity || 1, 
+                amount: ki.amount || 0, 
+                termNumber: ki.termNumber || 1 
+              })) }
             : undefined,
         hasElgaBooks: data.hasElgaBooks || false,
       },
@@ -191,15 +214,25 @@ export class FeesService {
   }
 
   async updateFeeStructure(id: string, data: CreateFeeStructureDto) {
+    const tuitionFee = Number(data.tuitionFee || 0);
+    const transportFee = Number(data.transportFee || 0);
+    const bookFee = Number(data.bookFee || 0);
+    const hostelFee = Number(data.hostelFee || 0);
+    const otherFee = Number(data.otherFee || 0);
+    const specialClassFee = Number(data.specialClassFee || 0);
+    const specialClassMonths = Number(data.specialClassMonths || 0);
+    const specialClassTransportFee = Number(data.specialClassTransportFee || 0);
+    const specialClassTransportMonths = Number(data.specialClassTransportMonths || 0);
+
     const numberOfTerms = data.numberOfTerms || 1;
     const totalBase =
-      data.tuitionFee +
-      (data.transportFee || 0) +
-      (data.bookFee || 0) +
-      (data.hostelFee || 0) +
-      (data.otherFee || 0) +
-      ((data.specialClassFee || 0) * (data.specialClassMonths || 0)) +
-      ((data.specialClassTransportFee || 0) * (data.specialClassTransportMonths || 0));
+      tuitionFee +
+      transportFee +
+      bookFee +
+      hostelFee +
+      otherFee +
+      (specialClassFee * specialClassMonths) +
+      (specialClassTransportFee * specialClassTransportMonths);
 
     let termsData = data.terms || [];
     if (termsData.length === 0 && numberOfTerms > 1) {
@@ -218,23 +251,37 @@ export class FeesService {
       data: {
         standard: toStandardEnum(data.standard),
         academicYear: data.academicYear,
-        tuitionFee: data.tuitionFee,
-        transportFee: data.transportFee || 0,
-        bookFee: data.bookFee || 0,
-        hostelFee: data.hostelFee || 0,
-        otherFee: data.otherFee || 0,
+        tuitionFee,
+        transportFee,
+        bookFee,
+        hostelFee,
+        otherFee,
+        specialClassFee,
+        specialClassMonths,
+        specialClassTransportFee,
+        specialClassTransportMonths,
         numberOfTerms,
         customItems: {
           deleteMany: {},
-          create: data.customItems || [],
+          create: (data.customItems || []).map(ci => ({ name: ci.name, amount: ci.amount })),
         },
         terms: {
           deleteMany: {},
-          create: termsData.map((t) => ({ ...t, dueDate: t.dueDate ? new Date(t.dueDate) : null })),
+          create: termsData.map((t) => ({ 
+            termNumber: t.termNumber,
+            termName: t.termName,
+            amount: t.amount,
+            dueDate: t.dueDate ? new Date(t.dueDate) : null 
+          })),
         },
         kitItems: {
           deleteMany: {},
-          create: (data.kitItems || []).map((ki) => ({ storeItemId: ki.storeItemId, quantity: ki.quantity || 1, amount: ki.amount || 0, termNumber: ki.termNumber || 1 })),
+          create: (data.kitItems || []).map((ki) => ({ 
+            storeItemId: ki.storeItemId, 
+            quantity: ki.quantity || 1, 
+            amount: ki.amount || 0, 
+            termNumber: ki.termNumber || 1 
+          })),
         },
         hasElgaBooks: data.hasElgaBooks || false,
       },
