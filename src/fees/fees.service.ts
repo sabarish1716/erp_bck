@@ -1916,10 +1916,12 @@ export class FeesService {
       teacherDiscount: { eligible: boolean; percentage: number; reason: string };
       siblingDiscount: { eligible: boolean; percentage: number; reason: string };
       rteDiscount: { eligible: boolean; percentage: number; reason: string };
+      communityDiscount: { eligible: boolean; percentage: number; reason: string };
     } = {
       teacherDiscount: { eligible: false, percentage: 0, reason: '' },
       siblingDiscount: { eligible: false, percentage: 0, reason: '' },
       rteDiscount: { eligible: false, percentage: 0, reason: '' },
+      communityDiscount: { eligible: false, percentage: 0, reason: '' },
     };
 
     // Teacher discount
@@ -1948,15 +1950,18 @@ export class FeesService {
       }
     }
 
-    // RTE / Community discount
+    // RTE discount
     if (student.rte) {
       eligibility.rteDiscount = {
         eligible: true,
         percentage: 100,
         reason: 'Student under RTE (Right to Education)',
       };
-    } else if (['SC', 'ST', 'SCA'].includes(student.community)) {
-      eligibility.rteDiscount = {
+    }
+
+    // Community-based discount (SC/ST/SCA)
+    if (['SC', 'ST', 'SCA'].includes(student.community)) {
+      eligibility.communityDiscount = {
         eligible: true,
         percentage: 50,
         reason: `Community-based discount (${student.community})`,

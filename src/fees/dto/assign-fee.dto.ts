@@ -27,7 +27,7 @@ class DiscountDto {
   @IsNotEmpty() @IsEnum(DiscountTypeEnum) type: DiscountTypeEnum;
   @IsNotEmpty() @IsNumber() value: number;
   @IsOptional() @IsString() reason?: string;
-  @IsOptional() @IsArray() applicableHeads?: string[];
+  @IsOptional() @IsArray() @IsString({ each: true }) applicableHeads?: string[];
 }
 
 class StudentFeeTermDto {
@@ -72,9 +72,9 @@ export class AssignFeeDto {
   terms?: StudentFeeTermDto[];
 
   // Auto-detect flags — if true, server will check eligibility and apply
-  @IsOptional() autoTeacherDiscount?: boolean;
-  @IsOptional() autoSiblingDiscount?: boolean;
-  @IsOptional() autoRteDiscount?: boolean;
+  @IsOptional() @IsBoolean() autoTeacherDiscount?: boolean;
+  @IsOptional() @IsBoolean() autoSiblingDiscount?: boolean;
+  @IsOptional() @IsBoolean() autoRteDiscount?: boolean;
 
   @IsOptional()
   @IsBoolean()
