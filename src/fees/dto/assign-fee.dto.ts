@@ -27,6 +27,7 @@ class DiscountDto {
   @IsNotEmpty() @IsEnum(DiscountTypeEnum) type: DiscountTypeEnum;
   @IsNotEmpty() @IsNumber() value: number;
   @IsOptional() @IsString() reason?: string;
+  @IsOptional() @IsArray() applicableHeads?: string[];
 }
 
 class StudentFeeTermDto {
@@ -45,6 +46,7 @@ export class AssignFeeDto {
   @IsOptional() @IsNumber() bookFee?: number;
   @IsOptional() @IsNumber() hostelFee?: number;
   @IsOptional() @IsNumber() otherFee?: number;
+  @IsOptional() @IsNumber() applicationFee?: number;
   
   @IsOptional() @IsNumber() specialClassFee?: number;
   @IsOptional() @IsNumber() specialClassMonths?: number;

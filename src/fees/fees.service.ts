@@ -143,6 +143,7 @@ export class FeesService {
     const bookFee = Number(data.bookFee || 0);
     const hostelFee = Number(data.hostelFee || 0);
     const otherFee = Number(data.otherFee || 0);
+    const applicationFee = Number(data.applicationFee || 0);
     const specialClassFee = Number(data.specialClassFee || 0);
     const specialClassMonths = Number(data.specialClassMonths || 0);
     const specialClassTransportFee = Number(data.specialClassTransportFee || 0);
@@ -155,6 +156,7 @@ export class FeesService {
       bookFee +
       hostelFee +
       otherFee +
+      applicationFee +
       (specialClassFee * specialClassMonths) +
       (specialClassTransportFee * specialClassTransportMonths);
 
@@ -180,6 +182,7 @@ export class FeesService {
         bookFee,
         hostelFee,
         otherFee,
+        applicationFee,
         specialClassFee,
         specialClassMonths,
         specialClassTransportFee,
@@ -219,6 +222,7 @@ export class FeesService {
     const bookFee = Number(data.bookFee || 0);
     const hostelFee = Number(data.hostelFee || 0);
     const otherFee = Number(data.otherFee || 0);
+    const applicationFee = Number(data.applicationFee || 0);
     const specialClassFee = Number(data.specialClassFee || 0);
     const specialClassMonths = Number(data.specialClassMonths || 0);
     const specialClassTransportFee = Number(data.specialClassTransportFee || 0);
@@ -231,6 +235,7 @@ export class FeesService {
       bookFee +
       hostelFee +
       otherFee +
+      applicationFee +
       (specialClassFee * specialClassMonths) +
       (specialClassTransportFee * specialClassTransportMonths);
 
@@ -256,6 +261,7 @@ export class FeesService {
         bookFee,
         hostelFee,
         otherFee,
+        applicationFee,
         specialClassFee,
         specialClassMonths,
         specialClassTransportFee,
@@ -337,6 +343,7 @@ export class FeesService {
     let bookFee = data.bookFee ?? 0;
     let hostelFee = data.hostelFee ?? 0;
     let otherFee = data.otherFee ?? 0;
+    let applicationFee = data.applicationFee ?? 0;
     let specialClassFee = data.specialClassFee ?? 0;
     let specialClassMonths = data.specialClassMonths ?? 0;
     let specialClassTransportFee = data.specialClassTransportFee ?? 0;
@@ -399,6 +406,7 @@ export class FeesService {
       bookFee = data.bookFee ?? structure.bookFee;
       hostelFee = data.hostelFee ?? structure.hostelFee;
       otherFee = data.otherFee ?? structure.otherFee;
+      applicationFee = data.applicationFee ?? structure.applicationFee;
       specialClassFee = data.specialClassFee ?? structure.specialClassFee;
       specialClassMonths = data.specialClassMonths ?? structure.specialClassMonths;
       specialClassTransportFee = data.specialClassTransportFee ?? structure.specialClassTransportFee;
@@ -425,15 +433,17 @@ export class FeesService {
       bookFee +
       hostelFee +
       otherFee +
+      applicationFee +
       (specialClassFee * specialClassMonths) +
       (specialClassTransportFee * specialClassTransportMonths) +
       customTotal;
 
     // Build discount list: start with explicitly passed discounts
-    const allDiscounts: { type: DiscountType; value: number; reason?: string }[] = [...(data.discounts || [])].map((d) => ({
+    const allDiscounts: { type: DiscountType; value: number; reason?: string; applicableHeads?: any }[] = [...(data.discounts || [])].map((d) => ({
       type: d.type as DiscountType,
       value: d.value,
       reason: d.reason,
+      applicableHeads: d.applicableHeads,
     }));
 
     // Auto-detect teacher discount: student's parent is staff
@@ -494,11 +504,32 @@ export class FeesService {
       if (d.type === DiscountType.FLAT) {
         discountAmount += d.value;
       } else if (d.type === DiscountType.TEACHER_DISCOUNT) {
+        // Staff discount applies only on tuition/term fees (without book/store fees)
         discountAmount += Math.round((tuitionFee * d.value) / 100 * 100) / 100;
       } else if (d.type === DiscountType.SIBLING_DISCOUNT) {
+        // Sibling discount applies only on total transport fees
         discountAmount += Math.round((transportFee * d.value) / 100 * 100) / 100;
+      } else if (d.type === DiscountType.RTE_COMMUNITY) {
+        // RTE discount applies to Store, Tuition, Transport
+        const rteBasis = tuitionFee + transportFee + bookFee + applicationFee;
+        discountAmount += Math.round((rteBasis * d.value) / 100 * 100) / 100;
+      } else if (d.applicableHeads && Array.isArray(d.applicableHeads)) {
+        // General discount - user chooses where this applies
+        let basis = 0;
+        const heads = d.applicableHeads;
+        if (heads.includes("tuitionFee")) basis += tuitionFee;
+        if (heads.includes("transportFee")) basis += transportFee;
+        if (heads.includes("bookFee")) basis += bookFee;
+        if (heads.includes("hostelFee")) basis += hostelFee;
+        if (heads.includes("otherFee")) basis += otherFee;
+        if (heads.includes("applicationFee")) basis += applicationFee;
+        if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
+        if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
+        if (heads.includes("customItems")) basis += customTotal;
+        
+        discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
       } else {
-        // PERCENTAGE, RTE_COMMUNITY — stay on totalFee basis
+        // Default: PERCENTAGE — stay on totalFee basis
         discountAmount += Math.round((totalFee * d.value) / 100 * 100) / 100;
       }
     }
@@ -507,10 +538,10 @@ export class FeesService {
     const netFee = Math.max(totalFee - discountAmount, 0);
 
     // Build student term records from custom terms if provided, else from structure
-    let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
+    let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
 
     // Helper: split tuition across terms; others are lumped into the first term
-    const buildComponentSplit = (nTerms: number): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[] } => {
+    const buildComponentSplit = (nTerms: number): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[]; application: number[] } => {
       const splitEvenly = (val: number, n: number) => {
         if (n <= 0) return [];
         const perTerm = Math.round((val / n) * 100) / 100;
@@ -545,6 +576,7 @@ export class FeesService {
         book: kitSplit,
         hostel: firstOnly(hostelFee, nTerms),
         other: firstOnly(otherFee, nTerms),
+        application: firstOnly(applicationFee, nTerms),
       };
     };
 
@@ -570,12 +602,13 @@ export class FeesService {
         bookAmount: comp.book[i],
         hostelAmount: comp.hostel[i],
         otherAmount: comp.other[i],
+        applicationAmount: comp.application[i],
       }));
       numberOfTerms = customStudentTerms.length;
     } else if (structureTerms.length > 0) {
       const comp = buildComponentSplit(structureTerms.length);
       studentTerms = structureTerms.map((t, i) => {
-        const termAmount = comp.tuition[i] + comp.transport[i] + comp.specialClass[i] + comp.specialClassTransport[i] + comp.book[i] + comp.hostel[i] + comp.other[i];
+        const termAmount = comp.tuition[i] + comp.transport[i] + comp.specialClass[i] + comp.specialClassTransport[i] + comp.book[i] + comp.hostel[i] + comp.other[i] + comp.application[i];
         return {
           termNumber: t.termNumber,
           termName: t.termName,
@@ -588,6 +621,7 @@ export class FeesService {
           bookAmount: comp.book[i],
           hostelAmount: comp.hostel[i],
           otherAmount: comp.other[i],
+          applicationAmount: comp.application[i],
         };
       });
       numberOfTerms = structureTerms.length;
@@ -607,6 +641,7 @@ export class FeesService {
           bookAmount: comp.book[idx],
           hostelAmount: comp.hostel[idx],
           otherAmount: comp.other[idx],
+          applicationAmount: comp.application[idx],
         });
       }
     }
@@ -633,6 +668,7 @@ export class FeesService {
         bookFee,
         hostelFee,
         otherFee,
+        applicationFee,
         specialClassFee,
         specialClassMonths,
         specialClassTransportFee,
@@ -713,6 +749,7 @@ export class FeesService {
           quantity,
           amount,
           issuedDate: data.issuedDate ? new Date(data.issuedDate) : new Date(),
+          issuerName: data.issuerName || null,
           saleId: data.saleId || null,
         },
         include: {
@@ -815,6 +852,7 @@ export class FeesService {
     const bookFee = data.bookFee ?? existing.bookFee;
     const hostelFee = data.hostelFee ?? existing.hostelFee;
     const otherFee = data.otherFee ?? existing.otherFee;
+    const applicationFee = data.applicationFee ?? existing.applicationFee;
     const hasElgaBooks = data.hasElgaBooks ?? existing.hasElgaBooks;
     const customItems = data.customItems || [];
 
@@ -846,15 +884,17 @@ export class FeesService {
       bookFee + 
       hostelFee + 
       otherFee + 
+      applicationFee + 
       (specialClassFee * specialClassMonths) +
       (specialClassTransportFee * specialClassTransportMonths) +
       customTotal;
 
     // Build discount list with auto-detection support
-    const allDiscounts: { type: DiscountType; value: number; reason?: string }[] = [...(data.discounts || [])].map((d) => ({
+    const allDiscounts: { type: DiscountType; value: number; reason?: string; applicableHeads?: any }[] = [...(data.discounts || [])].map((d) => ({
       type: d.type as DiscountType,
       value: d.value,
       reason: d.reason,
+      applicableHeads: d.applicableHeads,
     }));
 
     if (data.autoTeacherDiscount || data.autoSiblingDiscount || data.autoRteDiscount) {
@@ -890,10 +930,32 @@ export class FeesService {
       if (d.type === DiscountType.FLAT) {
         discountAmount += d.value;
       } else if (d.type === DiscountType.TEACHER_DISCOUNT) {
+        // Staff discount applies only on tuition/term fees (without book/store fees)
         discountAmount += Math.round((tuitionFee * d.value) / 100 * 100) / 100;
       } else if (d.type === DiscountType.SIBLING_DISCOUNT) {
+        // Sibling discount applies only on total transport fees
         discountAmount += Math.round((transportFee * d.value) / 100 * 100) / 100;
+      } else if (d.type === DiscountType.RTE_COMMUNITY) {
+        // RTE discount applies to Store, Tuition, Transport
+        const rteBasis = tuitionFee + transportFee + bookFee + applicationFee;
+        discountAmount += Math.round((rteBasis * d.value) / 100 * 100) / 100;
+      } else if (d.applicableHeads && Array.isArray(d.applicableHeads)) {
+        // General discount - user chooses where this applies
+        let basis = 0;
+        const heads = d.applicableHeads;
+        if (heads.includes("tuitionFee")) basis += tuitionFee;
+        if (heads.includes("transportFee")) basis += transportFee;
+        if (heads.includes("bookFee")) basis += bookFee;
+        if (heads.includes("hostelFee")) basis += hostelFee;
+        if (heads.includes("otherFee")) basis += otherFee;
+        if (heads.includes("applicationFee")) basis += applicationFee;
+        if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
+        if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
+        if (heads.includes("customItems")) basis += customTotal;
+        
+        discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
       } else {
+        // Default: PERCENTAGE — stay on totalFee basis
         discountAmount += Math.round((totalFee * d.value) / 100 * 100) / 100;
       }
     }
@@ -909,7 +971,7 @@ export class FeesService {
     };
 
     // Rebuild student term records — only tuition is split
-    let studentTerms: { termNumber: number; termName: string; amount: number; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
+    let studentTerms: { termNumber: number; termName: string; amount: number; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
     if (numberOfTerms > 0) {
       const splitEvenly = (val: number, n: number) => {
         if (n <= 0) return [];
@@ -925,12 +987,13 @@ export class FeesService {
       const bkSplit = firstOnly(bookFee, numberOfTerms);
       const hSplit = firstOnly(hostelFee, numberOfTerms);
       const oSplit = firstOnly(otherFee, numberOfTerms);
+      const appSplit = firstOnly(applicationFee, numberOfTerms);
       const scSplit = firstOnly(specialClassFeeTotal, numberOfTerms);
       const sctSplit = firstOnly(specialClassTransportFeeTotal, numberOfTerms);
 
       for (let i = 1; i <= numberOfTerms; i++) {
         const idx = i - 1;
-        const termAmount = tSplit[idx] + trSplit[idx] + bkSplit[idx] + hSplit[idx] + oSplit[idx] + scSplit[idx] + sctSplit[idx];
+        const termAmount = tSplit[idx] + trSplit[idx] + bkSplit[idx] + hSplit[idx] + oSplit[idx] + appSplit[idx] + scSplit[idx] + sctSplit[idx];
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
@@ -940,6 +1003,7 @@ export class FeesService {
           bookAmount: bkSplit[idx],
           hostelAmount: hSplit[idx],
           otherAmount: oSplit[idx],
+          applicationAmount: appSplit[idx],
           specialClassAmount: scSplit[idx],
           specialClassTransportAmount: sctSplit[idx],
         });
@@ -959,6 +1023,7 @@ export class FeesService {
         bookFee,
         hostelFee,
         otherFee,
+        applicationFee,
         totalFee,
         discount: discountAmount,
         netFee,
@@ -1087,7 +1152,7 @@ export class FeesService {
         termPendingMap.set(term.termNumber, Math.max(term.amount - termPaid, 0));
       }
 
-      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
+      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) + Number(studentFee.applicationFee || 0) +
         (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
       const nonTermPaid = studentFee.payments
         .filter((p) => !p.termNumber)
@@ -1227,7 +1292,7 @@ export class FeesService {
           .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
         termPendingMap.set(term.termNumber, Math.max(term.amount - termPaid, 0));
       }
-      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) +
+      const nonTermTotal = Number(studentFee.bookFee || 0) + Number(studentFee.hostelFee || 0) + Number(studentFee.otherFee || 0) + Number(studentFee.applicationFee || 0) +
         (studentFee.customItems || []).reduce((s: number, ci) => s + Number(ci.amount || 0), 0);
       const nonTermPaid = studentFee.payments
         .filter((p) => !p.termNumber)
@@ -1624,6 +1689,10 @@ export class FeesService {
         customItems: true,
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
+        kitIssues: {
+          include: { storeItem: { select: { id: true, name: true, category: true, unit: true } } },
+          orderBy: { issuedDate: 'desc' },
+        },
       },
       orderBy: { student: { name: 'asc' } },
     });
@@ -1680,6 +1749,23 @@ export class FeesService {
         newDiscount += Math.round((studentFee.tuitionFee * d.value) / 100 * 100) / 100;
       } else if (d.type === DiscountType.SIBLING_DISCOUNT) {
         newDiscount += Math.round((newTransportFee * d.value) / 100 * 100) / 100;
+      } else if (d.type === DiscountType.RTE_COMMUNITY) {
+        const basis = studentFee.tuitionFee + newTransportFee + studentFee.bookFee + studentFee.applicationFee;
+        newDiscount += Math.round((basis * d.value) / 100 * 100) / 100;
+      } else if ((d as any).applicableHeads && Array.isArray((d as any).applicableHeads)) {
+        let basis = 0;
+        const heads = (d as any).applicableHeads;
+        const customTotal = studentFee.customItems.reduce((s, ci) => s + ci.amount, 0);
+        if (heads.includes("tuitionFee")) basis += studentFee.tuitionFee;
+        if (heads.includes("transportFee")) basis += newTransportFee;
+        if (heads.includes("bookFee")) basis += studentFee.bookFee;
+        if (heads.includes("hostelFee")) basis += studentFee.hostelFee;
+        if (heads.includes("otherFee")) basis += studentFee.otherFee;
+        if (heads.includes("applicationFee")) basis += studentFee.applicationFee;
+        if (heads.includes("specialClassFee")) basis += (studentFee.specialClassFee * studentFee.specialClassMonths);
+        if (heads.includes("specialClassTransportFee")) basis += (studentFee.specialClassTransportFee * studentFee.specialClassTransportMonths);
+        if (heads.includes("customItems")) basis += customTotal;
+        newDiscount += Math.round((basis * d.value) / 100 * 100) / 100;
       } else {
         newDiscount += Math.round((newTotalFee * d.value) / 100 * 100) / 100;
       }
@@ -2068,6 +2154,7 @@ export class FeesService {
       bookFee: number;
       hostelFee: number;
       otherFee: number;
+      applicationFee: number;
       customItemsTotal: number;
       totalFee: number;
       totalDiscount: number;
@@ -2087,6 +2174,7 @@ export class FeesService {
           bookFee: 0,
           hostelFee: 0,
           otherFee: 0,
+          applicationFee: 0,
           customItemsTotal: 0,
           totalFee: 0,
           totalDiscount: 0,
@@ -2102,6 +2190,7 @@ export class FeesService {
       entry.bookFee += fee.bookFee || 0;
       entry.hostelFee += fee.hostelFee || 0;
       entry.otherFee += fee.otherFee || 0;
+      entry.applicationFee += (fee as any).applicationFee || 0;
       entry.customItemsTotal += (fee.customItems || []).reduce((s, ci) => s + (ci.amount || 0), 0);
       entry.totalFee += fee.totalFee || 0;
       entry.totalDiscount += fee.discount || 0;
@@ -2131,6 +2220,7 @@ export class FeesService {
       bookFee: acc.bookFee + r.bookFee,
       hostelFee: acc.hostelFee + r.hostelFee,
       otherFee: acc.otherFee + r.otherFee,
+      applicationFee: (acc as any).applicationFee + (r as any).applicationFee,
       customItemsTotal: acc.customItemsTotal + r.customItemsTotal,
       totalFee: acc.totalFee + r.totalFee,
       totalDiscount: acc.totalDiscount + r.totalDiscount,
@@ -2138,7 +2228,7 @@ export class FeesService {
       netOutstanding: acc.netOutstanding + r.netOutstanding,
     }), {
       studentCount: 0, tuitionFee: 0, transportFee: 0, bookFee: 0,
-      hostelFee: 0, otherFee: 0, customItemsTotal: 0, totalFee: 0,
+      hostelFee: 0, otherFee: 0, applicationFee: 0, customItemsTotal: 0, totalFee: 0,
       totalDiscount: 0, totalPaid: 0, netOutstanding: 0,
     });
 

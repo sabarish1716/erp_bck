@@ -889,6 +889,7 @@ model FeeStructure {
   bookFee      Float   @default(0)
   hostelFee    Float   @default(0)
   otherFee     Float   @default(0)
+  applicationFee Float @default(0)
 
   numberOfTerms Int    @default(1)  // 1, 2, or 3
 
@@ -947,6 +948,7 @@ model StudentFee {
   bookFee       Float   @default(0)
   hostelFee     Float   @default(0)
   otherFee      Float   @default(0)
+  applicationFee Float  @default(0)
 
   totalFee      Float
   discount      Float   @default(0)
@@ -984,6 +986,7 @@ model StudentKitIssue {
   quantity      Int        @default(1)
   amount        Float      // actual amount charged for this item
   issuedDate    DateTime   @default(now())
+  issuerName    String?    // staff who issued the item
   saleId        String?    // linked POS sale if applicable
 
   studentFee    StudentFee @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
@@ -1008,6 +1011,7 @@ model StudentFeeTerm {
   bookAmount       Float   @default(0)
   hostelAmount     Float   @default(0)
   otherAmount      Float   @default(0)
+  applicationAmount Float  @default(0)
   specialClassAmount Float @default(0)
   specialClassTransportAmount Float @default(0)
 
@@ -1045,6 +1049,7 @@ model Discount {
   type          DiscountType // FLAT / PERCENTAGE / TEACHER_DISCOUNT / SIBLING_DISCOUNT / RTE_COMMUNITY
   value         Float
   reason        String?
+  applicableHeads Json?      // New: stores which heads this discount applies to
 
   studentFee    StudentFee @relation(fields: [studentFeeId], references: [id])
 }

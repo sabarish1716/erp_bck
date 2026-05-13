@@ -15,4 +15,5 @@ export class IssueKitItemDto {
   @IsOptional() @IsNumber() amount?: number; // override, else uses sellingPrice × qty
   @IsOptional() @IsDateString() issuedDate?: string;
   @IsOptional() @IsString() saleId?: string; // link to POS sale if applicable
+  @IsOptional() @IsString() issuerName?: string;
 }
