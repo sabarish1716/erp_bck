@@ -13,7 +13,7 @@ import {
 } from 'class-validator';
 
 class TermPaymentDto {
-  @IsNotEmpty() @IsInt() termNumber: number;
+  @IsOptional() @IsInt() termNumber?: number | null;
   @IsNotEmpty() @IsNumber() amount: number;
 }
 

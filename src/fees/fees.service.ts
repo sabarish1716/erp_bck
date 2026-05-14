@@ -194,21 +194,25 @@ export class FeesService {
             : undefined,
         terms:
           termsData.length > 0
-            ? { create: termsData.map((t) => ({ 
+            ? {
+              create: termsData.map((t) => ({
                 termNumber: t.termNumber,
                 termName: t.termName,
                 amount: t.amount,
-                dueDate: t.dueDate ? new Date(t.dueDate) : null 
-              })) }
+                dueDate: t.dueDate ? new Date(t.dueDate) : null
+              }))
+            }
             : undefined,
         kitItems:
           data.kitItems && data.kitItems.length > 0
-            ? { create: data.kitItems.map((ki) => ({ 
-                storeItemId: ki.storeItemId, 
-                quantity: ki.quantity || 1, 
-                amount: ki.amount || 0, 
-                termNumber: ki.termNumber || 1 
-              })) }
+            ? {
+              create: data.kitItems.map((ki) => ({
+                storeItemId: ki.storeItemId,
+                quantity: ki.quantity || 1,
+                amount: ki.amount || 0,
+                termNumber: ki.termNumber || 1
+              }))
+            }
             : undefined,
         hasElgaBooks: data.hasElgaBooks || false,
       },
@@ -273,20 +277,20 @@ export class FeesService {
         },
         terms: {
           deleteMany: {},
-          create: termsData.map((t) => ({ 
+          create: termsData.map((t) => ({
             termNumber: t.termNumber,
             termName: t.termName,
             amount: t.amount,
-            dueDate: t.dueDate ? new Date(t.dueDate) : null 
+            dueDate: t.dueDate ? new Date(t.dueDate) : null
           })),
         },
         kitItems: {
           deleteMany: {},
-          create: (data.kitItems || []).map((ki) => ({ 
-            storeItemId: ki.storeItemId, 
-            quantity: ki.quantity || 1, 
-            amount: ki.amount || 0, 
-            termNumber: ki.termNumber || 1 
+          create: (data.kitItems || []).map((ki) => ({
+            storeItemId: ki.storeItemId,
+            quantity: ki.quantity || 1,
+            amount: ki.amount || 0,
+            termNumber: ki.termNumber || 1
           })),
         },
         hasElgaBooks: data.hasElgaBooks || false,
@@ -518,7 +522,7 @@ export class FeesService {
         if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
         if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
         if (heads.includes("customItems")) basis += customTotal;
-        
+
         discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
       } else {
         // Default: PERCENTAGE — stay on totalFee basis
@@ -870,13 +874,13 @@ export class FeesService {
     }
     const customTotal = finalCustomItems.reduce((sum, ci) => sum + ci.amount, 0);
 
-    const totalFee = 
-      tuitionFee + 
-      transportFee + 
-      bookFee + 
-      hostelFee + 
-      otherFee + 
-      applicationFee + 
+    const totalFee =
+      tuitionFee +
+      transportFee +
+      bookFee +
+      hostelFee +
+      otherFee +
+      applicationFee +
       (specialClassFee * specialClassMonths) +
       (specialClassTransportFee * specialClassTransportMonths) +
       customTotal;
@@ -909,10 +913,10 @@ export class FeesService {
         }
         if (data.autoRteDiscount) {
           if (student.rte && !allDiscounts.some((d) => d.type === DiscountType.RTE_COMMUNITY)) {
-            allDiscounts.push({ 
-              type: DiscountType.RTE_COMMUNITY, 
-              value: 100, 
-              reason: 'RTE (Right to Education) Eligible' 
+            allDiscounts.push({
+              type: DiscountType.RTE_COMMUNITY,
+              value: 100,
+              reason: 'RTE (Right to Education) Eligible'
             });
           }
         }
@@ -946,7 +950,7 @@ export class FeesService {
         if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
         if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
         if (heads.includes("customItems")) basis += customTotal;
-        
+
         discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
       } else {
         // Default: PERCENTAGE — stay on totalFee basis
@@ -972,7 +976,7 @@ export class FeesService {
         const pt = Math.round((val / n) * 100) / 100;
         return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
       };
-      
+
       const specialClassFeeTotal = (data.specialClassFee ?? existing.specialClassFee) * (data.specialClassMonths ?? existing.specialClassMonths);
       const specialClassTransportFeeTotal = (data.specialClassTransportFee ?? existing.specialClassTransportFee) * (data.specialClassTransportMonths ?? existing.specialClassTransportMonths);
 
@@ -1156,19 +1160,31 @@ export class FeesService {
       const allocations: Array<{ termNumber: number | null; amount: number; paidComponents?: Record<string, number> }> = [];
       let overflowPool = 0;
 
-      // Validate each term
+      // Validate each split
       for (const split of data.payments) {
-        const term = studentFee.terms.find((t) => t.termNumber === split.termNumber);
-        if (!term) throw new BadRequestException(`Term ${split.termNumber} not found`);
+        if (split.termNumber) {
+          const term = studentFee.terms.find((t) => t.termNumber === split.termNumber);
+          if (!term) throw new BadRequestException(`Term ${split.termNumber} not found`);
 
-        const termPending = termPendingMap.get(split.termNumber) || 0;
-        const toTerm = Math.min(split.amount, termPending);
-        if (toTerm > 0) {
-          allocations.push({ termNumber: split.termNumber, amount: toTerm, paidComponents: data.paidComponents });
-          termPendingMap.set(split.termNumber, termPending - toTerm);
-        }
-        if (split.amount > toTerm) {
-          overflowPool += split.amount - toTerm;
+          const termPending = termPendingMap.get(split.termNumber) || 0;
+          const toTerm = Math.min(split.amount, termPending);
+          if (toTerm > 0) {
+            allocations.push({ termNumber: split.termNumber, amount: toTerm, paidComponents: data.paidComponents });
+            termPendingMap.set(split.termNumber, termPending - toTerm);
+          }
+          if (split.amount > toTerm) {
+            overflowPool += split.amount - toTerm;
+          }
+        } else {
+          // Explicit non-term allocation
+          const toNonTerm = Math.min(split.amount, nonTermPending);
+          if (toNonTerm > 0) {
+            allocations.push({ termNumber: null, amount: toNonTerm, paidComponents: data.paidComponents });
+            nonTermPending -= toNonTerm;
+          }
+          if (split.amount > toNonTerm) {
+            overflowPool += split.amount - toNonTerm;
+          }
         }
       }
 
@@ -1231,7 +1247,7 @@ export class FeesService {
             include: {
               studentFee: {
                 include: {
-                  student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+                  student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
                   terms: { orderBy: { termNumber: 'asc' } },
                 },
               },
