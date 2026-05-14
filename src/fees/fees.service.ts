@@ -372,9 +372,8 @@ export class FeesService {
         },
       },
     });
-    if (!student) throw new NotFoundException('Student not found');
-    if (!student.admission?.isApproved) {
-      throw new BadRequestException('Fees can be assigned only for approved students');
+    if (!student) {
+      throw new BadRequestException('Student not found.');
     }
 
     // Auto-pull transport fee from route assignment
@@ -655,6 +654,60 @@ export class FeesService {
     }
     const bookBalance = Math.max(bookFee - kitAmount, 0);
 
+    const existingFee = await this.prisma.studentFee.findUnique({
+      where: {
+        studentId_academicYear: {
+          studentId: data.studentId,
+          academicYear: data.academicYear,
+        },
+      },
+    });
+
+    if (existingFee) {
+      // Update existing fee
+      return await this.prisma.studentFee.update({
+        where: { id: existingFee.id },
+        data: {
+          tuitionFee,
+          transportFee,
+          bookFee,
+          hostelFee,
+          otherFee,
+          applicationFee,
+          specialClassFee,
+          specialClassMonths,
+          specialClassTransportFee,
+          specialClassTransportMonths,
+          totalFee,
+          discount: discountAmount,
+          netFee,
+          numberOfTerms,
+          kitAmount,
+          bookBalance,
+          hasElgaBooks,
+          customItems: {
+            deleteMany: {},
+            create: customItems,
+          },
+          discounts: {
+            deleteMany: {},
+            create: allDiscounts,
+          },
+          terms: {
+            deleteMany: {},
+            create: studentTerms,
+          },
+        },
+        include: {
+          customItems: true,
+          discounts: true,
+          terms: { orderBy: { termNumber: 'asc' } },
+          kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
+          student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        },
+      });
+    }
+
     return await this.prisma.studentFee.create({
       data: {
         studentId: data.studentId,
@@ -690,7 +743,7 @@ export class FeesService {
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
         kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
-        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
   }
