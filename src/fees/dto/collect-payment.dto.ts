@@ -9,6 +9,7 @@ import {
   IsArray,
   IsIn,
   ValidateNested,
+  IsObject,
 } from 'class-validator';
 
 class TermPaymentDto {
@@ -37,10 +38,23 @@ export class CollectPaymentDto {
   splitPayments?: TermPaymentDto[];
   @IsOptional()
   @IsArray()
-  @IsIn(['transportFee', 'bookFee', 'hostelFee', 'otherFee', 'customItems', 'manualDiscount'], {
-    each: true,
-  })
+  @IsIn(
+    [
+      'tuitionFee',
+      'transportFee',
+      'bookFee',
+      'hostelFee',
+      'otherFee',
+      'customItems',
+      'manualDiscount',
+    ],
+    {
+      each: true,
+    },
+  )
   receiptComponents?: string[];
+
   @IsOptional()
-  paidComponents?: Record<string, number>;  // { tuition: 17333, transport: 3667, ... }
+  @IsObject()
+  paidComponents?: Record<string, number>; // { tuition: 17333, transport: 3667, ... }
 }
