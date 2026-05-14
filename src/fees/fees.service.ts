@@ -478,23 +478,15 @@ export class FeesService {
       }
     }
 
-    // Auto-detect RTE / community discount
-    if (data.autoRteDiscount && (student.rte || ['SC', 'ST', 'SCA'].includes(student.community))) {
+    // Auto-detect RTE discount
+    if (data.autoRteDiscount && student.rte) {
       const alreadyHas = allDiscounts.some((d) => d.type === DiscountType.RTE_COMMUNITY);
       if (!alreadyHas) {
-        let rtePercent = 0;
-        if (student.rte) {
-          rtePercent = 100;
-        } else if (['SC', 'ST', 'SCA'].includes(student.community)) {
-          rtePercent = 50;
-        }
-        if (rtePercent > 0) {
-          allDiscounts.push({
-            type: DiscountType.RTE_COMMUNITY,
-            value: rtePercent,
-            reason: `RTE/Community discount (${student.rte ? 'RTE' : student.community})`,
-          });
-        }
+        allDiscounts.push({
+          type: DiscountType.RTE_COMMUNITY,
+          value: 100,
+          reason: 'RTE (Right to Education) Eligible',
+        });
       }
     }
 
@@ -917,9 +909,11 @@ export class FeesService {
         }
         if (data.autoRteDiscount) {
           if (student.rte && !allDiscounts.some((d) => d.type === DiscountType.RTE_COMMUNITY)) {
-            allDiscounts.push({ type: DiscountType.RTE_COMMUNITY, value: 100, reason: 'RTE discount' });
-          } else if (['SC', 'ST', 'SCA'].includes(student.community) && !allDiscounts.some((d) => d.type === DiscountType.RTE_COMMUNITY)) {
-            allDiscounts.push({ type: DiscountType.RTE_COMMUNITY, value: 50, reason: `Community discount (${student.community})` });
+            allDiscounts.push({ 
+              type: DiscountType.RTE_COMMUNITY, 
+              value: 100, 
+              reason: 'RTE (Right to Education) Eligible' 
+            });
           }
         }
       }
@@ -1956,15 +1950,6 @@ export class FeesService {
         eligible: true,
         percentage: 100,
         reason: 'Student under RTE (Right to Education)',
-      };
-    }
-
-    // Community-based discount (SC/ST/SCA)
-    if (['SC', 'ST', 'SCA'].includes(student.community)) {
-      eligibility.communityDiscount = {
-        eligible: true,
-        percentage: 50,
-        reason: `Community-based discount (${student.community})`,
       };
     }
 
