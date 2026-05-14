@@ -621,7 +621,7 @@ export class FeesService {
       const comp = buildComponentSplit(numberOfTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
         const idx = i - 1;
-        const termAmount = comp.tuition[idx] + comp.transport[idx] + comp.specialClass[idx] + comp.specialClassTransport[idx] + comp.book[idx] + comp.hostel[idx] + comp.other[idx];
+        const termAmount = comp.tuition[idx] + comp.transport[idx] + comp.specialClass[idx] + comp.specialClassTransport[idx] + comp.book[idx] + comp.hostel[idx] + comp.other[idx] + comp.application[idx];
         studentTerms.push({
           termNumber: i,
           termName: `Term ${i}`,
@@ -686,7 +686,7 @@ export class FeesService {
         discounts: true,
         terms: { orderBy: { termNumber: 'asc' } },
         kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
-        student: { select: { id: true, name: true, standard: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
   }
@@ -771,7 +771,7 @@ export class FeesService {
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: studentFeeId },
       include: {
-        student: { select: { standard: true } },
+        student: { select: { standard: true, kitTag: true } },
         kitIssues: {
           include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } },
           orderBy: { issuedDate: 'desc' },
@@ -1047,7 +1047,7 @@ export class FeesService {
         terms: { orderBy: { termNumber: 'asc' } },
         payments: true,
         kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true } } } },
-        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
   }
@@ -1064,7 +1064,7 @@ export class FeesService {
         terms: { orderBy: { termNumber: 'asc' } },
         payments: { orderBy: { paymentDate: 'desc' } },
         kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } } },
-        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
     if (!fee) throw new NotFoundException('Fee record not found for this student/year');
@@ -1082,7 +1082,7 @@ export class FeesService {
         terms: { orderBy: { termNumber: 'asc' } },
         payments: { orderBy: { paymentDate: 'desc' } },
         kitIssues: { include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } } },
-        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
     if (!fee) throw new NotFoundException('Fee record not found');
@@ -1231,7 +1231,7 @@ export class FeesService {
             include: {
               studentFee: {
                 include: {
-                  student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+                  student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
                   terms: { orderBy: { termNumber: 'asc' } },
                 },
               },
@@ -1313,7 +1313,7 @@ export class FeesService {
               paidComponents: data.paidComponents ? (data.paidComponents as unknown as Prisma.JsonObject) : undefined,
             },
             include: {
-              studentFee: { include: { student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
           createdPaymentAmounts.push(Number(toSelected));
@@ -1338,7 +1338,7 @@ export class FeesService {
               receiptComponents: data.receiptComponents ? (data.receiptComponents as unknown as Prisma.JsonArray) : undefined,
             },
             include: {
-              studentFee: { include: { student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
           createdPaymentAmounts.push(Number(toNonTerm));
@@ -1368,7 +1368,7 @@ export class FeesService {
               receiptComponents: data.receiptComponents ? (data.receiptComponents as unknown as Prisma.JsonArray) : undefined,
             },
             include: {
-              studentFee: { include: { student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           }));
           createdPaymentAmounts.push(Number(toTerm));
@@ -1389,7 +1389,7 @@ export class FeesService {
             where: { id: createdPayments[i].id },
             data: { manualDiscount: allocated },
             include: {
-              studentFee: { include: { student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
+              studentFee: { include: { student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } }, terms: { orderBy: { termNumber: 'asc' } } } },
             },
           });
           createdPayments[i] = updated;
@@ -1515,7 +1515,7 @@ export class FeesService {
         payments: true,
         customItems: true,
         terms: { orderBy: { termNumber: 'asc' } },
-        student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+        student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
       },
     });
 
@@ -1543,7 +1543,7 @@ export class FeesService {
       include: {
         studentFee: {
           include: {
-            student: { select: { id: true, name: true, standard: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
+            student: { select: { id: true, name: true, standard: true, section: true, kitTag: true, family: { select: { fatherPhone: true, motherPhone: true, fatherWhatsapp: true, motherWhatsapp: true } } } },
           },
         },
       },
@@ -2127,7 +2127,7 @@ export class FeesService {
     const fees = await this.prisma.studentFee.findMany({
       where: { academicYear },
       include: {
-        student: { select: { standard: true, section: true } },
+        student: { select: { standard: true, section: true, kitTag: true } },
         payments: true,
         customItems: true,
         discounts: true,
