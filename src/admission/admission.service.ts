@@ -1124,6 +1124,7 @@ parentsEmail: data.parentsEmail,
       academicYear: data.academicYear ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
       staffParent: data.staffParentId ? { connect: { id: data.staffParentId } } : { disconnect: true },
       siblingGroupId: data.siblingGroupId ?? undefined,
+      kitTag: data.kitTag ?? undefined,
     };
 
 
@@ -1406,6 +1407,24 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         academics: { include: { subjects: true } },
         admission: true,
       },
+    });
+  }
+
+  async patchStudent(id: string, data: Partial<CreateAdmissionDto>) {
+    const updateData: any = {};
+    
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.kitTag !== undefined) updateData.kitTag = data.kitTag;
+    if (data.standard !== undefined) updateData.standard = toStandardEnum(data.standard as any);
+    if (data.section !== undefined) updateData.section = data.section;
+    if (data.academicYear !== undefined) updateData.academicYear = data.academicYear;
+    
+    return this.prisma.student.update({
+      where: { id },
+      data: updateData,
+      include: {
+        admission: true,
+      }
     });
   }
 

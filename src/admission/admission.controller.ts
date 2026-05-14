@@ -382,6 +382,12 @@ async update(
 
   return this.service.updateStudent(id, parsedBody);
 }
+  
+  @Patch(':id')
+  @Permissions(Permission.ADMISSION_UPDATE)
+  async patch(@Param('id') id: string, @Body() body: Partial<CreateAdmissionDto>) {
+    return this.service.patchStudent(id, body);
+  }
 
   @Post(':id/unarchive')
   unarchive(@Param('id') id: string) {

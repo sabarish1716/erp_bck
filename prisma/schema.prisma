@@ -215,6 +215,7 @@ model Student {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
   documentsJson     Json?
+  kitTag            String?
 }
 
 model Family {
