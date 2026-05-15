@@ -1220,7 +1220,11 @@ export class FeesService {
           const termPending = termPendingMap.get(split.termNumber) || 0;
           const toTerm = Math.min(split.amount, termPending);
           if (toTerm > 0) {
-            allocations.push({ termNumber: split.termNumber, amount: toTerm, paidComponents: data.paidComponents });
+            allocations.push({ 
+              termNumber: split.termNumber, 
+              amount: toTerm, 
+              paidComponents: split.paidComponents || data.paidComponents 
+            });
             termPendingMap.set(split.termNumber, termPending - toTerm);
           }
           if (split.amount > toTerm) {
@@ -1230,7 +1234,11 @@ export class FeesService {
           // Explicit non-term allocation
           const toNonTerm = Math.min(split.amount, nonTermPending);
           if (toNonTerm > 0) {
-            allocations.push({ termNumber: null, amount: toNonTerm, paidComponents: data.paidComponents });
+            allocations.push({ 
+              termNumber: null, 
+              amount: toNonTerm, 
+              paidComponents: split.paidComponents || data.paidComponents 
+            });
             nonTermPending -= toNonTerm;
           }
           if (split.amount > toNonTerm) {
