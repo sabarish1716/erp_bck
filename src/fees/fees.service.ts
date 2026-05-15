@@ -1179,10 +1179,8 @@ export class FeesService {
     const overallPending = Math.max(Number(studentFee.netFee || 0) - totalPaidOverall, 0);
     const manualDiscountTotal = this.normalizeManualDiscount(data.manualDiscount);
     const grossAmount = Number(data.amount || 0);
-    if (manualDiscountTotal > grossAmount + 0.01) {
-      throw new BadRequestException('Manual discount cannot exceed amount');
-    }
-    const netPayableAmount = Math.max(grossAmount - manualDiscountTotal, 0);
+    const netPayableAmount = grossAmount;
+    const totalReduction = grossAmount + manualDiscountTotal;
 
     // Multi-term payment support
     if (Array.isArray(data.payments) && data.payments.length > 0) {
@@ -1191,8 +1189,8 @@ export class FeesService {
       if (Math.abs(totalSplit - netPayableAmount) > 0.01) {
         throw new BadRequestException(`Sum of split term payments (${totalSplit}) does not match net payable amount (${netPayableAmount})`);
       }
-      if (grossAmount > overallPending + 0.01) {
-        throw new BadRequestException(`Amount (${grossAmount}) exceeds pending balance (${overallPending})`);
+      if (totalReduction > overallPending + 0.01) {
+        throw new BadRequestException(`Total payment value (${totalReduction}) exceeds pending balance (${overallPending})`);
       }
 
       const termPendingMap = new Map<number, number>();
