@@ -986,6 +986,7 @@ model StudentKitIssue {
   storeItemId   String
   quantity      Int        @default(1)
   amount        Float      // actual amount charged for this item
+  termNumber    Int        @default(1)
   issuedDate    DateTime   @default(now())
   issuerName    String?    // staff who issued the item
   saleId        String?    // linked POS sale if applicable

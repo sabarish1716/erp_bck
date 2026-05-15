@@ -755,7 +755,7 @@ export class FeesService {
   async issueKitItem(data: IssueKitItemDto) {
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: data.studentFeeId },
-      include: { kitIssues: true },
+      include: { kitIssues: true, terms: { orderBy: { termNumber: 'asc' } } },
     });
     if (!studentFee) throw new NotFoundException('Student fee record not found');
 
@@ -764,15 +764,29 @@ export class FeesService {
 
     const quantity = data.quantity || 1;
     const amount = data.amount ?? (storeItem.sellingPrice * quantity);
+    const termNumber = data.termNumber || 1;
 
-    // Check if this would exceed bookFee
-    const currentKitTotal = studentFee.kitIssues.reduce((sum, ki) => sum + ki.amount, 0);
-    const newKitTotal = currentKitTotal + amount;
-    if (newKitTotal > studentFee.bookFee) {
+    // Term-specific budget check
+    const term = studentFee.terms.find(t => t.termNumber === termNumber);
+    if (!term) throw new BadRequestException(`Term ${termNumber} is not assigned to this student.`);
+
+    const termBudget = term.bookAmount || 0;
+    const currentTermTotal = studentFee.kitIssues
+      .filter(ki => ki.termNumber === termNumber)
+      .reduce((sum, ki) => sum + ki.amount, 0);
+    
+    const newTermTotal = currentTermTotal + amount;
+
+    if (newTermTotal > termBudget && termBudget > 0) {
       throw new BadRequestException(
-        `Kit item total (${newKitTotal}) would exceed book/kit fee (${studentFee.bookFee}). Current kit issued: ${currentKitTotal}`,
+        `Issue failed: Total items for Term ${termNumber} (₹${newTermTotal}) would exceed the allocated budget of ₹${termBudget}.`
       );
+    } else if (termBudget === 0 && (studentFee.kitAmount + amount) > studentFee.bookFee) {
+       // Fallback to total budget if term budget is not explicitly set
+       throw new BadRequestException(`Issue failed: Total kit items would exceed the overall annual budget of ₹${studentFee.bookFee}.`);
     }
+
+    const newGlobalTotal = studentFee.kitAmount + amount;
 
     return this.prisma.$transaction(async (tx) => {
       // Deduct from master store stock
@@ -797,6 +811,7 @@ export class FeesService {
           storeItemId: data.storeItemId,
           quantity,
           amount,
+          termNumber,
           issuedDate: data.issuedDate ? new Date(data.issuedDate) : new Date(),
           issuerName: data.issuerName || null,
           saleId: data.saleId || null,
@@ -810,15 +825,15 @@ export class FeesService {
       await tx.studentFee.update({
         where: { id: data.studentFeeId },
         data: {
-          kitAmount: newKitTotal,
-          bookBalance: Math.max(studentFee.bookFee - newKitTotal, 0),
+          kitAmount: newGlobalTotal,
+          bookBalance: Math.max(studentFee.bookFee - newGlobalTotal, 0),
         },
       });
 
       return {
         ...issue,
-        kitTotal: newKitTotal,
-        bookBalance: Math.max(studentFee.bookFee - newKitTotal, 0),
+        kitTotal: newGlobalTotal,
+        bookBalance: Math.max(studentFee.bookFee - newGlobalTotal, 0),
         bookFee: studentFee.bookFee,
       };
     });
@@ -828,7 +843,8 @@ export class FeesService {
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: studentFeeId },
       include: {
-        student: { select: { standard: true, kitTag: true } },
+        student: { select: { name: true, standard: true, kitTag: true } },
+        terms: { orderBy: { termNumber: 'asc' } },
         kitIssues: {
           include: { storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } } },
           orderBy: { issuedDate: 'desc' },
@@ -852,6 +868,7 @@ export class FeesService {
       kitAmount: studentFee.kitAmount,
       bookBalance: studentFee.bookBalance,
       kitIssues: studentFee.kitIssues,
+      terms: studentFee.terms,
       allowedKitItems: feeStructure?.kitItems || [],
     };
   }
@@ -1766,9 +1783,18 @@ export class FeesService {
       orderBy: { student: { name: 'asc' } },
     });
 
-    return fees.map((fee) => {
-      const totalPaid = this.getTotalEffectivePaid(fee.payments);
-      return { ...fee, totalPaid, pending: fee.netFee - totalPaid };
+    return fees.map((f) => {
+      const fee = f as any;
+      const totalPaid = this.getTotalEffectivePaid(fee.payments || []);
+      return {
+        ...fee,
+        student: fee.student,
+        payments: fee.payments,
+        kitIssues: fee.kitIssues,
+        terms: fee.terms,
+        totalPaid,
+        pending: Math.max(fee.netFee - totalPaid, 0),
+      };
     });
   }
 
