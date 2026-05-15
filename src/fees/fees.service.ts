@@ -1034,9 +1034,9 @@ export class FeesService {
       const specialClassTransportFeeTotal = (data.specialClassTransportFee ?? existing.specialClassTransportFee) * (data.specialClassTransportMonths ?? existing.specialClassTransportMonths);
 
       const tSplit = splitEvenly(tuitionFee, numberOfTerms);
-      const trSplit = firstOnly(transportFee, numberOfTerms);
+      const trSplit = splitEvenly(transportFee, numberOfTerms);
       const bkSplit = firstOnly(bookFee, numberOfTerms);
-      const hSplit = firstOnly(hostelFee, numberOfTerms);
+      const hSplit = splitEvenly(hostelFee, numberOfTerms);
       const oSplit = firstOnly(otherFee, numberOfTerms);
       const appSplit = firstOnly(applicationFee, numberOfTerms);
       const scSplit = firstOnly(specialClassFeeTotal, numberOfTerms);
