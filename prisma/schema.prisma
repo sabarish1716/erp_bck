@@ -1605,7 +1605,7 @@ enum ItemCategory {
   FURNITURE
   ID_CARD
   ACCESSORIES
-  ELGA_BOOKS
+  NOTEBOOKS
   OTHER
 }
 
