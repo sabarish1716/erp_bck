@@ -2331,5 +2331,66 @@ export class FeesService {
 
     return { rows, grandTotal };
   }
+
+  // ═══════════════════════════════════════════════
+  // ELGA NOTEBOOK MAPPINGS
+  // ═══════════════════════════════════════════════
+
+  async getElgaNotebookMappings() {
+    const mappings = await this.prisma.elgaNotebookMapping.findMany({
+      include: {
+        storeItem: { select: { id: true, name: true, category: true, sellingPrice: true } },
+      },
+      orderBy: [{ level: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    // Group by level
+    const grouped: Record<number, { storeItemId: string; quantity: number; storeItem: any }[]> = {};
+    for (const m of mappings) {
+      if (!grouped[m.level]) grouped[m.level] = [];
+      grouped[m.level].push({ storeItemId: m.storeItemId, quantity: m.quantity, storeItem: m.storeItem });
+    }
+    return grouped;
+  }
+
+  async upsertElgaNotebookMappings(level: number, storeItemIds: string[]) {
+    // Delete existing mappings for this level
+    await this.prisma.elgaNotebookMapping.deleteMany({ where: { level } });
+
+    if (storeItemIds.length === 0) return { level, storeItemIds: [] };
+
+    // Create new mappings
+    await this.prisma.elgaNotebookMapping.createMany({
+      data: storeItemIds.map(id => ({ level, storeItemId: id, quantity: 1 })),
+      skipDuplicates: true,
+    });
+
+    return { level, storeItemIds };
+  }
+
+  // ═══════════════════════════════════════════════
+  // ALL FEES BY STUDENT (across all years)
+  // ═══════════════════════════════════════════════
+
+  async getAllFeesByStudent(studentId: string) {
+    const fees = await this.prisma.studentFee.findMany({
+      where: { studentId },
+      include: {
+        payments: true,
+        customItems: true,
+        terms: { orderBy: { termNumber: 'asc' } },
+      },
+      orderBy: { academicYear: 'desc' },
+    });
+
+    return fees.map(f => {
+      const totalPaid = this.getTotalEffectivePaid(f.payments);
+      return {
+        ...f,
+        totalPaid,
+        pending: Math.max(f.netFee - totalPaid, 0),
+      };
+    });
+  }
 }
 

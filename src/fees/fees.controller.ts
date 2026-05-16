@@ -243,4 +243,28 @@ export class FeesController {
   getClassWiseSummary(@Query('academicYear') academicYear: string) {
     return this.feesService.getClassWiseSummary(academicYear);
   }
+
+  // ─── ELGA NOTEBOOK MAPPINGS ────────────────────
+
+  @Get('elga-mappings')
+  @Permissions(Permission.FEES_ASSIGN)
+  getElgaNotebookMappings() {
+    return this.feesService.getElgaNotebookMappings();
+  }
+
+  @Post('elga-mappings')
+  @Permissions(Permission.FEES_ASSIGN)
+  upsertElgaNotebookMappings(
+    @Body() body: { level: number; storeItemIds: string[] },
+  ) {
+    return this.feesService.upsertElgaNotebookMappings(body.level, body.storeItemIds);
+  }
+
+  // ─── ALL FEES BY STUDENT ───────────────────────
+
+  @Get('all-by-student/:studentId')
+  @Permissions(Permission.FEES_READ)
+  getAllFeesByStudent(@Param('studentId') studentId: string) {
+    return this.feesService.getAllFeesByStudent(studentId);
+  }
 }

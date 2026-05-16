@@ -1649,6 +1649,7 @@ model StoreItem {
   teacherFreeItems  TeacherFreeItem[]
   feeKitItems       FeeKitItem[]
   studentKitIssues  StudentKitIssue[]
+  elgaMappings      ElgaNotebookMapping[]
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1898,5 +1899,20 @@ model DocRequest {
   @@index([status])
   @@index([type])
 }
+// ═══════════════════════════════════════════════
+// ELGA NOTEBOOK LEVEL MAPPINGS
+// ═══════════════════════════════════════════════
 
+model ElgaNotebookMapping {
+  id          String    @id @default(uuid())
+  level       Int       // 1–21 (ELGA book level)
+  storeItemId String
+  quantity    Int       @default(1)
 
+  storeItem   StoreItem @relation(fields: [storeItemId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime  @default(now())
+
+  @@unique([level, storeItemId])
+  @@index([level])
+}
