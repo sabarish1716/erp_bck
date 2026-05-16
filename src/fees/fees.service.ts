@@ -111,8 +111,12 @@ export class FeesService {
         .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
 
       let status = 'PENDING';
-      if (termPaid >= term.amount) status = 'PAID';
-      else if (termPaid > 0) status = 'PARTIAL';
+      // Use small epsilon or rounding to handle floating point precision issues during partial refunds
+      const isPaid = Math.round(termPaid * 100) / 100 >= Math.round(term.amount * 100) / 100;
+      const isPartial = termPaid > 0.01;
+
+      if (isPaid) status = 'PAID';
+      else if (isPartial) status = 'PARTIAL';
 
       await tx.studentFeeTerm.update({
         where: { id: term.id },
@@ -1571,6 +1575,8 @@ export class FeesService {
           statusReason: data.reason,
         },
       });
+
+      console.log(`[Refund] Payment ${paymentId} updated: status=${status}, refundAmount=${newTotalRefunded}`);
 
       await this.recalculateTermStatuses(payment.studentFeeId, tx);
       return updated;
