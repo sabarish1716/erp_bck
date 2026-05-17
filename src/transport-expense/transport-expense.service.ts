@@ -363,6 +363,11 @@ export class TransportExpenseService {
       select: { amount: true, category: true },
     });
 
+    const appFuelLogs = await this.prisma.fuelLog.findMany({
+      where: { timestamp: { gte: start, lt: end } },
+      select: { totalCost: true },
+    });
+
     const payments = await this.prisma.payment.findMany({
       where: {
         paymentDate: { gte: start, lt: end },
@@ -405,7 +410,9 @@ export class TransportExpenseService {
     );
 
     const manualExpenseTotal = Number(manualExpenses.reduce((sum, x) => sum + Number(x.amount || 0), 0).toFixed(2));
-    const totalExpense = Number((manualExpenseTotal + salary.totalSalaryExpense).toFixed(2));
+    const appFuelExpenseTotal = Number(appFuelLogs.reduce((sum, x) => sum + Number(x.totalCost || 0), 0).toFixed(2));
+    const combinedManualExpense = Number((manualExpenseTotal + appFuelExpenseTotal).toFixed(2));
+    const totalExpense = Number((combinedManualExpense + salary.totalSalaryExpense).toFixed(2));
     const netTransport = Number((transportIncome - totalExpense).toFixed(2));
 
     return {
@@ -415,7 +422,7 @@ export class TransportExpenseService {
       },
       expense: {
         salary: salary.totalSalaryExpense,
-        manual: manualExpenseTotal,
+        manual: combinedManualExpense,
         total: totalExpense,
       },
       net: netTransport,
@@ -532,7 +539,7 @@ export class TransportExpenseService {
     });
   }
 
-  findAll(filters: ExpenseFilters = {}) {
+  async findAll(filters: ExpenseFilters = {}) {
     const where: any = {};
 
     if (filters.category) {
@@ -553,11 +560,50 @@ export class TransportExpenseService {
       }
     }
 
-    return this.prisma.transportExpense.findMany({
+    const expenses: any[] = await this.prisma.transportExpense.findMany({
       where,
       include: { bus: true },
       orderBy: { date: 'desc' },
     });
+
+    if (!filters.category || filters.category === 'FUEL') {
+      const fuelWhere: any = {};
+      if (filters.busIds?.length) {
+        fuelWhere.busId = { in: filters.busIds };
+      }
+      if (filters.from || filters.to) {
+        fuelWhere.timestamp = {};
+        if (filters.from) fuelWhere.timestamp.gte = this.parseDateBoundary(filters.from, false);
+        if (filters.to) fuelWhere.timestamp.lte = this.parseDateBoundary(filters.to, true);
+      }
+
+      const fuelLogs = await this.prisma.fuelLog.findMany({
+        where: fuelWhere,
+        include: { bus: true, driver: true },
+      });
+
+      const mappedLogs = fuelLogs.map((log) => ({
+        id: `fuellog-${log.id}`,
+        busId: log.busId,
+        date: log.timestamp,
+        category: 'FUEL',
+        amount: log.totalCost || 0,
+        fuelStation: log.note ? `App Upload - ${log.note}` : 'App Upload',
+        paymentMode: 'MOBILE_APP',
+        litres: log.litres,
+        pricePerLitre: log.fuelCostPerLitre,
+        isShared: false,
+        bus: log.bus || { number: log.plateNo },
+        imageUrl: log.imageUrl,
+        driverName: log.driver?.name,
+        odometer: log.odometer,
+      }));
+
+      expenses.push(...mappedLogs);
+      expenses.sort((a, b) => b.date.getTime() - a.date.getTime());
+    }
+
+    return expenses;
   }
 
   async exportExcel(filters: ExpenseFilters = {}) {
