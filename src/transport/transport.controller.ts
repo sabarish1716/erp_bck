@@ -349,6 +349,39 @@ export class TransportController {
     return this.transportService.stopSplClass(studentId, body.daysUsed, body.totalWorkingDays);
   }
 
+  // ─── STUDENT TRANSPORT TIMELINE & DRIVER ROTATION ───────
+
+  @Get('student/:studentId/timeline')
+  @Permissions(Permission.TRANSPORT_READ)
+  getStudentTransportTimeline(
+    @Param('studentId') studentId: string,
+    @Query('academicYear') academicYear: string,
+  ) {
+    return this.transportService.getStudentTransportTimeline(studentId, academicYear);
+  }
+
+  @Post('student/timeline')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  updateStudentTransportTimeline(@Body() dto: any) {
+    return this.transportService.updateStudentTransportTimeline(dto);
+  }
+
+  @Get('rotations')
+  @Permissions(Permission.TRANSPORT_READ)
+  getDriverRotations(
+    @Query('routeId') routeId: string,
+    @Query('academicYear') academicYear: string,
+  ) {
+    return this.transportService.getDriverRotations(routeId, academicYear);
+  }
+
+  @Post('rotations')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  updateDriverRotation(@Body() dto: any) {
+    return this.transportService.updateDriverRotation(dto);
+  }
+
+
   // ─── DRIVER CRUD ──────────────────────────────
 
   @Post('drivers')

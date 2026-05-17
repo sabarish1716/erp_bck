@@ -1080,9 +1080,39 @@ export class HrService {
       const preservedExtraAllowance = existingPayroll?.extraAllowance ?? 0;
       const preservedBonusIncentive = existingPayroll?.bonusIncentive ?? 0;
 
+      // Check for DriverRotation extra pay allowance for this month
+      let rotationExtraAllowance = 0;
+      if (staff.designation?.toLowerCase() === 'driver' || staff.category?.toString().toLowerCase().includes('driver')) {
+        const driverRecord = await this.prisma.driver.findFirst({
+          where: {
+            OR: [
+              { phone: staff.phone || undefined },
+              { email: staff.email || undefined },
+              { name: staff.name },
+            ],
+          },
+        });
+        if (driverRecord) {
+          const [yearStr, monthStr] = (month || '').split('-');
+          const yNum = Number(yearStr);
+          const mNum = Number(monthStr);
+          const startYear = mNum >= 6 ? yNum : yNum - 1;
+          const calcAcademicYear = `${startYear}-${startYear + 1}`;
+
+          const rotation = await this.prisma.driverRotation.findFirst({
+            where: { driverId: driverRecord.id, month: month || '', academicYear: calcAcademicYear },
+          });
+          if (rotation) {
+            rotationExtraAllowance = rotation.extraPayRate;
+          }
+        }
+      }
+
+      const finalExtraAllowance = preservedExtraAllowance || rotationExtraAllowance;
+
       const netSalary = isActingDriver
         ? Math.round(grossSalary)
-        : Math.round(grossSalary - totalDeductions + preservedExtraAllowance + preservedBonusIncentive);
+        : Math.round(grossSalary - totalDeductions + finalExtraAllowance + preservedBonusIncentive);
 
       // CTC = Gross + Employer PF + Employer ESI
       const ctc = isActingDriver
@@ -1100,7 +1130,7 @@ export class HrService {
           employerPfContribution, employerEsiContribution, ctc,
           loanEMIDeduction,
           fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
-          extraAllowance: preservedExtraAllowance,
+          extraAllowance: finalExtraAllowance,
           bonusIncentive: preservedBonusIncentive,
           totalDeductions, netSalary,
           status: 'generated',
@@ -1115,7 +1145,7 @@ export class HrService {
           employerPfContribution, employerEsiContribution, ctc,
           loanEMIDeduction,
           fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
-          extraAllowance: 0,
+          extraAllowance: finalExtraAllowance,
           totalDeductions, netSalary,
         },
       });

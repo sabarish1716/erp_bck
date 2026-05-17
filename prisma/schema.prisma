@@ -206,6 +206,7 @@ model Student {
   users             User?
   studentFees       StudentFee[]
   studentTransport  StudentTransport?
+  studentTransportTimeline StudentTransportTimeline[]
   docRequests       DocRequest[]
   examRollNumbers   ExamRollNumber[]
   examSeatAllocs    ExamSeatAllocation[]
@@ -558,6 +559,7 @@ model Driver {
   locations  Location[]
   mileages   Mileage[] @relation("DriverMileages")
   fuelLogs   FuelLog[] @relation("DriverFuelLogs")
+  rotations  DriverRotation[] @relation("DriverRotations")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt @default(now())
 }
@@ -1096,6 +1098,8 @@ model TransportRoute {
   stops         TransportStop[]
   students      StudentTransport[]
   buses         Bus[]     @relation("RouteBuses")
+  timelines     StudentTransportTimeline[]
+  rotations     DriverRotation[] @relation("RouteRotations")
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -1113,6 +1117,7 @@ model TransportStop {
 
   route         TransportRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
   students      StudentTransport[]
+  timelines     StudentTransportTimeline[]
 }
 
 // Student → Route assignment
@@ -1916,3 +1921,52 @@ model ElgaNotebookMapping {
   @@unique([level, storeItemId])
   @@index([level])
 }
+
+// ═══════════════════════════════════════════════
+// SPECIAL CLASS TRANSPORT EXTENSIONS
+// ═══════════════════════════════════════════════
+
+model StudentTransportTimeline {
+  id             String         @id @default(uuid())
+  studentId      String
+  routeId        String
+  stopId         String?
+  academicYear   String
+  month          String         // Format: "YYYY-MM" (e.g. "2026-08")
+  
+  // BOTH_WAYS, MORNING_ONLY, EVENING_ONLY, SUSPENDED
+  commuteMode    String         @default("BOTH_WAYS") 
+  isSplClass     Boolean        @default(false)
+  feeCharged     Float          // Calculated fee for this specific month
+
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  route          TransportRoute @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  stop           TransportStop? @relation(fields: [stopId], references: [id], onDelete: SetNull)
+
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@unique([studentId, academicYear, month])
+  @@index([studentId])
+  @@index([routeId])
+}
+
+model DriverRotation {
+  id            String         @id @default(uuid())
+  driverId      String
+  routeId       String
+  academicYear  String
+  month         String         // Format: "YYYY-MM" (e.g. "2026-08")
+  extraPayRate  Float          @default(0)
+
+  driver        Driver         @relation("DriverRotations", fields: [driverId], references: [id], onDelete: Cascade)
+  route         TransportRoute @relation("RouteRotations", fields: [routeId], references: [id], onDelete: Restrict)
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([routeId, academicYear, month])
+  @@index([driverId])
+  @@index([routeId])
+}
+

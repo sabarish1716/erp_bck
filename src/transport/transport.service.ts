@@ -556,6 +556,13 @@ export class TransportService {
     });
     if (!student) throw new NotFoundException('Student not found');
 
+    if (data.isSplClass) {
+      const isEligible = student.standard === 'STD_9' || student.standard === 'STD_10' || student.standard === 'STD_11' || student.standard === 'STD_12';
+      if (!isEligible) {
+        throw new BadRequestException('Special Class transport is only applicable for standards 9, 10, 11, and 12');
+      }
+    }
+
     const route = await this.prisma.transportRoute.findUnique({
       where: { id: data.routeId },
       include: { stops: { orderBy: { stopOrder: 'asc' } } },
@@ -779,23 +786,34 @@ export class TransportService {
 
   async getAllAssignments(academicYear?: string) {
     const resolvedAcademicYear = normalizeAcademicYear(academicYear) || await this.getConfiguredAcademicYear();
-    const assignments = await this.prisma.studentTransport.findMany({
-      where: { academicYear: resolvedAcademicYear },
-      include: {
-        route: {
-          include: {
-            buses: {
-              include: { route: true }
-            }, stops: { orderBy: { stopOrder: 'asc' } }
+    const [assignments, timelines] = await Promise.all([
+      this.prisma.studentTransport.findMany({
+        where: { academicYear: resolvedAcademicYear },
+        include: {
+          route: {
+            include: {
+              buses: {
+                include: { route: true }
+              }, stops: { orderBy: { stopOrder: 'asc' } }
+            },
           },
+          stop: true,
+          student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
         },
-        stop: true,
-        student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
-      },
-      orderBy: { student: { name: 'asc' } },
-    });
+        orderBy: { student: { name: 'asc' } },
+      }),
+      this.prisma.studentTransportTimeline.findMany({
+        where: { academicYear: resolvedAcademicYear },
+      }),
+    ]);
 
-    return assignments.map((assignment) => this.resolveAssignmentResponse(assignment));
+    return assignments.map((assignment) => {
+      const studentTimelines = timelines.filter((t) => t.studentId === assignment.studentId);
+      return {
+        ...this.resolveAssignmentResponse(assignment),
+        timelines: studentTimelines,
+      };
+    });
   }
 
   // Calculate transport fee for a student based on route + spl class
@@ -812,6 +830,59 @@ export class TransportService {
   }
 
   async getTransportFeeBreakdown(studentId: string) {
+    const timelines = await this.prisma.studentTransportTimeline.findMany({
+      where: { studentId },
+      include: { route: true, stop: true },
+      orderBy: { month: 'asc' },
+    });
+
+    if (timelines.length > 0) {
+      let baseFee = 0;
+      let splClassFee = 0;
+      let splClassMonths = 0;
+
+      for (const t of timelines) {
+        if (t.commuteMode !== 'SUSPENDED') {
+          const yearlyBase = t.stop?.fee ?? t.route.baseFee;
+          const monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
+          const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+          baseFee += monthlyBase * multiplier;
+
+          if (t.isSplClass) {
+            splClassMonths++;
+            // Fetch structure special class transport fee if not set on the route
+            const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+            let splFee = t.route.splClassFee;
+            if (student) {
+              const fs = await this.prisma.feeStructure.findFirst({
+                where: { standard: student.standard, academicYear: t.academicYear },
+              });
+              if (fs) {
+                splFee = fs.specialClassTransportFee || splFee;
+              }
+            }
+            splClassFee = splFee;
+          }
+        }
+      }
+
+      baseFee = Math.round(baseFee * 100) / 100;
+      const totalFee = baseFee + (splClassFee * splClassMonths);
+
+      return {
+        baseFee,
+        splClassFee: splClassFee * splClassMonths,
+        proRataSplClassFee: splClassFee * splClassMonths,
+        totalFee,
+        splClassDaysUsed: null,
+        totalWorkingDays: null,
+        splClassStartDate: null,
+        splClassEndDate: null,
+        isFromTimeline: true,
+        timelineCount: timelines.length,
+      };
+    }
+
     const assignment = await this.prisma.studentTransport.findUnique({
       where: { studentId },
       include: { route: true, stop: true },
@@ -836,6 +907,7 @@ export class TransportService {
       totalWorkingDays: assignment.totalWorkingDays,
       splClassStartDate: assignment.splClassStartDate,
       splClassEndDate: assignment.splClassEndDate,
+      isFromTimeline: false,
     };
   }
 
@@ -2247,5 +2319,388 @@ export class TransportService {
       content,
     };
   }
+
+  // ─── TIMELINE & DRIVER ROTATION LOGIC ──────────────────
+
+  async getStudentTransportTimeline(studentId: string, academicYear: string) {
+    if (!academicYear) {
+      throw new BadRequestException('Academic year is required');
+    }
+
+    let timeline = await this.prisma.studentTransportTimeline.findMany({
+      where: { studentId, academicYear },
+      include: { route: true, stop: true },
+      orderBy: { month: 'asc' },
+    });
+
+    if (timeline.length === 0) {
+      const assignment = await this.prisma.studentTransport.findUnique({
+        where: { studentId },
+        include: { route: true, stop: true },
+      });
+
+      if (assignment) {
+        const yearPrefix = academicYear.split('-')[0];
+        const nextYearPrefix = String(Number(yearPrefix) + 1);
+        
+        const activeMonths = [
+          { month: '06', year: yearPrefix },
+          { month: '07', year: yearPrefix },
+          { month: '08', year: yearPrefix },
+          { month: '09', year: yearPrefix },
+          { month: '10', year: yearPrefix },
+          { month: '11', year: yearPrefix },
+          { month: '12', year: yearPrefix },
+          { month: '01', year: nextYearPrefix },
+          { month: '02', year: nextYearPrefix },
+          { month: '03', year: nextYearPrefix },
+        ];
+
+        const yearlyBaseFee = assignment.stop?.fee ?? assignment.route.baseFee;
+        const monthlyBaseFee = Math.round((yearlyBaseFee / 10) * 100) / 100;
+        
+        const student = await this.prisma.student.findUnique({
+          where: { id: studentId },
+        });
+        let splClassMonthlyFee = assignment.route.splClassFee;
+        if (student) {
+          const feeStructure = await this.prisma.feeStructure.findFirst({
+            where: { standard: student.standard, academicYear },
+          });
+          if (feeStructure) {
+            splClassMonthlyFee = feeStructure.specialClassTransportFee || assignment.route.splClassFee;
+          }
+        }
+
+        const createData = activeMonths.map((m) => {
+          const monthStr = `${m.year}-${m.month}`;
+          const isSpl = assignment.isSplClass;
+          const feeCharged = monthlyBaseFee + (isSpl ? splClassMonthlyFee : 0);
+
+          return {
+            studentId,
+            routeId: assignment.routeId,
+            stopId: assignment.stopId || null,
+            academicYear,
+            month: monthStr,
+            commuteMode: 'BOTH_WAYS',
+            isSplClass: isSpl,
+            feeCharged,
+          };
+        });
+
+        await this.prisma.studentTransportTimeline.createMany({
+          data: createData,
+        });
+
+        timeline = await this.prisma.studentTransportTimeline.findMany({
+          where: { studentId, academicYear },
+          include: { route: true, stop: true },
+          orderBy: { month: 'asc' },
+        });
+      }
+    }
+
+    return timeline;
+  }
+
+  async updateStudentTransportTimeline(dto: any) {
+    const { studentId, academicYear, month, routeId, stopId, commuteMode, isSplClass } = dto;
+    if (!studentId || !academicYear || !month) {
+      throw new BadRequestException('studentId, academicYear, and month are required');
+    }
+
+    const targetRouteId = routeId;
+    if (!targetRouteId) {
+      throw new BadRequestException('routeId is required');
+    }
+
+    const route = await this.prisma.transportRoute.findUnique({
+      where: { id: targetRouteId },
+      include: { stops: true },
+    });
+    if (!route) throw new NotFoundException('Route not found');
+
+    let yearlyBaseFee = route.baseFee;
+    if (stopId) {
+      const stop = route.stops.find((s) => s.id === stopId);
+      if (stop && stop.fee != null) {
+        yearlyBaseFee = stop.fee;
+      }
+    }
+
+    const monthlyBaseFee = Math.round((yearlyBaseFee / 10) * 100) / 100;
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+    });
+
+    if (isSplClass && student) {
+      const isEligible = student.standard === 'STD_9' || student.standard === 'STD_10' || student.standard === 'STD_11' || student.standard === 'STD_12';
+      if (!isEligible) {
+        throw new BadRequestException('Special Class transport is only applicable for standards 9, 10, 11, and 12');
+      }
+    }
+
+    let splClassMonthlyFee = route.splClassFee;
+    if (student) {
+      const feeStructure = await this.prisma.feeStructure.findFirst({
+        where: { standard: student.standard, academicYear },
+      });
+      if (feeStructure) {
+        splClassMonthlyFee = feeStructure.specialClassTransportFee || route.splClassFee;
+      }
+    }
+
+    let feeCharged = 0;
+    const finalCommuteMode = commuteMode || 'BOTH_WAYS';
+    if (finalCommuteMode !== 'SUSPENDED') {
+      const multiplier = (finalCommuteMode === 'MORNING_ONLY' || finalCommuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+      feeCharged += monthlyBaseFee * multiplier;
+      if (isSplClass) {
+        feeCharged += splClassMonthlyFee;
+      }
+    }
+    feeCharged = Math.round(feeCharged * 100) / 100;
+
+    const updatedRecord = await this.prisma.studentTransportTimeline.upsert({
+      where: {
+        studentId_academicYear_month: { studentId, academicYear, month },
+      },
+      update: {
+        routeId: targetRouteId,
+        stopId: stopId || null,
+        commuteMode: finalCommuteMode,
+        isSplClass: !!isSplClass,
+        feeCharged,
+      },
+      create: {
+        studentId,
+        routeId: targetRouteId,
+        stopId: stopId || null,
+        academicYear,
+        month,
+        commuteMode: finalCommuteMode,
+        isSplClass: !!isSplClass,
+        feeCharged,
+      },
+    });
+
+    await this.syncStudentTimelineFees(studentId, academicYear);
+
+    return updatedRecord;
+  }
+
+  async syncStudentTimelineFees(studentId: string, academicYear: string) {
+    const timelines = await this.prisma.studentTransportTimeline.findMany({
+      where: { studentId, academicYear },
+    });
+    if (timelines.length === 0) return;
+
+    let totalTransportFee = 0;
+    let specialClassTransportFee = 0;
+    let specialClassTransportMonths = 0;
+
+    for (const t of timelines) {
+      if (t.commuteMode !== 'SUSPENDED') {
+        const baseRoute = await this.prisma.transportRoute.findUnique({
+          where: { id: t.routeId },
+          include: { stops: true },
+        });
+        if (baseRoute) {
+          let yearlyBase = baseRoute.baseFee;
+          if (t.stopId) {
+            const stop = baseRoute.stops.find((s) => s.id === t.stopId);
+            if (stop && stop.fee != null) {
+              yearlyBase = stop.fee;
+            }
+          }
+          const monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
+          const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+          totalTransportFee += monthlyBase * multiplier;
+        }
+
+        if (t.isSplClass) {
+          specialClassTransportMonths++;
+          const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+          let splFee = baseRoute?.splClassFee ?? 0;
+          if (student) {
+            const fs = await this.prisma.feeStructure.findFirst({
+              where: { standard: student.standard, academicYear },
+            });
+            if (fs) {
+              splFee = fs.specialClassTransportFee || splFee;
+            }
+          }
+          specialClassTransportFee = splFee;
+        }
+      }
+    }
+
+    totalTransportFee = Math.round(totalTransportFee * 100) / 100;
+
+    const studentFee = await this.prisma.studentFee.findUnique({
+      where: {
+        studentId_academicYear: { studentId, academicYear },
+      },
+    });
+
+    if (studentFee) {
+      const tuitionFee = studentFee.tuitionFee;
+      const bookFee = studentFee.bookFee;
+      const hostelFee = studentFee.hostelFee;
+      const otherFee = studentFee.otherFee;
+      const applicationFee = studentFee.applicationFee;
+      const specialClassFee = studentFee.specialClassFee;
+      const specialClassMonths = studentFee.specialClassMonths;
+
+      const customItems = await this.prisma.studentCustomFeeItem.findMany({
+        where: { studentFeeId: studentFee.id },
+      });
+      const customTotal = customItems.reduce((s, c) => s + c.amount, 0);
+
+      const totalFee =
+        tuitionFee +
+        totalTransportFee +
+        bookFee +
+        hostelFee +
+        otherFee +
+        applicationFee +
+        (specialClassFee * specialClassMonths) +
+        (specialClassTransportFee * specialClassTransportMonths) +
+        customTotal;
+
+      const discounts = await this.prisma.discount.findMany({
+        where: { studentFeeId: studentFee.id },
+      });
+
+      let discountAmount = 0;
+      for (const d of discounts) {
+        if (d.type === 'FLAT') {
+          discountAmount += d.value;
+        } else if (d.type === 'TEACHER_DISCOUNT') {
+          discountAmount += Math.round((tuitionFee * d.value) / 100 * 100) / 100;
+        } else if (d.type === 'SIBLING_DISCOUNT') {
+          discountAmount += Math.round((totalTransportFee * d.value) / 100 * 100) / 100;
+        } else if (d.type === 'RTE_COMMUNITY') {
+          const rteBasis = tuitionFee + totalTransportFee + bookFee + applicationFee;
+          discountAmount += Math.round((rteBasis * d.value) / 100 * 100) / 100;
+        } else if (d.applicableHeads && Array.isArray(d.applicableHeads)) {
+          let basis = 0;
+          const heads = d.applicableHeads as string[];
+          if (heads.includes("tuitionFee")) basis += tuitionFee;
+          if (heads.includes("transportFee")) basis += totalTransportFee;
+          if (heads.includes("bookFee")) basis += bookFee;
+          if (heads.includes("hostelFee")) basis += hostelFee;
+          if (heads.includes("otherFee")) basis += otherFee;
+          if (heads.includes("applicationFee")) basis += applicationFee;
+          if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
+          if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
+          if (heads.includes("customItems")) basis += customTotal;
+
+          discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
+        } else {
+          discountAmount += Math.round((totalFee * d.value) / 100 * 100) / 100;
+        }
+      }
+      discountAmount = Math.min(discountAmount, totalFee);
+      const netFee = Math.max(totalFee - discountAmount, 0);
+
+      const numberOfTerms = studentFee.numberOfTerms;
+      const terms = await this.prisma.studentFeeTerm.findMany({
+        where: { studentFeeId: studentFee.id },
+        orderBy: { termNumber: 'asc' },
+      });
+
+      if (numberOfTerms > 0 && terms.length > 0) {
+        const splitEvenly = (val: number, n: number) => {
+          if (n <= 0) return [];
+          const pt = Math.round((val / n) * 100) / 100;
+          return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
+        };
+
+        const tSplit = splitEvenly(tuitionFee, numberOfTerms);
+        const trSplit = splitEvenly(totalTransportFee, numberOfTerms);
+        const bkSplit = splitEvenly(bookFee, numberOfTerms);
+        const hSplit = splitEvenly(hostelFee, numberOfTerms);
+        const oSplit = splitEvenly(otherFee, numberOfTerms);
+        const appSplit = splitEvenly(applicationFee, numberOfTerms);
+        const scSplit = splitEvenly(specialClassFee * specialClassMonths, numberOfTerms);
+        const sctSplit = splitEvenly(specialClassTransportFee * specialClassTransportMonths, numberOfTerms);
+
+        for (let i = 0; i < terms.length; i++) {
+          const termAmount = tSplit[i] + trSplit[i] + bkSplit[i] + hSplit[i] + oSplit[i] + appSplit[i] + scSplit[i] + sctSplit[i];
+          await this.prisma.studentFeeTerm.update({
+            where: { id: terms[i].id },
+            data: {
+              amount: Math.round(termAmount * 100) / 100,
+              tuitionAmount: tSplit[i],
+              transportAmount: trSplit[i],
+              bookAmount: bkSplit[i],
+              hostelAmount: hSplit[i],
+              otherAmount: oSplit[i],
+              applicationAmount: appSplit[i],
+              specialClassAmount: scSplit[i],
+              specialClassTransportAmount: sctSplit[i],
+            },
+          });
+        }
+      }
+
+      await this.prisma.studentFee.update({
+        where: { id: studentFee.id },
+        data: {
+          transportFee: totalTransportFee,
+          specialClassTransportFee,
+          specialClassTransportMonths,
+          totalFee,
+          discount: discountAmount,
+          netFee,
+        },
+      });
+    }
+  }
+
+  // ─── DRIVER ROTATION LOGIC ──────────────────────────────
+
+  async getDriverRotations(routeId: string, academicYear: string) {
+    if (!academicYear) {
+      throw new BadRequestException('academicYear query param is required');
+    }
+    const whereClause: any = { academicYear };
+    if (routeId) whereClause.routeId = routeId;
+
+    return this.prisma.driverRotation.findMany({
+      where: whereClause,
+      include: { driver: true, route: true },
+      orderBy: { month: 'asc' },
+    });
+  }
+
+  async updateDriverRotation(dto: any) {
+    const { driverId, routeId, academicYear, month, extraPayRate } = dto;
+    if (!driverId || !routeId || !academicYear || !month) {
+      throw new BadRequestException('driverId, routeId, academicYear, and month are required');
+    }
+
+    return this.prisma.driverRotation.upsert({
+      where: {
+        routeId_academicYear_month: { routeId, academicYear, month },
+      },
+      update: {
+        driverId,
+        extraPayRate: extraPayRate || 0,
+      },
+      create: {
+        driverId,
+        routeId,
+        academicYear,
+        month,
+        extraPayRate: extraPayRate || 0,
+      },
+      include: { driver: true, route: true },
+    });
+  }
 }
+
 
