@@ -707,7 +707,7 @@ export class TransportService {
     const assignment = await this.prisma.studentTransport.findUnique({
       where: { studentId },
       include: {
-        route: { include: { stops: { orderBy: { stopOrder: 'asc' } } } },
+        route: { include: { stops: { orderBy: { stopOrder: 'asc' } }, buses: true } },
         stop: true,
         student: { select: { id: true, name: true, standard: true } },
       },
