@@ -894,11 +894,14 @@ export class TransportService {
       data.deviceId = data.phone;
     }
 
-    // If a route is selected but no explicit busId, auto-assign the first bus on that route
+    // Resolve bus and route relationships (strictly manual linking)
     let resolvedBusId: string | null = data.busId || null;
-    if (!resolvedBusId && data.route) {
-      const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
-      if (bus) resolvedBusId = bus.id;
+    if (resolvedBusId && data.route !== undefined) {
+      // Link this bus to the selected route in the DB
+      await this.prisma.bus.update({
+        where: { id: resolvedBusId },
+        data: { routeId: data.route || null },
+      });
     }
 
     try {
@@ -949,13 +952,15 @@ export class TransportService {
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
     if (data.status !== undefined) updateData.status = data.status;
 
-    // Route selection: find the first bus on the selected route and assign it.
-    // This runs AFTER busId so it always wins if a route is explicitly chosen.
-    if (data.route) {
-      const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
-      if (bus) {
-        updateData.busId = bus.id;
-      }
+    // Resolve bus and route relationships during update (strictly manual linking)
+    const targetBusId = updateData.busId !== undefined ? updateData.busId : existing.busId;
+    if (targetBusId && data.route !== undefined) {
+      // Link this bus to the selected route (or null if cleared) in the DB
+      await this.prisma.bus.update({
+        where: { id: targetBusId },
+        data: { routeId: data.route || null },
+      });
+      updateData.busId = targetBusId;
     }
 
     try {
