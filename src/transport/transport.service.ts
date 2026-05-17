@@ -894,9 +894,16 @@ export class TransportService {
       data.deviceId = data.phone;
     }
 
+    // If a route is selected but no explicit busId, auto-assign the first bus on that route
+    let resolvedBusId: string | null = data.busId || null;
+    if (!resolvedBusId && data.route) {
+      const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
+      if (bus) resolvedBusId = bus.id;
+    }
+
     try {
-      if (data.busId) {
-        await this.clearBusAssignments(data.busId);
+      if (resolvedBusId) {
+        await this.clearBusAssignments(resolvedBusId);
       }
 
       return await this.prisma.driver.create({
@@ -905,7 +912,7 @@ export class TransportService {
           email: data.email || null,
           phone: data.phone || null,
           deviceId: data.deviceId || null,
-          busId: data.busId || null,
+          busId: resolvedBusId,
           licenseNo: data.licenseNo || null,
           address: data.address || null,
           bloodGroup: data.bloodGroup || null,
@@ -941,13 +948,15 @@ export class TransportService {
     if (data.address !== undefined) updateData.address = data.address || null;
     if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
     if (data.status !== undefined) updateData.status = data.status;
-    if (data.route !== undefined) {
+
+    // Route selection: find the first bus on the selected route and assign it.
+    // This runs AFTER busId so it always wins if a route is explicitly chosen.
+    if (data.route) {
       const bus = await this.prisma.bus.findFirst({ where: { routeId: data.route } });
       if (bus) {
         updateData.busId = bus.id;
       }
     }
-
 
     try {
       if (updateData.busId && updateData.busId !== existing.busId) {
