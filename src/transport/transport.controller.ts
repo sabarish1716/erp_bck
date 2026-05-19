@@ -328,8 +328,11 @@ export class TransportController {
 
   @Get('fee/:studentId')
   @Permissions(Permission.TRANSPORT_READ)
-  getTransportFee(@Param('studentId') studentId: string) {
-    return this.transportService.getTransportFeeBreakdown(studentId);
+  getTransportFee(
+    @Param('studentId') studentId: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.transportService.getTransportFeeBreakdown(studentId, academicYear);
   }
 
   // ─── SPECIAL CLASS PRO-RATA ───────────────────
@@ -364,6 +367,12 @@ export class TransportController {
   @Permissions(Permission.TRANSPORT_ASSIGN)
   updateStudentTransportTimeline(@Body() dto: any) {
     return this.transportService.updateStudentTransportTimeline(dto);
+  }
+
+  @Post('student/spl-range')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  setStudentSplClassRange(@Body() dto: any) {
+    return this.transportService.setStudentSplClassRange(dto);
   }
 
   @Get('rotations')
