@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, Put, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
 import { StudentService } from './student.service';
 import { CreateStudentDto } from './create-student.dto';
 import { Permissions } from '../auth/permissions.decorator';
@@ -18,6 +18,22 @@ export class StudentController {
   @Permissions(Permission.STUDENT_READ)
   findAll() {
     return this.studentService.findAll();
+  }
+
+  @Get('sections/:standard')
+  @Permissions(Permission.STUDENT_READ)
+  getSectionsByStandard(@Param('standard') standard: string, @Query('academicYear') academicYear?: string) {
+    return this.studentService.getSectionsByStandard(standard, academicYear);
+  }
+
+  @Get('by-class/:standard')
+  @Permissions(Permission.STUDENT_READ)
+  getStudentsByStandardAndSection(
+    @Param('standard') standard: string,
+    @Query('section') section?: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.studentService.getStudentsByStandardAndSection(standard, section, academicYear);
   }
 
   @Get(':id')

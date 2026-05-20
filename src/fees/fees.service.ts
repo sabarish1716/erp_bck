@@ -757,13 +757,20 @@ export class FeesService {
   // ═══════════════════════════════════════════════
 
   async issueKitItem(data: IssueKitItemDto) {
+    const studentFeeId = data.studentFeeId || data.feeId;
+    const storeItemId = data.storeItemId || data.itemId;
+    const issuedDate = data.issuedDate || data.issueDate;
+
+    if (!studentFeeId) throw new BadRequestException('studentFeeId is required');
+    if (!storeItemId) throw new BadRequestException('storeItemId is required');
+
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: data.studentFeeId },
       include: { kitIssues: true, terms: { orderBy: { termNumber: 'asc' } } },
     });
     if (!studentFee) throw new NotFoundException('Student fee record not found');
 
-    const storeItem = await this.prisma.storeItem.findUnique({ where: { id: data.storeItemId } });
+    const storeItem = await this.prisma.storeItem.findUnique({ where: { id: storeItemId } });
     if (!storeItem) throw new NotFoundException('Store item not found');
 
     const quantity = data.quantity || 1;
@@ -798,21 +805,21 @@ export class FeesService {
       if (!masterStore) throw new BadRequestException('No master store configured');
 
       const stock = await tx.storeStock.findUnique({
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: data.storeItemId } },
+        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
       });
       if (!stock || stock.quantity < quantity) {
         throw new BadRequestException(`Insufficient stock in Master Store (Available: ${stock?.quantity || 0})`);
       }
 
       await tx.storeStock.update({
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: data.storeItemId } },
+        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
         data: { quantity: { decrement: quantity } },
       });
 
       const issue = await tx.studentKitIssue.create({
         data: {
-          studentFeeId: data.studentFeeId,
-          storeItemId: data.storeItemId,
+          studentFeeId,
+          storeItemId,
           quantity,
           amount,
           termNumber,
@@ -827,7 +834,7 @@ export class FeesService {
 
       // Update kitAmount and bookBalance on the student fee
       await tx.studentFee.update({
-        where: { id: data.studentFeeId },
+        where: { id: studentFeeId },
         data: {
           kitAmount: newGlobalTotal,
           bookBalance: Math.max(studentFee.bookFee - newGlobalTotal, 0),
@@ -2079,8 +2086,9 @@ export class FeesService {
       standard: toStandardEnum(data.standard),
       admission: { isApproved: true },
     };
-    if (data.section) where.section = data.section;
-    if (data.academicYear) where.academicYear = data.academicYear;
+    if (data.section?.trim()) {
+      where.section = { equals: data.section.trim(), mode: 'insensitive' };
+    }
 
     const students = await this.prisma.student.findMany({
       where,

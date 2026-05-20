@@ -6,6 +6,8 @@ import { UpdateUserPermissionsDto } from './update-user-permissions.dto';
 
 const SETTINGS_KEY = 'admin.settings';
 const FEE_RECEIPT_FIELDS_KEY = 'fees.receiptFields';
+const LEGACY_SCHOOL_NAME = 'PSF Public School';
+const CURRENT_SCHOOL_NAME = 'PSF Matriculation Higher Secondary School';
 
 const DOCUMENT_ASSET_KEYS = [
   'principalSignature',
@@ -28,7 +30,7 @@ const DEFAULT_DOCUMENT_ASSETS: Record<DocumentAssetKey, string> = {
 };
 
 const DEFAULT_SETTINGS = {
-  schoolName: 'PSF School',
+  schoolName: CURRENT_SCHOOL_NAME,
   schoolCode: 'PSF',
   academicYear: '2026-2027',
   requireApprovalForAdmission: false,
@@ -72,6 +74,11 @@ export class SettingsService {
       ...DEFAULT_SETTINGS,
       ...(row.value as Record<string, unknown>),
     };
+
+    // Keep legacy data backward compatible by rewriting the old school label.
+    if ((merged.schoolName as string | undefined) === LEGACY_SCHOOL_NAME) {
+      merged.schoolName = CURRENT_SCHOOL_NAME;
+    }
 
     return {
       ...merged,

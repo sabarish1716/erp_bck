@@ -155,9 +155,10 @@ describe('AdmissionService', () => {
     const csv = service.getBulkUploadTemplateCsv();
     const [headerLine, sampleLine] = csv.split('\n');
 
-    expect(headerLine).toContain('name,standard,gender,dob');
-    expect(headerLine).toContain('academicYear');
-    expect(headerLine).toContain('admissionDate');
+    expect(headerLine).toContain('Student Name');
+    expect(headerLine).toContain('Academic Year');
+    expect(headerLine).toContain('Admission Date');
+    expect(headerLine).toContain('Admission Number');
     expect(sampleLine).toContain('Arun Kumar');
   });
 

@@ -11,61 +11,78 @@
 
 */
 -- AlterEnum
-ALTER TYPE "Gender" ADD VALUE 'OTHERS';
+ALTER TYPE "Gender" ADD VALUE IF NOT EXISTS 'OTHERS';
 
 -- DropForeignKey
-ALTER TABLE "BusCertificate" DROP CONSTRAINT "BusCertificate_busId_fkey";
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'BusCertificate') THEN
+    ALTER TABLE "BusCertificate" DROP CONSTRAINT IF EXISTS "BusCertificate_busId_fkey";
+  END IF;
+END $$;
 
 -- AlterTable
-ALTER TABLE "AcademicDetail" DROP COLUMN "stream",
-ADD COLUMN     "academicStreamId" TEXT;
+ALTER TABLE "AcademicDetail"
+  DROP COLUMN IF EXISTS "stream",
+  ADD COLUMN IF NOT EXISTS "academicStreamId" TEXT;
 
 -- AlterTable
-ALTER TABLE "Bus" DROP COLUMN "name";
+ALTER TABLE "Bus" DROP COLUMN IF EXISTS "name";
 
 -- AlterTable
-ALTER TABLE "ExamRollNumber" DROP COLUMN "stream",
-ADD COLUMN     "academicStreamId" TEXT;
+ALTER TABLE "ExamRollNumber"
+  DROP COLUMN IF EXISTS "stream",
+  ADD COLUMN IF NOT EXISTS "academicStreamId" TEXT;
 
 -- AlterTable
-ALTER TABLE "ExamSchedule" DROP COLUMN "stream",
-ADD COLUMN     "academicStreamId" TEXT;
+ALTER TABLE "ExamSchedule"
+  DROP COLUMN IF EXISTS "stream",
+  ADD COLUMN IF NOT EXISTS "academicStreamId" TEXT;
 
 -- AlterTable
-ALTER TABLE "ExamSubject" DROP COLUMN "stream",
-ADD COLUMN     "academicStreamId" TEXT;
+ALTER TABLE "ExamSubject"
+  DROP COLUMN IF EXISTS "stream",
+  ADD COLUMN IF NOT EXISTS "academicStreamId" TEXT;
 
 -- AlterTable
-ALTER TABLE "FeeStructure" ADD COLUMN     "specialClassFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassMonths" INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassTransportFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassTransportMonths" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "FeeStructure"
+  ADD COLUMN IF NOT EXISTS "specialClassFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassMonths" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassTransportFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassTransportMonths" INTEGER NOT NULL DEFAULT 0;
 
 -- AlterTable
-ALTER TABLE "Student" DROP COLUMN "academicStream",
-ADD COLUMN     "academicStreamId" TEXT;
+ALTER TABLE "Student"
+  DROP COLUMN IF EXISTS "academicStream",
+  ADD COLUMN IF NOT EXISTS "academicStreamId" TEXT;
 
 -- AlterTable
-ALTER TABLE "StudentFee" ADD COLUMN     "specialClassFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassMonths" INTEGER NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassTransportFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassTransportMonths" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "StudentFee"
+  ADD COLUMN IF NOT EXISTS "specialClassFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassMonths" INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassTransportFee" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassTransportMonths" INTEGER NOT NULL DEFAULT 0;
 
 -- AlterTable
-ALTER TABLE "StudentFeeTerm" ADD COLUMN     "specialClassAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
-ADD COLUMN     "specialClassTransportAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;
+ALTER TABLE "StudentFeeTerm"
+  ADD COLUMN IF NOT EXISTS "specialClassAmount" DOUBLE PRECISION NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS "specialClassTransportAmount" DOUBLE PRECISION NOT NULL DEFAULT 0;
 
 -- AlterTable
-ALTER TABLE "TransportRoute" ADD COLUMN     "numberOfTerms" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "TransportRoute"
+  ADD COLUMN IF NOT EXISTS "numberOfTerms" INTEGER NOT NULL DEFAULT 1;
 
 -- DropTable
-DROP TABLE "BusCertificate";
+DROP TABLE IF EXISTS "BusCertificate";
 
--- DropEnum
-DROP TYPE "AcademicStream";
+-- DropEnum (only if it still exists as an enum type, not a table)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'AcademicStream' AND typtype = 'e') THEN
+    DROP TYPE "AcademicStream";
+  END IF;
+END $$;
 
 -- CreateTable
-CREATE TABLE "AcademicStream" (
+CREATE TABLE IF NOT EXISTS "AcademicStream" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "label" TEXT NOT NULL,
@@ -78,19 +95,26 @@ CREATE TABLE "AcademicStream" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "AcademicStream_name_key" ON "AcademicStream"("name");
+CREATE UNIQUE INDEX IF NOT EXISTS "AcademicStream_name_key" ON "AcademicStream"("name");
 
 -- AddForeignKey
+ALTER TABLE "Student" DROP CONSTRAINT IF EXISTS "Student_academicStreamId_fkey";
 ALTER TABLE "Student" ADD CONSTRAINT "Student_academicStreamId_fkey" FOREIGN KEY ("academicStreamId") REFERENCES "AcademicStream"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "AcademicDetail" DROP CONSTRAINT IF EXISTS "AcademicDetail_academicStreamId_fkey";
 ALTER TABLE "AcademicDetail" ADD CONSTRAINT "AcademicDetail_academicStreamId_fkey" FOREIGN KEY ("academicStreamId") REFERENCES "AcademicStream"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ExamSubject" DROP CONSTRAINT IF EXISTS "ExamSubject_academicStreamId_fkey";
 ALTER TABLE "ExamSubject" ADD CONSTRAINT "ExamSubject_academicStreamId_fkey" FOREIGN KEY ("academicStreamId") REFERENCES "AcademicStream"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ExamSchedule" DROP CONSTRAINT IF EXISTS "ExamSchedule_academicStreamId_fkey";
 ALTER TABLE "ExamSchedule" ADD CONSTRAINT "ExamSchedule_academicStreamId_fkey" FOREIGN KEY ("academicStreamId") REFERENCES "AcademicStream"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "ExamRollNumber" DROP CONSTRAINT IF EXISTS "ExamRollNumber_academicStreamId_fkey";
 ALTER TABLE "ExamRollNumber" ADD CONSTRAINT "ExamRollNumber_academicStreamId_fkey" FOREIGN KEY ("academicStreamId") REFERENCES "AcademicStream"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+

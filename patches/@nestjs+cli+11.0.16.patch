@@ -1,0 +1,13 @@
+diff --git a/node_modules/@nestjs/cli/lib/utils/tree-kill.js b/node_modules/@nestjs/cli/lib/utils/tree-kill.js
+index 47f78a0..4e9cb9f 100644
+--- a/node_modules/@nestjs/cli/lib/utils/tree-kill.js
++++ b/node_modules/@nestjs/cli/lib/utils/tree-kill.js
+@@ -4,7 +4,7 @@ exports.treeKillSync = treeKillSync;
+ const child_process_1 = require("child_process");
+ function treeKillSync(pid, signal) {
+     if (process.platform === 'win32') {
+-        (0, child_process_1.execSync)('taskkill /pid ' + pid + ' /T /F');
++        try { (0, child_process_1.execSync)('taskkill /pid ' + pid + ' /T /F'); } catch (_) {}
+         return;
+     }
+     const childs = getAllChilds(pid);

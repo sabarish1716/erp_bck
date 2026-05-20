@@ -122,4 +122,57 @@ export class StudentService {
   delete(id: string) {
     return this.prisma.student.delete({ where: { id } });
   }
+
+  // Get distinct sections for a given standard and academic year
+  async getSectionsByStandard(standard: string, academicYear?: string) {
+    const standardEnum = toStandardEnum(standard);
+    
+    const students = await this.prisma.student.findMany({
+      where: {
+        standard: standardEnum,
+        academicYear: academicYear || undefined,
+      },
+      select: { section: true },
+      distinct: ['section'],
+    });
+
+    const sections = students
+      .map(s => s.section)
+      .filter((section): section is string => !!section)
+      .sort();
+
+    return { sections: [...new Set(sections)] };
+  }
+
+  // Get students by standard and section
+  async getStudentsByStandardAndSection(standard: string, section?: string, academicYear?: string) {
+    const standardEnum = toStandardEnum(standard);
+    
+    const where: any = {
+      standard: standardEnum,
+      admission: { isApproved: true },
+    };
+
+    if (section) {
+      where.section = section;
+    }
+
+    if (academicYear) {
+      where.academicYear = academicYear;
+    }
+
+    const students = await this.prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        standard: true,
+        section: true,
+        academicYear: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return students;
+  }
 }

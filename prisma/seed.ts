@@ -141,7 +141,7 @@ async function main() {
     data: {
       key: 'admin.settings',
       value: {
-        schoolName: 'PSF Public School',
+        schoolName: 'PSF Matriculation Higher Secondary School',
         schoolCode,
         academicYear: ACADEMIC_YEARS[1],
         requireApprovalForAdmission: false,

@@ -225,6 +225,7 @@ const BULK_UPLOAD_ALLOWED_KEYS = new Set(
     'admissionfrom',
     'admissionto',
     'admissionno',
+    'admissionnumber',
     'taluk',
     'district',
     'pincode',
@@ -258,6 +259,7 @@ const BULK_UPLOAD_TEMPLATE_HEADERS = [
   'Academic Year',
   'Admission Date',
   'Admission No',
+  'Admission Number',
   'Admission From',
   'Admission To',
   'Gender',
@@ -490,7 +492,11 @@ export class AdmissionService {
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
-        const admissionNo = await this.generateAdmissionNo();
+        const requestedAdmissionNo = asOptionalString(row.admissionNo || row.admissionNumber);
+        const admissionNo =
+          !requestedAdmissionNo || requestedAdmissionNo.toUpperCase() === 'AUTO'
+            ? await this.generateAdmissionNo()
+            : requestedAdmissionNo;
 
         const rowAcademicYear = normalizeAcademicYear(asOptionalString(row.academicYear)) || undefined;
         const rowSubjects = parseSubjectsJson(row.subjectsJson);
@@ -609,6 +615,7 @@ export class AdmissionService {
       'A',
       '2026-2027',
       '2026-04-10',
+      'AUTO',
       'AUTO',
       '2026-04-10',
       '2029-04-10',
