@@ -20,5 +20,4 @@ export class IssueKitItemDto {
   @IsOptional() @IsString() issuerName?: string;
   @IsOptional() @IsString() saleId?: string; // link to POS sale if applicable
   @IsOptional() @IsInt() @Min(1) termNumber?: number; // defaults to 1
-  @IsOptional() @IsString() issuerName?: string;
 }
