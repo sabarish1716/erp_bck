@@ -161,6 +161,7 @@ const BULK_UPLOAD_ALLOWED_KEYS = new Set(
     'identitymark2',
     'previouslystudied',
     'previousschool',
+    'previousschoolstandard',
     'transportmode',
     'vanneeded',
     'rte',
@@ -212,6 +213,8 @@ const BULK_UPLOAD_ALLOWED_KEYS = new Set(
     'line1',
     'line2',
     'line3',
+    'villagepoarea',
+    'nearbusstand',
     'examname',
     'boardexamtype',
     'boardname',
@@ -259,9 +262,6 @@ const BULK_UPLOAD_TEMPLATE_HEADERS = [
   'Academic Year',
   'Admission Date',
   'Admission No',
-  'Admission Number',
-  'Admission From',
-  'Admission To',
   'Gender',
   'Date of Birth',
   'Religion',
@@ -291,6 +291,7 @@ const BULK_UPLOAD_TEMPLATE_HEADERS = [
   'Number of Siblings',
   'Preferred Contact',
   'Parents Email ID',
+  'Hostel Required',
   'Single Parent',
   'Guardian Relation',
   'Guardian Name',
@@ -305,7 +306,8 @@ const BULK_UPLOAD_TEMPLATE_HEADERS = [
   'Sibling 2 School',
   'Sibling 2 Standard',
   'Door No / House No',
-  'Street / Village',
+  'Street',
+  'Village / PO / Area',
   'Taluk',
   'District',
   'State',
@@ -540,7 +542,7 @@ export class AdmissionService {
             pin: asOptionalString(row.pin || row.pincode),
             line1: asOptionalString(row.doorNo || row.doorNoHouseNo) || asOptionalString(row.line1),
             line2: asOptionalString(row.street || row.streetVillage) || asOptionalString(row.line2),
-            line3: asOptionalString(row.line3),
+            line3: asOptionalString(row.line3 || row.villagePoArea),
           },
 
           academics: [
@@ -615,10 +617,7 @@ export class AdmissionService {
       'A',
       '2026-2027',
       '2026-04-10',
-      'AUTO',
-      'AUTO',
-      '2026-04-10',
-      '2029-04-10',
+      'PSF/2026-2027/12314',
       'MALE',
       '2015-03-14',
       'Hindu',
@@ -649,6 +648,7 @@ export class AdmissionService {
       'father',
       'parents@example.com',
       'false',
+      'false',
       '',
       '',
       '',
@@ -663,7 +663,8 @@ export class AdmissionService {
       '',
       '12/4',
       'North Street',
-      'Near Temple',
+      'Anna Nagar',
+      'Sankari',
       'Madurai',
       'Tamil Nadu',
       '625001',
@@ -821,7 +822,7 @@ parentsEmail: data.parentsEmail,
   state: data.address.state || '',
   line1: data.address.doorNo || data.address.line1 || 'Pending',
   line2: data.address.street || data.address.line2 || '',
-  line3: `${data.address.landmark || ''}, ${data.address.city || ''}, ${data.address.state || ''}` || data.address.line3 || '',
+  line3: data.address.line3 || [data.address.landmark, data.address.city, data.address.state].filter(Boolean).join(', '),
   pin: data.address.pin || '000000',
 }
           }
@@ -1261,9 +1262,10 @@ parentsEmail: data.parentsEmail,
         line1: addressAny.doorNo || addressAny.line1 || 'Pending',
         line2: addressAny.street || addressAny.village || addressAny.line2 || '',
         line3:
-          `${addressAny.landmark || addressAny.taluk || ''}, ${addressAny.city || addressAny.district || ''}, ${addressAny.state || ''}`.trim() ||
           addressAny.line3 ||
-          '',
+          [addressAny.landmark || addressAny.taluk, addressAny.city || addressAny.district, addressAny.state]
+            .filter(Boolean)
+            .join(', '),
         pin: addressAny.pin || '000000',
       },
       create: {
@@ -1275,9 +1277,10 @@ parentsEmail: data.parentsEmail,
         line1: addressAny.doorNo || addressAny.line1 || 'Pending',
         line2: addressAny.street || addressAny.village || addressAny.line2 || '',
         line3:
-          `${addressAny.landmark || addressAny.taluk || ''}, ${addressAny.city || addressAny.district || ''}, ${addressAny.state || ''}`.trim() ||
           addressAny.line3 ||
-          '',
+          [addressAny.landmark || addressAny.taluk, addressAny.city || addressAny.district, addressAny.state]
+            .filter(Boolean)
+            .join(', '),
         pin: addressAny.pin || '000000',
       },
     },

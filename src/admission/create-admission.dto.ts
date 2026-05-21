@@ -16,16 +16,16 @@ import { Gender, Community } from '@prisma/client';
 
 class FamilyDto {
   @IsOptional() @IsString() fatherName?: string;
-  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) fatherPhone?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) fatherPhone?: string;
   @IsOptional() @IsString() fatherWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) fatherAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) fatherAadhar?: string;
 
   @IsOptional() @IsString() fatherOccupation?: string;
   
   @IsOptional() @IsString() motherName?: string;
-  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) motherPhone?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) motherPhone?: string;
   @IsOptional() @IsString() motherWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) motherAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) motherAadhar?: string;
 
   @IsOptional() @IsString() motherOccupation?: string;
   
@@ -37,9 +37,9 @@ class FamilyDto {
   // Single parent & guardian
   @IsOptional() @IsBoolean() isSingleParent?: boolean;
   @IsOptional() @IsString() guardianName?: string;
-  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'Phone must be exactly 10 digits' }) guardianPhone?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) guardianPhone?: string;
   @IsOptional() @IsString() guardianWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) guardianAadhar?: string;
+  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) guardianAadhar?: string;
 
   @IsOptional() @IsString() guardianOccupation?: string;
   @IsOptional() @IsString() guardianRelation?: string;
@@ -151,7 +151,9 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() religion?: string;
   @IsOptional() @IsString() caste?: string;
   @IsOptional() @IsString() motherTongue?: string;
-  @IsOptional() @IsString() @Matches(/^\d{12}$/, { message: 'Aadhar must be exactly 12 digits' }) aadharNo?: string;
+  
+  // Update: Allow empty values for optional phone/aadhar fields
+  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) aadharNo?: string;
 
   @IsOptional() @IsString() bloodGroup?: string;
   
