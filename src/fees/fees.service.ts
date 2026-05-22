@@ -1361,6 +1361,7 @@ export class FeesService {
         const totalManualDiscount = createdPayments.reduce((s, p) => s + Number(p.manualDiscount || 0), 0);
         return {
           ...createdPayments[0],
+          amount: totalCollected,
           splitPayments: createdPayments.map((p) => ({ id: p.id, amount: p.amount, manualDiscount: p.manualDiscount || 0, termNumber: p.termNumber, paidComponents: p.paidComponents || undefined })),
           totalCollected,
           totalManualDiscount,
