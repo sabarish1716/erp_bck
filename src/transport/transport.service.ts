@@ -929,10 +929,14 @@ export class TransportService {
     };
   }
 
-  // Get transport fee with pro-rata special class calculation
+  // Get regular (base) transport fee for a student, excluding special class transport.
+  // SCT is tracked separately via specialClassTransportFee × specialClassTransportMonths
+  // on the StudentFee record to avoid double-counting.
   async getTransportFeeForStudentProRata(studentId: string, academicYear?: string): Promise<number> {
     const breakdown = await this.getTransportFeeBreakdown(studentId, academicYear);
-    return breakdown.totalFee;
+    // Return only the base transport fee — SCT is stored separately in
+    // specialClassTransportFee / specialClassTransportMonths on StudentFee.
+    return breakdown.baseFee;
   }
 
   // Update special class date tracking for pro-rata fee calculation
