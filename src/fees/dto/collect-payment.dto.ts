@@ -15,6 +15,7 @@ import {
 class TermPaymentDto {
   @IsOptional() @IsInt() termNumber?: number | null;
   @IsNotEmpty() @IsNumber() amount: number;
+  @IsOptional() @IsNumber() manualDiscount?: number;
   @IsOptional() @IsObject() paidComponents?: Record<string, number>;
 }
 

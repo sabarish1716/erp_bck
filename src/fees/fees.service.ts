@@ -1207,8 +1207,9 @@ export class FeesService {
     const overallPending = Math.max(Number(studentFee.netFee || 0) - totalPaidOverall, 0);
     const manualDiscountTotal = this.normalizeManualDiscount(data.manualDiscount);
     const grossAmount = Number(data.amount || 0);
+    const explicitDiscountTotal = (data.payments || []).reduce((sum, p) => sum + (p.manualDiscount || 0), 0);
     const netPayableAmount = grossAmount;
-    const totalReduction = grossAmount + manualDiscountTotal;
+    const totalReduction = grossAmount + manualDiscountTotal + explicitDiscountTotal;
 
     // Multi-term payment support
     if (Array.isArray(data.payments) && data.payments.length > 0) {
@@ -1236,7 +1237,7 @@ export class FeesService {
         .reduce((sum, p) => sum + this.getEffectivePaymentAmount(p), 0);
       let nonTermPending = Math.max(nonTermTotal - nonTermPaid, 0);
 
-      const allocations: Array<{ termNumber: number | null; amount: number; paidComponents?: Record<string, number> }> = [];
+      const allocations: Array<{ termNumber: number | null; amount: number; manualDiscount: number; paidComponents?: Record<string, number> }> = [];
       let overflowPool = 0;
 
       // Validate each split
@@ -1247,10 +1248,11 @@ export class FeesService {
 
           const termPending = termPendingMap.get(split.termNumber) || 0;
           const toTerm = Math.min(split.amount, termPending);
-          if (toTerm > 0) {
+          if (toTerm > 0 || (split.manualDiscount && split.manualDiscount > 0)) {
             allocations.push({ 
               termNumber: split.termNumber, 
               amount: toTerm, 
+              manualDiscount: split.manualDiscount || 0,
               paidComponents: split.paidComponents || data.paidComponents 
             });
             termPendingMap.set(split.termNumber, termPending - toTerm);
@@ -1261,10 +1263,11 @@ export class FeesService {
         } else {
           // Explicit non-term allocation
           const toNonTerm = Math.min(split.amount, nonTermPending);
-          if (toNonTerm > 0) {
+          if (toNonTerm > 0 || (split.manualDiscount && split.manualDiscount > 0)) {
             allocations.push({ 
               termNumber: null, 
               amount: toNonTerm, 
+              manualDiscount: split.manualDiscount || 0,
               paidComponents: split.paidComponents || data.paidComponents 
             });
             nonTermPending -= toNonTerm;
@@ -1278,7 +1281,7 @@ export class FeesService {
       if (overflowPool > 0) {
         const toNonTerm = Math.min(overflowPool, nonTermPending);
         if (toNonTerm > 0) {
-          allocations.push({ termNumber: null, amount: toNonTerm });
+          allocations.push({ termNumber: null, amount: toNonTerm, manualDiscount: 0 });
           overflowPool -= toNonTerm;
           nonTermPending -= toNonTerm;
         }
@@ -1291,7 +1294,7 @@ export class FeesService {
           const termPending = termPendingMap.get(term.termNumber) || 0;
           if (termPending <= 0) continue;
           const toTerm = Math.min(overflowPool, termPending);
-          allocations.push({ termNumber: term.termNumber, amount: toTerm });
+          allocations.push({ termNumber: term.termNumber, amount: toTerm, manualDiscount: 0 });
           termPendingMap.set(term.termNumber, termPending - toTerm);
           overflowPool -= toTerm;
         }
@@ -1305,7 +1308,7 @@ export class FeesService {
       return this.prisma.$transaction(async (tx) => {
         const receiptNo = data.receiptNo || (await this.getNextReceiptNo()).nextReceiptNo;
         const createdPayments: any[] = [];
-        const validAllocations = allocations.filter((a) => a.amount > 0);
+        const validAllocations = allocations.filter((a) => a.amount > 0 || a.manualDiscount > 0);
         const manualDiscountAllocations = this.buildManualDiscountAllocations(
           validAllocations.map((a) => Number(a.amount || 0)),
           manualDiscountTotal,
@@ -1317,7 +1320,7 @@ export class FeesService {
             data: {
               studentFeeId: data.studentFeeId,
               amount: split.amount,
-              manualDiscount: manualDiscountAllocations[i] || 0,
+              manualDiscount: (split.manualDiscount || 0) + (manualDiscountAllocations[i] || 0),
               paymentMode: data.paymentMode,
               paymentDate: data.paymentDate ? new Date(data.paymentDate) : new Date(),
               receiptNo,
