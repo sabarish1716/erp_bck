@@ -2177,8 +2177,14 @@ export class FeesService {
       include: {
         student: {
           select: {
-            id: true, name: true, standard: true, section: true,
+            id: true, name: true, standard: true, section: true, gender: true,
             admission: { select: { isApproved: true, admissionNo: true } },
+            address: true,
+            users: { select: { isActive: true } },
+            docRequests: {
+              where: { type: 'TRANSFER_CERTIFICATE', status: 'ISSUED' },
+              select: { id: true },
+            },
           },
         },
         payments: true,
@@ -2196,11 +2202,18 @@ export class FeesService {
     // Group by student
     const studentMap = new Map<string, {
       student: any;
+      isArchived: boolean;
+      isTC: boolean;
       yearData: Record<string, { totalFee: number; paid: number; discount: number; balance: number }>;
       grandTotal: number;
       grandPaid: number;
       grandDiscount: number;
       grandBalance: number;
+      grandRteDiscount: number;
+      grandSiblingDiscount: number;
+      grandStaffDiscount: number;
+      grandAdditionalDiscount: number;
+      grandManualDiscount: number;
     }>();
 
     for (const fee of allFees) {
@@ -2208,17 +2221,40 @@ export class FeesService {
       if (!studentMap.has(sid)) {
         studentMap.set(sid, {
           student: fee.student,
+          isArchived: fee.student?.users?.isActive === false,
+          isTC: fee.student?.docRequests?.length > 0,
           yearData: {},
           grandTotal: 0,
           grandPaid: 0,
           grandDiscount: 0,
           grandBalance: 0,
+          grandRteDiscount: 0,
+          grandSiblingDiscount: 0,
+          grandStaffDiscount: 0,
+          grandAdditionalDiscount: 0,
+          grandManualDiscount: 0,
         });
       }
       const entry = studentMap.get(sid)!;
       const paid = this.getTotalEffectivePaid(fee.payments);
       const discount = fee.discount || 0;
       const balance = fee.netFee - paid;
+
+      let rte = 0;
+      let sibling = 0;
+      let staff = 0;
+      let addl = 0;
+      for (const d of fee.discounts || []) {
+        if (d.type === 'RTE_COMMUNITY') rte += d.value;
+        else if (d.type === 'SIBLING_DISCOUNT') sibling += d.value;
+        else if (d.type === 'TEACHER_DISCOUNT') staff += d.value;
+        else addl += d.value;
+      }
+
+      let manual = 0;
+      for (const p of fee.payments || []) {
+        manual += p.manualDiscount || 0;
+      }
 
       entry.yearData[fee.academicYear] = {
         totalFee: fee.totalFee,
@@ -2230,6 +2266,12 @@ export class FeesService {
       entry.grandPaid += paid;
       entry.grandDiscount += discount;
       entry.grandBalance += Math.max(balance, 0);
+      
+      entry.grandRteDiscount += rte;
+      entry.grandSiblingDiscount += sibling;
+      entry.grandStaffDiscount += staff;
+      entry.grandAdditionalDiscount += addl;
+      entry.grandManualDiscount += manual;
     }
 
     return {
