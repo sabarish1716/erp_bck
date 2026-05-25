@@ -861,7 +861,6 @@ export class TransportService {
           const yearlyBase = t.stop?.fee ?? t.route.baseFee;
           const monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
           const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
-          baseFee += monthlyBase * multiplier;
 
           if (t.isSplClass) {
             const splMultiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
@@ -871,6 +870,8 @@ export class TransportService {
             if (splFeeRate === 0 && t.route.splClassFee > 0) {
               splFeeRate = t.route.splClassFee;
             }
+          } else {
+            baseFee += monthlyBase * multiplier;
           }
         }
       }
@@ -2626,8 +2627,9 @@ export class TransportService {
 
     for (const t of timelines) {
       if (t.commuteMode !== 'SUSPENDED') {
-        // Stop-wise base fee: stop.fee takes priority over route baseFee
         const baseRoute = routeMap.get(t.routeId);
+        let monthlyBase = 0;
+
         if (baseRoute) {
           let yearlyBase = baseRoute.baseFee;
           if (t.stopId) {
@@ -2636,17 +2638,19 @@ export class TransportService {
               yearlyBase = stop.fee;
             }
           }
-          const monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
-          const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
-          totalTransportFee += monthlyBase * multiplier;
+          monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
         }
 
+        const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+
         if (t.isSplClass) {
-          const splMultiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
-          specialClassTransportMonths += splMultiplier;
+          specialClassTransportMonths += multiplier;
           // Use pre-fetched rate; fall back to route splClassFee if fee structure has none
-          const routeSplFee = routeMap.get(t.routeId)?.splClassFee ?? 0;
+          const routeSplFee = baseRoute?.splClassFee ?? 0;
           specialClassTransportFee = splFeeRate > 0 ? splFeeRate : routeSplFee;
+        } else {
+          // If not special class, charge the regular route base fee
+          totalTransportFee += monthlyBase * multiplier;
         }
       }
     }
