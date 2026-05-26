@@ -764,12 +764,20 @@ export class FeesService {
     if (!studentFeeId) throw new BadRequestException('studentFeeId is required');
     if (!storeItemId) throw new BadRequestException('storeItemId is required');
 
+    const studentFeeId = data.studentFeeId || data.feeId;
+    const storeItemId = data.storeItemId || data.itemId;
+    const issuedDate = data.issuedDate || data.issueDate;
+
+    if (!studentFeeId) throw new BadRequestException('studentFeeId is required');
+    if (!storeItemId) throw new BadRequestException('storeItemId is required');
+
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { id: data.studentFeeId },
       include: { kitIssues: true, terms: { orderBy: { termNumber: 'asc' } } },
     });
     if (!studentFee) throw new NotFoundException('Student fee record not found');
 
+    const storeItem = await this.prisma.storeItem.findUnique({ where: { id: storeItemId } });
     const storeItem = await this.prisma.storeItem.findUnique({ where: { id: storeItemId } });
     if (!storeItem) throw new NotFoundException('Store item not found');
 
@@ -806,6 +814,7 @@ export class FeesService {
 
       const stock = await tx.storeStock.findUnique({
         where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
+        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
       });
       if (!stock || stock.quantity < quantity) {
         throw new BadRequestException(`Insufficient stock in Master Store (Available: ${stock?.quantity || 0})`);
@@ -813,11 +822,14 @@ export class FeesService {
 
       await tx.storeStock.update({
         where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
+        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
         data: { quantity: { decrement: quantity } },
       });
 
       const issue = await tx.studentKitIssue.create({
         data: {
+          studentFeeId,
+          storeItemId,
           studentFeeId,
           storeItemId,
           quantity,
@@ -834,6 +846,7 @@ export class FeesService {
 
       // Update kitAmount and bookBalance on the student fee
       await tx.studentFee.update({
+        where: { id: studentFeeId },
         where: { id: studentFeeId },
         data: {
           kitAmount: newGlobalTotal,
@@ -1915,6 +1928,10 @@ export class FeesService {
     };
   }
 
+  async getTransportBreakdown(studentId: string, academicYear?: string) {
+    return this.transportService.getTransportFeeBreakdown(studentId, academicYear);
+  }
+
   // ═══════════════════════════════════════════════
   // ACADEMIC YEARS
   // ═══════════════════════════════════════════════
@@ -2090,6 +2107,9 @@ export class FeesService {
       standard: toStandardEnum(data.standard),
       admission: { isApproved: true },
     };
+    if (data.section?.trim()) {
+      where.section = { equals: data.section.trim(), mode: 'insensitive' };
+    }
     if (data.section?.trim()) {
       where.section = { equals: data.section.trim(), mode: 'insensitive' };
     }

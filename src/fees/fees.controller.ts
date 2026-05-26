@@ -192,6 +192,15 @@ export class FeesController {
     return this.feesService.recalcTransportFee(studentId, academicYear);
   }
 
+  @Get('transport-breakdown/:studentId')
+  @Permissions(Permission.FEES_READ)
+  getTransportBreakdown(
+    @Param('studentId') studentId: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
+    return this.feesService.getTransportBreakdown(studentId, academicYear);
+  }
+
   // ─── KIT / BOOK FEE MANAGEMENT ─────────────────
 
   @Post('kit/issue')

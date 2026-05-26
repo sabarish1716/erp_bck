@@ -216,6 +216,68 @@ export class TransportService {
     return normalizeAcademicYear(String(settings.academicYear || '')) || DEFAULT_ACADEMIC_YEAR;
   }
 
+  private async resolveStudentSpecialClassTransportConfig(
+    studentId: string,
+    academicYear?: string,
+    studentStandard?: string | null,
+  ): Promise<{ monthlyFee: number; months: number; sourceAcademicYear: string | null }> {
+    const normalizedYear = normalizeAcademicYear(academicYear);
+    const standard = studentStandard
+      ?? (await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } }))?.standard
+      ?? null;
+
+    if (!standard) {
+      return { monthlyFee: 0, months: 0, sourceAcademicYear: null };
+    }
+
+    const exactFeeStructure = normalizedYear
+      ? await this.prisma.feeStructure.findUnique({
+        where: { standard_academicYear: { standard: standard as any, academicYear: normalizedYear } },
+        select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      })
+      : null;
+
+    const exactStudentFee = normalizedYear
+      ? await this.prisma.studentFee.findUnique({
+        where: { studentId_academicYear: { studentId, academicYear: normalizedYear } },
+        select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      })
+      : null;
+
+    const latestStudentFee = await this.prisma.studentFee.findFirst({
+      where: {
+        studentId,
+        OR: [
+          { specialClassTransportFee: { gt: 0 } },
+          { specialClassTransportMonths: { gt: 0 } },
+        ],
+      },
+      select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      orderBy: { academicYear: 'desc' },
+    });
+
+    const latestFeeStructure = await this.prisma.feeStructure.findFirst({
+      where: {
+        standard: standard as any,
+        OR: [
+          { specialClassTransportFee: { gt: 0 } },
+          { specialClassTransportMonths: { gt: 0 } },
+        ],
+      },
+      select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      orderBy: { academicYear: 'desc' },
+    });
+
+    const candidates = [exactFeeStructure, exactStudentFee, latestStudentFee, latestFeeStructure].filter(Boolean);
+    const chosen = candidates.find((item) => (item!.specialClassTransportFee ?? 0) > 0 || (item!.specialClassTransportMonths ?? 0) > 0);
+
+    return {
+      monthlyFee: chosen?.specialClassTransportFee ?? 0,
+      months: chosen?.specialClassTransportMonths ?? 0,
+      sourceAcademicYear: chosen?.academicYear ?? null,
+    };
+  }
+
   private buildFuelMileageEntries(logs: FuelLogWithRelations[]): FuelMileageEntry[] {
     return logs.map((log, index) => {
       const previousLog = index > 0 ? logs[index - 1] : null;
@@ -841,19 +903,14 @@ export class TransportService {
     });
 
     if (timelines.length > 0) {
-      // Fetch student + fee structure ONCE (eliminates N+1 per spl-class month)
-      const student = await this.prisma.student.findUnique({ where: { id: studentId } });
-      let splFeeRate = 0;
-      if (student) {
-        const fs = await this.prisma.feeStructure.findFirst({
-          where: { standard: student.standard, academicYear: resolvedYear },
-        });
-        // Fee structure rate takes precedence; fall back to route splClassFee if absent
-        splFeeRate = fs?.specialClassTransportFee ?? 0;
-      }
+      const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
+      const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, resolvedYear, student?.standard == null ? null : String(student.standard));
+      const splFeeRate = sctConfig.monthlyFee;
+      const configuredSplTransportMonths = sctConfig.months;
 
       let baseFee = 0;
       let splClassMonths = 0;
+      let splClassFeeTotal = 0;
 
       for (const t of timelines) {
         if (t.commuteMode !== 'SUSPENDED') {
@@ -865,11 +922,7 @@ export class TransportService {
           if (t.isSplClass) {
             const splMultiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
             splClassMonths += splMultiplier;
-
-            // Fallback: if fee structure has no rate, use the route's splClassFee
-            if (splFeeRate === 0 && t.route.splClassFee > 0) {
-              splFeeRate = t.route.splClassFee;
-            }
+            splClassFeeTotal += splFeeRate > 0 ? Math.round((splFeeRate * splMultiplier) * 100) / 100 : Number(t.feeCharged || 0);
           } else {
             baseFee += monthlyBase * multiplier;
           }
@@ -877,19 +930,16 @@ export class TransportService {
       }
 
       baseFee = Math.round(baseFee * 100) / 100;
-      // Sum feeCharged from DB rows — already computed correctly by setStudentSplClassRange
-      const splClassFeeTotal = Math.round(
-        timelines
-          .filter(t => t.isSplClass && t.commuteMode !== 'SUSPENDED')
-          .reduce((sum, t) => sum + (t.feeCharged || 0), 0) * 100,
-      ) / 100;
+      const billableSplClassMonths = configuredSplTransportMonths > 0 ? configuredSplTransportMonths : splClassMonths;
+      splClassFeeTotal = Math.round(splClassFeeTotal * 100) / 100;
       const totalFee = Math.round((baseFee + splClassFeeTotal) * 100) / 100;
 
       return {
         baseFee,
         splClassFee: splClassFeeTotal,
+        specialClassTransportTotal: splClassFeeTotal,
         proRataSplClassFee: splClassFeeTotal,
-        splClassMonths,
+        splClassMonths: billableSplClassMonths,
         splClassFeeRate: splFeeRate,
         totalFee,
         splClassDaysUsed: null,
@@ -910,7 +960,9 @@ export class TransportService {
 
     // Stop-wise fee respected in fallback path too
     const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-    const fullSplClassFee = assignment.isSplClass ? assignment.route.splClassFee : 0;
+    const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, resolvedYear, student?.standard == null ? null : String(student.standard));
+    const fullSplClassFee = assignment.isSplClass ? sctConfig.monthlyFee : 0;
 
     let proRataSplClassFee = fullSplClassFee;
     if (assignment.isSplClass && assignment.splClassDaysUsed != null && assignment.totalWorkingDays != null && assignment.totalWorkingDays > 0) {
@@ -920,6 +972,7 @@ export class TransportService {
     return {
       baseFee,
       splClassFee: fullSplClassFee,
+      specialClassTransportTotal: proRataSplClassFee,
       proRataSplClassFee,
       totalFee: baseFee + proRataSplClassFee,
       splClassDaysUsed: assignment.splClassDaysUsed,
@@ -2408,27 +2461,39 @@ export class TransportService {
       }
     }
 
-    // Fetch Fee Structure config for this student's standard to return metadata
-    let specialClassTransportMonths = 0;
-    let specialClassTransportFee = 0;
-
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
+      select: { standard: true },
     });
-    if (student) {
-      const feeStructure = await this.prisma.feeStructure.findFirst({
-        where: { standard: student.standard, academicYear },
-      });
-      if (feeStructure) {
-        specialClassTransportMonths = feeStructure.specialClassTransportMonths ?? 0;
-        specialClassTransportFee = feeStructure.specialClassTransportFee ?? 0;
-      }
-    }
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const specialClassTransportMonths = sctConfig.months;
+    const specialClassTransportFee = sctConfig.monthlyFee;
+
+    const normalizedTimeline = timeline.map((entry) => {
+      const multiplier = (entry.commuteMode === 'MORNING_ONLY' || entry.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+      const feeCharged = entry.isSplClass && entry.commuteMode !== 'SUSPENDED'
+        ? (specialClassTransportFee > 0
+          ? Math.round((specialClassTransportFee * multiplier) * 100) / 100
+          : Math.round((entry.feeCharged || 0) * 100) / 100)
+        : 0;
+
+      return {
+        ...entry,
+        feeCharged,
+      };
+    });
+
+    const specialClassTransportTotal = Math.round(
+      normalizedTimeline
+        .filter((entry) => entry.isSplClass && entry.commuteMode !== 'SUSPENDED')
+        .reduce((sum, entry) => sum + Number(entry.feeCharged || 0), 0) * 100,
+    ) / 100;
 
     return {
-      timeline,
+      timeline: normalizedTimeline,
       specialClassTransportMonths,
-      specialClassTransportFee
+      specialClassTransportFee,
+      specialClassTransportTotal,
     };
   }
 
@@ -2471,15 +2536,8 @@ export class TransportService {
       }
     }
 
-    let splClassMonthlyFee = route.splClassFee;
-    if (student) {
-      const feeStructure = await this.prisma.feeStructure.findFirst({
-        where: { standard: student.standard, academicYear },
-      });
-      if (feeStructure) {
-        splClassMonthlyFee = feeStructure.specialClassTransportFee || route.splClassFee;
-      }
-    }
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const splClassMonthlyFee = sctConfig.monthlyFee;
 
     let feeCharged = 0;
     const finalCommuteMode = commuteMode || 'BOTH_WAYS';
@@ -2546,13 +2604,8 @@ export class TransportService {
     const student = await this.prisma.student.findUnique({ where: { id: studentId } });
     if (!student) throw new BadRequestException('Student not found');
 
-    let splClassMonthlyFee = 0;
-    const feeStructure = await this.prisma.feeStructure.findFirst({
-      where: { standard: student.standard, academicYear },
-    });
-    if (feeStructure?.specialClassTransportFee) {
-      splClassMonthlyFee = feeStructure.specialClassTransportFee;
-    }
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, String(student.standard));
+    const splClassMonthlyFee = sctConfig.monthlyFee;
 
     // For each timeline row decide isSplClass based on range
     for (const t of timelines) {
@@ -2591,8 +2644,12 @@ export class TransportService {
 
     return {
       timeline: freshTimeline,
-      specialClassTransportMonths: feeStructure?.specialClassTransportMonths ?? 0,
-      specialClassTransportFee: feeStructure?.specialClassTransportFee ?? 0,
+      specialClassTransportMonths: sctConfig.months,
+      specialClassTransportFee: sctConfig.monthlyFee,
+      specialClassTransportTotal: sctConfig.monthlyFee > 0 ? Math.round((freshTimeline.filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED').reduce((sum, t) => {
+        const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+        return sum + (sctConfig.monthlyFee * multiplier);
+      }, 0)) * 100) / 100 : Math.round(freshTimeline.filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED').reduce((sum, t) => sum + Number(t.feeCharged || 0), 0) * 100) / 100,
     };
   }
 
@@ -2612,14 +2669,10 @@ export class TransportService {
     const routeMap = new Map(routes.map((r) => [r.id, r]));
 
     // ── Fetch student + fee structure ONCE (eliminates N+1 per spl-class month) ──
-    const student = await this.prisma.student.findUnique({ where: { id: studentId } });
-    let splFeeRate = 0;
-    if (student) {
-      const feeStructure = await this.prisma.feeStructure.findFirst({
-        where: { standard: student.standard, academicYear },
-      });
-      splFeeRate = feeStructure?.specialClassTransportFee ?? 0;
-    }
+    const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const splFeeRate = sctConfig.monthlyFee;
+    const configuredSpecialClassTransportMonths = sctConfig.months;
 
     let totalTransportFee = 0;
     let specialClassTransportFee = 0;
@@ -2645,9 +2698,7 @@ export class TransportService {
 
         if (t.isSplClass) {
           specialClassTransportMonths += multiplier;
-          // Use pre-fetched rate; fall back to route splClassFee if fee structure has none
-          const routeSplFee = baseRoute?.splClassFee ?? 0;
-          specialClassTransportFee = splFeeRate > 0 ? splFeeRate : routeSplFee;
+          specialClassTransportFee = splFeeRate;
         } else {
           // If not special class, charge the regular route base fee
           totalTransportFee += monthlyBase * multiplier;
@@ -2676,6 +2727,8 @@ export class TransportService {
         where: { studentFeeId: studentFee.id },
       });
       const customTotal = customItems.reduce((s, c) => s + c.amount, 0);
+      const billableSpecialClassTransportMonths =
+        configuredSpecialClassTransportMonths > 0 ? configuredSpecialClassTransportMonths : specialClassTransportMonths;
 
       const totalFee =
         tuitionFee +
@@ -2685,7 +2738,7 @@ export class TransportService {
         otherFee +
         applicationFee +
         (specialClassFee * specialClassMonths) +
-        (specialClassTransportFee * specialClassTransportMonths) +
+        (specialClassTransportFee * billableSpecialClassTransportMonths) +
         customTotal;
 
       const discounts = await this.prisma.discount.findMany({
@@ -2713,7 +2766,7 @@ export class TransportService {
           if (heads.includes("otherFee")) basis += otherFee;
           if (heads.includes("applicationFee")) basis += applicationFee;
           if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
-          if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * specialClassTransportMonths);
+          if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * billableSpecialClassTransportMonths);
           if (heads.includes("customItems")) basis += customTotal;
 
           discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
@@ -2744,7 +2797,7 @@ export class TransportService {
         const oSplit = splitEvenly(otherFee, numberOfTerms);
         const appSplit = splitEvenly(applicationFee, numberOfTerms);
         const scSplit = splitEvenly(specialClassFee * specialClassMonths, numberOfTerms);
-        const sctSplit = splitEvenly(specialClassTransportFee * specialClassTransportMonths, numberOfTerms);
+        const sctSplit = splitEvenly(specialClassTransportFee * billableSpecialClassTransportMonths, numberOfTerms);
 
         for (let i = 0; i < terms.length; i++) {
           const termAmount = tSplit[i] + trSplit[i] + bkSplit[i] + hSplit[i] + oSplit[i] + appSplit[i] + scSplit[i] + sctSplit[i];
@@ -2770,7 +2823,7 @@ export class TransportService {
         data: {
           transportFee: totalTransportFee,
           specialClassTransportFee,
-          specialClassTransportMonths,
+          specialClassTransportMonths: billableSpecialClassTransportMonths,
           totalFee,
           discount: discountAmount,
           netFee,
