@@ -81,6 +81,8 @@ export class AdmissionController {
       { name: 'birthCert', maxCount: 1 },
       { name: 'communityCert', maxCount: 1 },
       { name: 'aadharStudent', maxCount: 1 },
+      { name: 'transferCert', maxCount: 1 },
+      { name: 'entranceExam', maxCount: 1 },
     ],
     {
       storage: diskStorage({
@@ -103,6 +105,8 @@ async create(
     birthCert?: Express.Multer.File[];
     communityCert?: Express.Multer.File[];
     aadharStudent?: Express.Multer.File[];
+    transferCert?: Express.Multer.File[];
+    entranceExam?: Express.Multer.File[];
   },
   @Req() req: any,
 ) {
@@ -133,7 +137,9 @@ async create(
   // ✅ Attach uploaded files
   if (files) {
     Object.keys(files).forEach((key) => {
-      const file = files[key][0];
+      const fileArr = files[key];
+      if (!fileArr || !fileArr[0]) return;
+      const file = fileArr[0];
 
       if (!parsedBody.documents[key]) {
         parsedBody.documents[key] = {};
