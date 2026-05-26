@@ -764,20 +764,12 @@ export class FeesService {
     if (!studentFeeId) throw new BadRequestException('studentFeeId is required');
     if (!storeItemId) throw new BadRequestException('storeItemId is required');
 
-    const studentFeeId = data.studentFeeId || data.feeId;
-    const storeItemId = data.storeItemId || data.itemId;
-    const issuedDate = data.issuedDate || data.issueDate;
-
-    if (!studentFeeId) throw new BadRequestException('studentFeeId is required');
-    if (!storeItemId) throw new BadRequestException('storeItemId is required');
-
     const studentFee = await this.prisma.studentFee.findUnique({
-      where: { id: data.studentFeeId },
+      where: { id: studentFeeId },
       include: { kitIssues: true, terms: { orderBy: { termNumber: 'asc' } } },
     });
     if (!studentFee) throw new NotFoundException('Student fee record not found');
 
-    const storeItem = await this.prisma.storeItem.findUnique({ where: { id: storeItemId } });
     const storeItem = await this.prisma.storeItem.findUnique({ where: { id: storeItemId } });
     if (!storeItem) throw new NotFoundException('Store item not found');
 
@@ -814,14 +806,12 @@ export class FeesService {
 
       const stock = await tx.storeStock.findUnique({
         where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
       });
       if (!stock || stock.quantity < quantity) {
         throw new BadRequestException(`Insufficient stock in Master Store (Available: ${stock?.quantity || 0})`);
       }
 
       await tx.storeStock.update({
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
         where: { storeId_itemId: { storeId: masterStore.id, itemId: storeItemId } },
         data: { quantity: { decrement: quantity } },
       });
@@ -830,12 +820,10 @@ export class FeesService {
         data: {
           studentFeeId,
           storeItemId,
-          studentFeeId,
-          storeItemId,
           quantity,
           amount,
           termNumber,
-          issuedDate: data.issuedDate ? new Date(data.issuedDate) : new Date(),
+          issuedDate: issuedDate ? new Date(issuedDate) : new Date(),
           issuerName: data.issuerName || null,
           saleId: data.saleId || null,
         },
@@ -846,7 +834,6 @@ export class FeesService {
 
       // Update kitAmount and bookBalance on the student fee
       await tx.studentFee.update({
-        where: { id: studentFeeId },
         where: { id: studentFeeId },
         data: {
           kitAmount: newGlobalTotal,
