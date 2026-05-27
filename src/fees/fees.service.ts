@@ -2211,7 +2211,18 @@ export class FeesService {
       student: any;
       isArchived: boolean;
       isTC: boolean;
-      yearData: Record<string, { totalFee: number; paid: number; discount: number; balance: number }>;
+      yearData: Record<string, {
+        totalFee: number;
+        paid: number;
+        discount: number;
+        rteDiscount: number;
+        siblingDiscount: number;
+        staffDiscount: number;
+        additionalDiscount: number;
+        manualDiscount: number;
+        netFee: number;
+        balance: number;
+      }>;
       grandTotal: number;
       grandPaid: number;
       grandDiscount: number;
@@ -2243,10 +2254,11 @@ export class FeesService {
         });
       }
       const entry = studentMap.get(sid)!;
-      const paid = this.getTotalEffectivePaid(fee.payments);
-      const discount = fee.discount || 0;
-      const balance = fee.netFee - paid;
 
+      // 1. Total Fee (original, before any discounts)
+      const totalFee = fee.totalFee;
+
+      // 2. Discounts (RTE, Sibling, Staff, Additional, Manual)
       let rte = 0;
       let sibling = 0;
       let staff = 0;
@@ -2257,23 +2269,39 @@ export class FeesService {
         else if (d.type === 'TEACHER_DISCOUNT') staff += d.value;
         else addl += d.value;
       }
-
+      // Manual discounts from payments
       let manual = 0;
       for (const p of fee.payments || []) {
         manual += p.manualDiscount || 0;
       }
+      // 3. Total Discount
+      const totalDiscount = rte + sibling + staff + addl + manual;
+
+      // 4. Net Fee (after all discounts)
+      const netFee = Math.max(totalFee - totalDiscount, 0);
+
+      // 5. Paid Amount (only actual payments, exclude manual discounts)
+      const paid = (fee.payments || []).reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+      // 6. Balance
+      const balance = Math.max(netFee - paid, 0);
 
       entry.yearData[fee.academicYear] = {
-        totalFee: fee.totalFee,
+        totalFee,
         paid,
-        discount,
-        balance: Math.max(balance, 0),
+        discount: totalDiscount,
+        rteDiscount: rte,
+        siblingDiscount: sibling,
+        staffDiscount: staff,
+        additionalDiscount: addl,
+        manualDiscount: manual,
+        netFee,
+        balance,
       };
-      entry.grandTotal += fee.totalFee;
+      entry.grandTotal += totalFee;
       entry.grandPaid += paid;
-      entry.grandDiscount += discount;
-      entry.grandBalance += Math.max(balance, 0);
-      
+      entry.grandDiscount += totalDiscount;
+      entry.grandBalance += balance;
       entry.grandRteDiscount += rte;
       entry.grandSiblingDiscount += sibling;
       entry.grandStaffDiscount += staff;
