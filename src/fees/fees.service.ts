@@ -2044,7 +2044,7 @@ export class FeesService {
     if (student.staffParentId && student.staffParent?.isActive) {
       eligibility.teacherDiscount = {
         eligible: true,
-        percentage: 10,
+        percentage: 0,
         reason: `Parent is staff: ${student.staffParent.name} (${student.staffParent.designation})`,
       };
     }
@@ -2060,7 +2060,7 @@ export class FeesService {
       if (siblingsCount > 0) {
         eligibility.siblingDiscount = {
           eligible: true,
-          percentage: Math.min(siblingsCount * 5, 25),
+          percentage: 0,
           reason: `${siblingsCount} sibling(s) enrolled in the school`,
         };
       }
@@ -2070,7 +2070,7 @@ export class FeesService {
     if (student.rte) {
       eligibility.rteDiscount = {
         eligible: true,
-        percentage: 100,
+        percentage: 0,
         reason: 'Student under RTE (Right to Education)',
       };
     }
