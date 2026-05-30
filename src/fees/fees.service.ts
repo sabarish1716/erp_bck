@@ -409,7 +409,7 @@ export class FeesService {
       }
 
       tuitionFee = structure.tuitionFee;
-      transportFee = data.transportFee ?? (transportFee || structure.transportFee);
+      transportFee = data.transportFee ?? (transportFee || 0);
       bookFee = data.bookFee ?? structure.bookFee;
       hostelFee = data.hostelFee ?? structure.hostelFee;
       otherFee = data.otherFee ?? structure.otherFee;
@@ -569,7 +569,7 @@ export class FeesService {
 
       return {
         tuition: splitEvenly(tuitionFee, nTerms),
-        transport: firstOnly(transportFee, nTerms),
+        transport: splitEvenly(transportFee, nTerms),
         specialClass: firstOnly(specialClassFee * specialClassMonths, nTerms),
         specialClassTransport: firstOnly(specialClassTransportFee * specialClassTransportMonths, nTerms),
         book: kitSplit,

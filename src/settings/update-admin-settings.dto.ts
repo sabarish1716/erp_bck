@@ -8,6 +8,13 @@ export class DocumentAssetsDto {
   @IsOptional()
   @IsString()
   @MaxLength(12000000)
+  @ValidateIf((o) => !!o.schoolLogo)
+  @Matches(ASSET_VALUE_PATTERN)
+  schoolLogo?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(12000000)
   @ValidateIf((o) => !!o.principalSignature)
   @Matches(ASSET_VALUE_PATTERN)
   principalSignature?: string;
@@ -91,6 +98,18 @@ export class UpdateAdminSettingsDto {
   @IsOptional()
   @IsBoolean()
   enableIndividualDemotion?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableDriverRotation?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableSplClassTransport?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  enableMobileFuelLogs?: boolean;
 
   @IsOptional()
   @ValidateNested()

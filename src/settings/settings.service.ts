@@ -10,6 +10,7 @@ const LEGACY_SCHOOL_NAME = 'PSF Public School';
 const CURRENT_SCHOOL_NAME = 'PSF Matriculation Higher Secondary School';
 
 const DOCUMENT_ASSET_KEYS = [
+  'schoolLogo',
   'principalSignature',
   'hrSignature',
   'chairmanSignature',
@@ -21,6 +22,7 @@ const DOCUMENT_ASSET_KEYS = [
 type DocumentAssetKey = (typeof DOCUMENT_ASSET_KEYS)[number];
 
 const DEFAULT_DOCUMENT_ASSETS: Record<DocumentAssetKey, string> = {
+  schoolLogo: '',
   principalSignature: '',
   hrSignature: '',
   chairmanSignature: '',
@@ -40,6 +42,9 @@ const DEFAULT_SETTINGS = {
   enableStaffModule: true,
   admissionNoAutoGenerate: true,
   enableIndividualDemotion: false,
+  enableDriverRotation: true,
+  enableSplClassTransport: true,
+  enableMobileFuelLogs: true,
   documentAssets: DEFAULT_DOCUMENT_ASSETS,
 };
 
