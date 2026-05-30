@@ -539,8 +539,12 @@ export class FeesService {
     // Build student term records from custom terms if provided, else from structure
     let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
 
-    // Helper: split tuition across terms; others are lumped into the first term
-    const buildComponentSplit = (nTerms: number): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[]; application: number[] } => {
+    // Helper: split tuition across core terms; others are lumped into the first term
+    const buildComponentSplit = (termsArray: any[]): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[]; application: number[] } => {
+      const coreTerms = termsArray.filter(t => t.termNumber);
+      const nCore = coreTerms.length > 0 ? coreTerms.length : termsArray.length;
+      const nTerms = termsArray.length;
+
       const splitEvenly = (val: number, n: number) => {
         if (n <= 0) return [];
         const perTerm = Math.round((val / n) * 100) / 100;
@@ -552,6 +556,14 @@ export class FeesService {
         arr[0] = val;
         return arr;
       };
+
+      const fullTuition = splitEvenly(tuitionFee, nTerms);
+      const coreTransport = splitEvenly(transportFee, nCore);
+      const fullSpecialClass = firstOnly(specialClassFee * specialClassMonths, nTerms);
+      const fullSpecialClassTransport = firstOnly(specialClassTransportFee * specialClassTransportMonths, nTerms);
+      const fullHostel = firstOnly(hostelFee, nTerms);
+      const fullOther = firstOnly(otherFee, nTerms);
+      const fullApplication = firstOnly(applicationFee, nTerms);
 
       // Kit items split
       const kitSplit = Array(nTerms).fill(0);
@@ -567,15 +579,27 @@ export class FeesService {
       const remainder = Math.max(bookFee - kitTotal, 0);
       kitSplit[0] += remainder;
 
+      const transportArr: number[] = [];
+      let coreIdx = 0;
+      for (const t of termsArray) {
+        const isCore = coreTerms.length > 0 ? !!t.termNumber : true;
+        if (isCore) {
+          transportArr.push(coreTransport[coreIdx] || 0);
+          coreIdx++;
+        } else {
+          transportArr.push(0);
+        }
+      }
+
       return {
-        tuition: splitEvenly(tuitionFee, nTerms),
-        transport: splitEvenly(transportFee, nTerms),
-        specialClass: firstOnly(specialClassFee * specialClassMonths, nTerms),
-        specialClassTransport: firstOnly(specialClassTransportFee * specialClassTransportMonths, nTerms),
+        tuition: fullTuition,
+        transport: transportArr,
+        specialClass: fullSpecialClass,
+        specialClassTransport: fullSpecialClassTransport,
         book: kitSplit,
-        hostel: firstOnly(hostelFee, nTerms),
-        other: firstOnly(otherFee, nTerms),
-        application: firstOnly(applicationFee, nTerms),
+        hostel: fullHostel,
+        other: fullOther,
+        application: fullApplication,
       };
     };
 
@@ -588,7 +612,7 @@ export class FeesService {
       const discountRatio = totalFee > 0 ? netFee / totalFee : 1;
       const discountedTermBasis = Math.round(termFeeBasis * discountRatio * 100) / 100;
       // Allow custom terms to override amounts, but component split stays tuition+transport only
-      const comp = buildComponentSplit(customStudentTerms.length);
+      const comp = buildComponentSplit(customStudentTerms);
       studentTerms = customStudentTerms.map((t, i) => ({
         termNumber: t.termNumber,
         termName: t.termName,
@@ -605,7 +629,7 @@ export class FeesService {
       }));
       numberOfTerms = customStudentTerms.length;
     } else if (structureTerms.length > 0) {
-      const comp = buildComponentSplit(structureTerms.length);
+      const comp = buildComponentSplit(structureTerms);
       studentTerms = structureTerms.map((t, i) => {
         const termAmount = comp.tuition[i] + comp.transport[i] + comp.specialClass[i] + comp.specialClassTransport[i] + comp.book[i] + comp.hostel[i] + comp.other[i] + comp.application[i];
         return {
@@ -625,7 +649,8 @@ export class FeesService {
       });
       numberOfTerms = structureTerms.length;
     } else if (numberOfTerms > 1) {
-      const comp = buildComponentSplit(numberOfTerms);
+      const dummyTerms = Array.from({ length: numberOfTerms }, (_, idx) => ({ termNumber: idx + 1 }));
+      const comp = buildComponentSplit(dummyTerms);
       for (let i = 1; i <= numberOfTerms; i++) {
         const idx = i - 1;
         const termAmount = comp.tuition[idx] + comp.transport[idx] + comp.specialClass[idx] + comp.specialClassTransport[idx] + comp.book[idx] + comp.hostel[idx] + comp.other[idx] + comp.application[idx];
