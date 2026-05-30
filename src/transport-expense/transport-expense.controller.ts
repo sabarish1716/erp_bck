@@ -115,4 +115,20 @@ export class TransportExpenseController {
   ) {
     return this.service.updateActingDriverManualDays(staffId, dto.month, dto.days);
   }
+
+  @Put('expenses/:id/payment-mode')
+  updateExpensePaymentMode(
+    @Param('id') id: string,
+    @Body() body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
+  ) {
+    return this.service.updateExpensePaymentMode(id, body.paymentMode, body.cardNumber);
+  }
+
+  @Put('fuel-logs/:id/payment-mode')
+  updateFuelLogPaymentMode(
+    @Param('id') id: string,
+    @Body() body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
+  ) {
+    return this.service.updateFuelLogPaymentMode(id, body.paymentMode, body.cardNumber);
+  }
 }

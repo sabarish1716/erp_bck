@@ -828,6 +828,9 @@ model FuelLog {
   imageUrl     String?
   timestamp    DateTime @default(now())
 
+  paymentMode  PaymentMode?
+  cardNumber   String?
+
   driver       Driver   @relation("DriverFuelLogs", fields: [driverId], references: [id])
   bus          Bus?     @relation("BusFuelLogs", fields: [busId], references: [id])
 
@@ -837,6 +840,7 @@ model FuelLog {
   @@index([busId])
   @@index([plateNo, timestamp])
 }
+
 
 model TransportExpense {
   id          String   @id @default(uuid())

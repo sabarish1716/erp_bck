@@ -582,22 +582,25 @@ export class TransportExpenseService {
         include: { bus: true, driver: true },
       });
 
-      const mappedLogs = fuelLogs.map((log) => ({
-        id: `fuellog-${log.id}`,
-        busId: log.busId,
-        date: log.timestamp,
-        category: 'FUEL',
-        amount: log.totalCost || 0,
-        fuelStation: log.note ? `App Upload - ${log.note}` : 'App Upload',
-        paymentMode: 'MOBILE_APP',
-        litres: log.litres,
-        pricePerLitre: log.fuelCostPerLitre,
-        isShared: false,
-        bus: log.bus || { number: log.plateNo },
-        imageUrl: log.imageUrl,
-        driverName: log.driver?.name,
-        odometer: log.odometer,
-      }));
+      const mappedLogs = fuelLogs.map((log) => {
+        return {
+          id: `fuellog-${log.id}`,
+          busId: log.busId,
+          date: log.timestamp,
+          category: 'FUEL',
+          amount: log.totalCost || 0,
+          fuelStation: log.note ? `App Upload - ${log.note}` : 'App Upload',
+          paymentMode: log.paymentMode ?? null,
+          cardNumber: log.cardNumber ?? null,
+          litres: log.litres,
+          pricePerLitre: log.fuelCostPerLitre,
+          isShared: false,
+          bus: log.bus || { number: log.plateNo },
+          imageUrl: log.imageUrl,
+          driverName: log.driver?.name,
+          odometer: log.odometer,
+        };
+      });
 
       expenses.push(...mappedLogs);
       expenses.sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -722,5 +725,51 @@ export class TransportExpenseService {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       content: Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer),
     };
+  }
+
+  /** Update paymentMode (and optional cardNumber) on a manual TransportExpense record */
+  async updateExpensePaymentMode(
+    id: string,
+    paymentMode: 'CASH' | 'CARD' | null,
+    cardNumber?: string | null,
+  ) {
+    const record = await this.prisma.transportExpense.findUnique({ where: { id } });
+    if (!record) {
+      throw new BadRequestException(`Expense ${id} not found`);
+    }
+    // For manual expenses, card number is stored in description field as "Card: <number>"
+    const descriptionUpdate: string | undefined =
+      paymentMode === 'CARD' && cardNumber
+        ? `Card: ${cardNumber}`
+        : paymentMode !== 'CARD'
+        ? (record.description?.startsWith('Card:') ? '' : undefined)
+        : undefined;
+    return this.prisma.transportExpense.update({
+      where: { id },
+      data: {
+        paymentMode: paymentMode,
+        ...(descriptionUpdate !== undefined ? { description: descriptionUpdate } : {}),
+      },
+    });
+  }
+
+  /** Update paymentMode (and optional cardNumber) on a mobile FuelLog record */
+  async updateFuelLogPaymentMode(
+    id: string,
+    paymentMode: 'CASH' | 'CARD' | null,
+    cardNumber?: string | null,
+  ) {
+    const record = await this.prisma.fuelLog.findUnique({ where: { id } });
+    if (!record) {
+      throw new BadRequestException(`FuelLog ${id} not found`);
+    }
+    const cardVal = paymentMode === 'CARD' ? (cardNumber ?? null) : null;
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE "FuelLog" SET "paymentMode" = $1::"PaymentMode", "cardNumber" = $2 WHERE id = $3`,
+      paymentMode,
+      cardVal,
+      id,
+    );
+    return { id, paymentMode, cardNumber: cardVal };
   }
 }
