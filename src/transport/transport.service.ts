@@ -860,7 +860,7 @@ export class TransportService {
             },
           },
           stop: true,
-          student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true } } } },
+          student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true, motherName: true, guardianName: true, guardianRelation: true, isSingleParent: true } } } },
         },
         orderBy: { student: { name: 'asc' } },
       }),
