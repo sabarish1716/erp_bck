@@ -541,7 +541,7 @@ export class FeesService {
 
     // Helper: split tuition across core terms; others are lumped into the first term
     const buildComponentSplit = (termsArray: any[]): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[]; application: number[] } => {
-      const coreTerms = termsArray.filter(t => t.termNumber);
+      const coreTerms = termsArray.filter(t => t.termName && String(t.termName).toLowerCase().includes('term'));
       const nCore = coreTerms.length > 0 ? coreTerms.length : termsArray.length;
       const nTerms = termsArray.length;
 
@@ -582,7 +582,7 @@ export class FeesService {
       const transportArr: number[] = [];
       let coreIdx = 0;
       for (const t of termsArray) {
-        const isCore = coreTerms.length > 0 ? !!t.termNumber : true;
+        const isCore = coreTerms.length > 0 ? !!(t.termName && String(t.termName).toLowerCase().includes('term')) : true;
         if (isCore) {
           transportArr.push(coreTransport[coreIdx] || 0);
           coreIdx++;
