@@ -2093,15 +2093,6 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
     ];
 
-    // Derive the previous academic year string from e.g. "2026-2027" → "2025-2026"
-    const getPreviousAcademicYear = (year: string): string | null => {
-      const match = year?.match(/^(\d{4})-(\d{4})$/);
-      if (!match) return null;
-      const start = parseInt(match[1], 10);
-      const end = parseInt(match[2], 10);
-      return `${start - 1}-${end - 1}`;
-    };
-
     const results: any[] = [];
     for (const sid of uniqueIds) {
       const student = await this.prisma.student.findUnique({
@@ -2124,16 +2115,12 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
 
       const prevStd = standardOrder[idx - 1] as Standard;
       const currentAcademicYear = student.academicYear;
-      const prevAcademicYear = currentAcademicYear
-        ? getPreviousAcademicYear(currentAcademicYear)
-        : null;
 
-      // Update student standard and academic year
+      // Update student standard (keep current academic year)
       await this.prisma.student.update({
         where: { id: sid },
         data: {
           standard: prevStd,
-          ...(prevAcademicYear ? { academicYear: prevAcademicYear } : {}),
         },
       });
 
@@ -2143,32 +2130,95 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         data: { standard: prevStd },
       });
 
-      // Switch StudentFee active flags (no create/delete — just toggle isActive)
+      // Handle Fee Assignment in current academic year
       if (currentAcademicYear) {
+        // Deactivate the old fee structure for the higher standard
         await this.prisma.studentFee.updateMany({
           where: { studentId: sid, academicYear: currentAcademicYear },
           data: { isActive: false },
         });
-      }
-      if (prevAcademicYear) {
-        const prevFee = await this.prisma.studentFee.findFirst({
-          where: { studentId: sid, academicYear: prevAcademicYear },
-          select: { id: true },
+
+        // Find the fee structure for the new (demoted) standard
+        const structure = await this.prisma.feeStructure.findFirst({
+          where: {
+            academicYear: currentAcademicYear,
+            standard: prevStd,
+          },
+          include: {
+            customItems: true,
+            terms: { orderBy: { termNumber: 'asc' } },
+          },
         });
-        if (prevFee) {
-          await this.prisma.studentFee.updateMany({
-            where: { studentId: sid, academicYear: prevAcademicYear },
-            data: { isActive: true },
+
+        if (structure) {
+          // Generate new fee based on the structure
+          const tuitionFee = Number(structure.tuitionFee || 0);
+          const transportFee = Number(structure.transportFee || 0);
+          const bookFee = Number(structure.bookFee || 0);
+          const hostelFee = Number(structure.hostelFee || 0);
+          const otherFee = Number(structure.otherFee || 0);
+          const customItems = structure.customItems || [];
+          const customTotal = customItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+          const totalFee = tuitionFee + transportFee + bookFee + hostelFee + otherFee + customTotal;
+
+          const splitEvenly = (value: number, count: number) => {
+            const perTerm = Math.round((value / count) * 100) / 100;
+            return Array.from({ length: count }, (_, index) =>
+              index === count - 1
+                ? Math.round((value - perTerm * (count - 1)) * 100) / 100
+                : perTerm,
+            );
+          };
+
+          const numberOfTerms = structure.numberOfTerms || 1;
+          const tuitionSplit = splitEvenly(tuitionFee, numberOfTerms);
+          const transportSplit = splitEvenly(transportFee, numberOfTerms);
+
+          const termTemplates = structure.terms?.length > 0
+            ? structure.terms
+            : Array.from({ length: numberOfTerms }, (_, index) => ({
+                termNumber: index + 1,
+                termName: numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                dueDate: null,
+              }));
+
+          await this.prisma.studentFee.create({
+            data: {
+              studentId: sid,
+              academicYear: currentAcademicYear,
+              tuitionFee,
+              transportFee,
+              bookFee,
+              hostelFee,
+              otherFee,
+              totalFee,
+              discount: 0,
+              netFee: totalFee,
+              numberOfTerms,
+              customItems: customItems.length > 0
+                ? {
+                    create: customItems.map((item) => ({
+                      name: item.name,
+                      amount: Number(item.amount || 0),
+                    })),
+                  }
+                : undefined,
+              terms: {
+                create: termTemplates.map((template, index) => ({
+                  termNumber: template.termNumber,
+                  termName: template.termName,
+                  dueDate: template.dueDate || null,
+                  amount: (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
+                  tuitionAmount: tuitionSplit[index] || 0,
+                  transportAmount: transportSplit[index] || 0,
+                  bookAmount: 0,
+                  hostelAmount: 0,
+                  otherAmount: 0,
+                })),
+              },
+            },
           });
         }
-      }
-
-      // Revert StudentTransport to previous academic year (single record per student)
-      if (prevAcademicYear) {
-        await this.prisma.studentTransport.updateMany({
-          where: { studentId: sid },
-          data: { academicYear: prevAcademicYear },
-        });
       }
 
       results.push({
@@ -2177,8 +2227,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         status: 'success',
         from: currentStd,
         to: prevStd,
-        academicYearFrom: currentAcademicYear,
-        academicYearTo: prevAcademicYear,
+        academicYear: currentAcademicYear,
       });
     }
 
