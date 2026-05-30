@@ -467,6 +467,7 @@ export class TransportExpenseService {
           ...common,
           fuelStation: dto.fuelStation,
           paymentMode: dto.paymentMode,
+          description: dto.description, // Stores manual card number
           litres: dto.litres,
           pricePerLitre: dto.pricePerLitre,
           isShared: false,
@@ -623,20 +624,26 @@ export class TransportExpenseService {
         { header: 'Amount', key: 'amount', width: 14 },
         { header: 'Fuel Station', key: 'fuelStation', width: 24 },
         { header: 'Payment Mode', key: 'paymentMode', width: 16 },
+        { header: 'Card Number', key: 'cardNumber', width: 18 },
         { header: 'Litres', key: 'litres', width: 12 },
         { header: 'Price/Litre', key: 'pricePerLitre', width: 14 },
       ];
 
       sheet.addRows(
-        expenses.map((e) => ({
-          date: e.date.toISOString().slice(0, 10),
-          bus: e.bus?.number ?? '-',
-          amount: e.amount,
-          fuelStation: e.fuelStation ?? '-',
-          paymentMode: e.paymentMode ?? '-',
-          litres: e.litres ?? '-',
-          pricePerLitre: e.pricePerLitre ?? '-',
-        })),
+        expenses.map((e) => {
+          // Extract card number from mobile entries (cardNumber) or manual entries (description)
+          const cardVal = e.cardNumber ?? (e.description?.startsWith('Card:') ? e.description.replace(/^Card:\s*/i, '') : '-');
+          return {
+            date: e.date.toISOString().slice(0, 10),
+            bus: e.bus?.number ?? '-',
+            amount: e.amount,
+            fuelStation: e.fuelStation ?? '-',
+            paymentMode: e.paymentMode ?? '-',
+            cardNumber: cardVal || '-',
+            litres: e.litres ?? '-',
+            pricePerLitre: e.pricePerLitre ?? '-',
+          };
+        }),
       );
     } else if (selectedCategory === 'MAINTENANCE') {
       sheet.columns = [
