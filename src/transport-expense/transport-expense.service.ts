@@ -540,7 +540,7 @@ export class TransportExpenseService {
     });
   }
 
-  async findAll(filters: ExpenseFilters = {}) {
+  async findAll(filters: ExpenseFilters = {}, includeFuelLogs: boolean = false) {
     const where: any = {};
 
     if (filters.category) {
@@ -567,7 +567,7 @@ export class TransportExpenseService {
       orderBy: { date: 'desc' },
     });
 
-    if (!filters.category || filters.category === 'FUEL') {
+    if (includeFuelLogs && (!filters.category || filters.category === 'FUEL')) {
       const fuelWhere: any = {};
       if (filters.busIds?.length) {
         fuelWhere.busId = { in: filters.busIds };
@@ -611,7 +611,7 @@ export class TransportExpenseService {
   }
 
   async exportExcel(filters: ExpenseFilters = {}) {
-    const expenses = await this.findAll(filters);
+    const expenses = await this.findAll(filters, true);
 
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet('Transport Expense');
