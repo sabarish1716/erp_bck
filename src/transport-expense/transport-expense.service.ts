@@ -449,6 +449,24 @@ export class TransportExpenseService {
     return new Date(`${date}${endOfDay ? 'T23:59:59.999Z' : 'T00:00:00.000Z'}`);
   }
 
+  private getFuelExpenseKey(entry: {
+    busId?: string | null;
+    plateNo?: string | null;
+    date?: Date | string | null;
+    litres?: number | null;
+    pricePerLitre?: number | null;
+    amount?: number | null;
+  }) {
+    const date = entry.date ? new Date(entry.date) : null;
+    const dateKey = date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+    const busKey = String(entry.busId || entry.plateNo || '').trim();
+    const litres = Number(entry.litres ?? 0);
+    const pricePerLitre = Number(entry.pricePerLitre ?? 0);
+    const amount = Number(entry.amount ?? 0);
+
+    return [dateKey, busKey, litres.toFixed(2), pricePerLitre.toFixed(2), amount.toFixed(2)].join('|');
+  }
+
   private buildCreatePayload(
     dto: CreateExpenseDto,
     busId: string,
@@ -583,28 +601,55 @@ export class TransportExpenseService {
         include: { bus: true, driver: true },
       });
 
-      const mappedLogs = fuelLogs.map((log) => {
-        return {
-          id: `fuellog-${log.id}`,
-          busId: log.busId,
-          date: log.timestamp,
-          category: 'FUEL',
-          amount: log.totalCost || 0,
-          fuelStation: log.note ? `App Upload - ${log.note}` : 'App Upload',
-          paymentMode: log.paymentMode ?? null,
-          cardNumber: log.cardNumber ?? null,
-          litres: log.litres,
-          pricePerLitre: log.fuelCostPerLitre,
-          isShared: false,
-          bus: log.bus || { number: log.plateNo },
-          imageUrl: log.imageUrl,
-          driverName: log.driver?.name,
-          odometer: log.odometer,
-        };
+      const mappedLogs = fuelLogs.map((log) => ({
+        id: `fuellog-${log.id}`,
+        busId: log.busId,
+        date: log.timestamp,
+        category: 'FUEL',
+        amount: log.totalCost || 0,
+        fuelStation: log.note ? `App Upload - ${log.note}` : 'App Upload',
+        paymentMode: log.paymentMode ?? null,
+        cardNumber: log.cardNumber ?? null,
+        litres: log.litres,
+        pricePerLitre: log.fuelCostPerLitre,
+        isShared: false,
+        bus: log.bus || { number: log.plateNo },
+        imageUrl: log.imageUrl,
+        driverName: log.driver?.name,
+        odometer: log.odometer,
+      }));
+
+      const fuelLogKeys = new Set(
+        fuelLogs.map((log) =>
+          this.getFuelExpenseKey({
+            busId: log.busId,
+            plateNo: log.plateNo,
+            date: log.timestamp,
+            litres: log.litres,
+            pricePerLitre: log.fuelCostPerLitre,
+            amount: log.totalCost,
+          }),
+        ),
+      );
+
+      const filteredExpenses = expenses.filter((expense) => {
+        if (expense.category !== 'FUEL') {
+          return true;
+        }
+        const key = this.getFuelExpenseKey({
+          busId: expense.busId,
+          date: expense.date,
+          litres: expense.litres,
+          pricePerLitre: expense.pricePerLitre,
+          amount: expense.amount,
+        });
+        return key ? !fuelLogKeys.has(key) : true;
       });
 
-      expenses.push(...mappedLogs);
-      expenses.sort((a, b) => b.date.getTime() - a.date.getTime());
+      filteredExpenses.push(...mappedLogs);
+      filteredExpenses.sort((a, b) => b.date.getTime() - a.date.getTime());
+
+      return filteredExpenses;
     }
 
     return expenses;
