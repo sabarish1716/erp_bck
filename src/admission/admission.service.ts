@@ -708,7 +708,8 @@ export class AdmissionService {
     const fs = await import('fs/promises');
     const path = await import('path');
     const folderName = `${admissionNo}_${standard}`;
-    const targetDir = path.join('./uploads/documents/students', folderName);
+    const baseStoragePath = process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
+    const targetDir = path.join(baseStoragePath, folderName);
 
     let dirCreated = false;
     const ensureDir = async () => {
@@ -729,7 +730,7 @@ export class AdmissionService {
           const fileName = path.basename(currentPath);
           const newPath = path.join(targetDir, fileName);
           await fs.rename(currentPath, newPath);
-          return normalizePath(newPath);
+          return `student_documents/${folderName}/${fileName}`;
         } catch (err) {
           console.error(`Failed to move file ${currentPath} to ${targetDir}:`, err);
           return normalizePath(currentPath);

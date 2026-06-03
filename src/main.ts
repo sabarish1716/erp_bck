@@ -19,6 +19,7 @@ async function bootstrap() {
   app.enableCors();
   app.setGlobalPrefix('erp/api');
   app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/erp/api/uploads/' });
+  app.useStaticAssets(process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents', { prefix: '/erp/api/student_documents/' });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,        // remove extra fields
