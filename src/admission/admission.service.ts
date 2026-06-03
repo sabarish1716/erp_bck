@@ -703,11 +703,69 @@ export class AdmissionService {
     });
   }
 
+  private async moveStudentDocuments(docs: any, admissionNo: string, standard: string) {
+    if (!docs) return docs;
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const folderName = `${admissionNo}_${standard}`;
+    const targetDir = path.join('./uploads/documents/students', folderName);
+
+    let dirCreated = false;
+    const ensureDir = async () => {
+      if (!dirCreated) {
+        await fs.mkdir(targetDir, { recursive: true }).catch(() => {});
+        dirCreated = true;
+      }
+    };
+
+    const normalizePath = (p: string | undefined | null) => typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+
+    const moveFile = async (currentPath: string) => {
+      if (!currentPath) return '';
+      // Move if it is in the general uploads folder and not already in our target folder
+      if (!currentPath.includes(`/${folderName}/`) && !currentPath.includes(`\\${folderName}\\`) && (currentPath.startsWith('uploads/') || currentPath.startsWith('uploads\\'))) {
+        try {
+          await ensureDir();
+          const fileName = path.basename(currentPath);
+          const newPath = path.join(targetDir, fileName);
+          await fs.rename(currentPath, newPath);
+          return normalizePath(newPath);
+        } catch (err) {
+          console.error(`Failed to move file ${currentPath} to ${targetDir}:`, err);
+          return normalizePath(currentPath);
+        }
+      }
+      return normalizePath(currentPath);
+    };
+
+    const docKeys = ['profilePhoto', 'photo', 'birthCert', 'communityCert', 'aadharStudent', 'aadharFather', 'aadharMother', 'transferCert'];
+    for (const key of docKeys) {
+      if (docs[key]?.path) {
+        docs[key].path = await moveFile(docs[key].path);
+      }
+    }
+
+    return docs;
+  }
+
   async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
   // Fetch admin settings to check if approval is required
   const settingsRow = await this.prisma.appSetting.findUnique({ where: { key: 'admin.settings' } });
   const settings = (settingsRow?.value as Record<string, unknown>) || {};
   const requireApproval = settings.requireApprovalForAdmission === true || settings.requireApprovalForAdmission === 'true';
+
+  const admissionNo = (!data.admission?.admissionNo || data.admission.admissionNo === 'AUTO')
+    ? await this.generateAdmissionNo()
+    : data.admission.admissionNo;
+
+  if (!data.admission) data.admission = {} as any;
+  data.admission!.admissionNo = admissionNo;
+
+  const standardStr = data.admission!.standard || data.standard || 'UNKNOWN';
+
+  if (data.documents) {
+    data.documents = await this.moveStudentDocuments(data.documents, admissionNo, standardStr);
+  }
 
   const normalizePath = (p: string | undefined | null) =>
     typeof p === 'string' ? p.replace(/\\/g, '/') : '';
@@ -915,9 +973,7 @@ parentsEmail: data.parentsEmail,
      admission: data.admission
   ? {
       create: {
-        admissionNo: (!data.admission.admissionNo || data.admission.admissionNo === 'AUTO')
-          ? await this.generateAdmissionNo()
-          : data.admission.admissionNo,
+        admissionNo: data.admission.admissionNo,
 
         admissionDate: data.admission.admissionDate
           ? new Date(data.admission.admissionDate)
@@ -1103,7 +1159,11 @@ parentsEmail: data.parentsEmail,
   }
 
     async updateStudent(id: string, data: CreateAdmissionDto) {
-
+      const existingStudent = await this.prisma.student.findUnique({
+        where: { id },
+        include: { admission: true }
+      });
+      if (!existingStudent) throw new Error('Student not found');
     // Defensive: check for missing or invalid data
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid update data: expected an object');
@@ -1287,6 +1347,11 @@ parentsEmail: data.parentsEmail,
   };
 }
     if (data.documents) {
+        const standardStr = updateData.standard || existingStudent.standard || 'UNKNOWN';
+        const admissionNo = existingStudent.admission?.admissionNo || `UNKNOWN_${id}`;
+        
+        data.documents = await this.moveStudentDocuments(data.documents, admissionNo, standardStr);
+
         // Helper to normalize slashes
         const normalizePath = (p: string | undefined | null) =>
           typeof p === 'string' ? p.replace(/\\/g, '/') : p;
