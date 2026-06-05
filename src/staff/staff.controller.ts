@@ -127,4 +127,41 @@ export class StaffController {
   ) {
     return this.staffService.removeDocument(id, documentId);
   }
+
+  // --- Department & Designation Masters ---
+  @Get('masters/departments')
+  @Permissions(Permission.STAFF_READ)
+  getDepartments() {
+    return this.staffService.getDepartments();
+  }
+
+  @Post('masters/departments')
+  @Permissions(Permission.STAFF_UPDATE)
+  createDepartment(@Body() data: { name: string }) {
+    return this.staffService.createDepartment(data.name);
+  }
+
+  @Delete('masters/departments/:id')
+  @Permissions(Permission.STAFF_UPDATE)
+  deleteDepartment(@Param('id') id: string) {
+    return this.staffService.deleteDepartment(id);
+  }
+
+  @Get('masters/designations')
+  @Permissions(Permission.STAFF_READ)
+  getDesignations() {
+    return this.staffService.getDesignations();
+  }
+
+  @Post('masters/designations')
+  @Permissions(Permission.STAFF_UPDATE)
+  createDesignation(@Body() data: { name: string }) {
+    return this.staffService.createDesignation(data.name);
+  }
+
+  @Delete('masters/designations/:id')
+  @Permissions(Permission.STAFF_UPDATE)
+  deleteDesignation(@Param('id') id: string) {
+    return this.staffService.deleteDesignation(id);
+  }
 }

@@ -113,7 +113,22 @@ export class StaffService {
     return { employeeId: await this.generateEmployeeId() };
   }
 
+
+  async autoAddMaster(type: 'department' | 'designation', name: string) {
+    if (!name || name.trim() === '') return;
+    const cleanName = name.trim();
+    if (type === 'department') {
+      const exists = await this.prisma.department.findFirst({ where: { name: { equals: cleanName, mode: 'insensitive' } } });
+      if (!exists) await this.prisma.department.create({ data: { name: cleanName } });
+    } else {
+      const exists = await this.prisma.designation.findFirst({ where: { name: { equals: cleanName, mode: 'insensitive' } } });
+      if (!exists) await this.prisma.designation.create({ data: { name: cleanName } });
+    }
+  }
+
   async create(data: CreateStaffDto) {
+    await this.autoAddMaster('designation', data.designation);
+    if (data.department) await this.autoAddMaster('department', data.department);
     if (!data.password) {
       throw new BadRequestException('Password is required when creating staff');
     }
@@ -131,7 +146,7 @@ export class StaffService {
           data: {
             employeeId,
             name: data.name,
-            email: data.email,
+            email: data.email!,
             phone: data.phone,
             designation: data.designation,
             department: data.department,
@@ -164,7 +179,7 @@ export class StaffService {
         await tx.user.create({
           data: {
             name: data.name,
-            email: data.email,
+            email: data.email!,
             password: hashedPassword,
             role: userRole,
             staffId: staff.id,
@@ -400,7 +415,7 @@ export class StaffService {
           data: {
             employeeId: data.employeeId?.trim() || existing.employeeId,
             name: data.name,
-            email: data.email,
+            email: data.email!,
             phone: data.phone,
             designation: data.designation,
             department: data.department,
@@ -449,7 +464,7 @@ export class StaffService {
             where: { id: existingUser.id },
             data: {
               name: data.name,
-              email: data.email,
+              email: data.email!,
               role: userRole,
               staffId: staff.id,
               isActive: data.isActive,
@@ -460,7 +475,7 @@ export class StaffService {
           await tx.user.create({
             data: {
               name: data.name,
-              email: data.email,
+              email: data.email!,
               password: hashedPassword ?? (await bcrypt.hash('changeme123', 10)),
               role: userRole,
               staffId: staff.id,
@@ -517,4 +532,12 @@ export class StaffService {
       data: { staffParentId: null },
     });
   }
+
+  // --- Master endpoints ---
+  async getDepartments() { return this.prisma.department.findMany({ orderBy: { name: 'asc' } }); }
+  async createDepartment(name: string) { return this.prisma.department.create({ data: { name } }); }
+  async deleteDepartment(id: string) { return this.prisma.department.delete({ where: { id } }); }
+  async getDesignations() { return this.prisma.designation.findMany({ orderBy: { name: 'asc' } }); }
+  async createDesignation(name: string) { return this.prisma.designation.create({ data: { name } }); }
+  async deleteDesignation(id: string) { return this.prisma.designation.delete({ where: { id } }); }
 }

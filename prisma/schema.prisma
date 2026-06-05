@@ -465,12 +465,31 @@ model Staff {
   id            String   @id @default(uuid())
   employeeId    String   @unique
   name          String
-  email         String   @unique
+  email         String?  @unique
   phone         String?
-  designation   String   // e.g. "Teacher", "HOD", "Principal", "Clerk"
-  department    String?  // e.g. "Mathematics", "Science", "Administration"
-  qualification String?
+  alternatePhone String?
+  designation   String   // Stores name from Designation master
+  department    String?  // Stores name from Department master
+  
+  // Qualifications
+  ugDegree      String?
+  pgDegree      String?
+  bEdStatus     Boolean  @default(false)
+  otherQualifications String?
+  certificatesCollected Boolean @default(false)
+  
+  // Previous Work Experience
+  previousSchoolName String?
+  previousStandardsHandled String?
+  previousSubjectsHandled String?
+  
+  // Additional Personal Information
+  dateOfBirth   DateTime?
+  maritalStatus String?  // e.g. "SINGLE", "MARRIED"
+  numberOfChildren Int   @default(0)
+
   joiningDate   DateTime?
+  relievingDate DateTime?
   salary        Float?
   isActive      Boolean  @default(true)
 
@@ -1974,3 +1993,12 @@ model DriverRotation {
   @@index([routeId])
 }
 
+model Department {
+  id   String @id @default(uuid())
+  name String @unique
+}
+
+model Designation {
+  id   String @id @default(uuid())
+  name String @unique
+}

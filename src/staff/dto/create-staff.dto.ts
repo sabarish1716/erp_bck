@@ -16,9 +16,10 @@ export class CreateStaffDto {
   @IsOptional() @IsString() employeeId?: string; // EMPLOYEE ID
   @IsNotEmpty() @IsString()
   name!: string; // FULL NAME
-  @IsNotEmpty() @IsEmail()
-  email!: string; // WORK EMAIL
+  @IsOptional() @IsEmail()
+  email?: string; // WORK EMAIL
   @IsOptional() @IsString() phone?: string; // CONTACT NUMBER
+  @IsOptional() @IsString() alternatePhone?: string; // ALTERNATE CONTACT
   @IsOptional() @IsString() password?: string; // PASSWORD
 
   // JOB DETAILS
@@ -27,11 +28,28 @@ export class CreateStaffDto {
   @IsOptional() @IsString() department?: string; // DEPARTMENT / SPECIALIZATION
   @IsOptional() @IsString() category?: string; // CATEGORY / DEPARTMENT
   @IsOptional() @IsNumber() salary?: number; // MONTHLY SALARY
-  @IsOptional() @IsDateString()                                                                                                                                                                                                                                                                                                                                                                                                                                                        joiningDate?: string; // JOINING DATE
+  @IsNotEmpty() @IsDateString() joiningDate!: string; // JOINING DATE
+  @IsOptional() @IsDateString() relievingDate?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
   @IsOptional() @IsEnum(Role) role?: Role;
-  @IsOptional() @IsString() qualification?: string;
   @IsOptional() @IsNumber() perDaySalary?: number;
+
+  // QUALIFICATIONS
+  @IsOptional() @IsString() ugDegree?: string;
+  @IsOptional() @IsString() pgDegree?: string;
+  @IsOptional() @IsBoolean() bEdStatus?: boolean;
+  @IsOptional() @IsString() otherQualifications?: string;
+  @IsOptional() @IsBoolean() certificatesCollected?: boolean;
+
+  // PREVIOUS EXPERIENCE
+  @IsOptional() @IsString() previousSchoolName?: string;
+  @IsOptional() @IsString() previousStandardsHandled?: string;
+  @IsOptional() @IsString() previousSubjectsHandled?: string;
+
+  // PERSONAL INFO
+  @IsOptional() @IsDateString() dateOfBirth?: string;
+  @IsOptional() @IsString() maritalStatus?: string;
+  @IsOptional() @IsNumber() numberOfChildren?: number;
 
   // ADDRESS DETAILS
   @IsOptional() @IsString() doorNo?: string; // DOOR NO
