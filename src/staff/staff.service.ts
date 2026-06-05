@@ -129,11 +129,7 @@ export class StaffService {
   async create(data: CreateStaffDto) {
     await this.autoAddMaster('designation', data.designation);
     if (data.department) await this.autoAddMaster('department', data.department);
-    if (!data.password) {
-      throw new BadRequestException('Password is required when creating staff');
-    }
-
-    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : undefined;
     const isActive = data.isActive ?? true;
     const userRole = this.resolveStaffUserRole(data.role);
     const perDaySalary = this.sanitizePerDaySalary(data.perDaySalary);
@@ -146,11 +142,11 @@ export class StaffService {
           data: {
             employeeId,
             name: data.name,
-            email: data.email!,
+            email: data.email || null,
             phone: data.phone,
             designation: data.designation,
             department: data.department,
-            qualification: data.qualification,
+            qualification: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
             salary: data.salary,
             isActive,
@@ -160,15 +156,20 @@ export class StaffService {
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
             pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
-            city:data.city,
-            pincode:data.pincode,
-            area:data.area,
-            doorno:data.doorNo,
-            state:data.state,
+            ugDegree: data.ugDegree,
+            pgDegree: data.pgDegree,
+            bEdStatus: data.bEdStatus ?? false,
+            certificatesCollected: data.certificatesCollected ?? false,
+            previousSchoolName: data.previousSchoolName,
+            previousStandardsHandled: data.previousStandardsHandled,
+            previousSubjectsHandled: data.previousSubjectsHandled,
+            yearsOfExperience: data.yearsOfExperience,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+            maritalStatus: data.maritalStatus,
+            numberOfChildren: data.numberOfChildren ?? 0,
+            address: data.address,
+            pincode: data.pincode,
             bankBranch: data.bankBranch,
-            taluk:data.taluk,
-            district:data.district,
-            // state:data.state
           },
           include: {
             children: { select: { id: true, name: true, standard: true } },
@@ -176,16 +177,18 @@ export class StaffService {
           },
         });
 
-        await tx.user.create({
-          data: {
-            name: data.name,
-            email: data.email!,
-            password: hashedPassword,
-            role: userRole,
-            staffId: staff.id,
-            isActive,
-          },
-        });
+        if (data.email && hashedPassword) {
+          await tx.user.create({
+            data: {
+              name: data.name,
+              email: data.email,
+              password: hashedPassword,
+              role: userRole,
+              staffId: staff.id,
+              isActive,
+            },
+          });
+        }
 
         await tx.staffStatutory.upsert({
           where: { staffId: staff.id },
@@ -422,11 +425,11 @@ export class StaffService {
           data: {
             employeeId: data.employeeId?.trim() || existing.employeeId,
             name: data.name,
-            email: data.email!,
+            email: data.email || null,
             phone: data.phone,
             designation: data.designation,
             department: data.department,
-            qualification: data.qualification,
+            qualification: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
             salary: data.salary,
             isActive: data.isActive,
@@ -436,14 +439,20 @@ export class StaffService {
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
             pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
-            city:data.city,
-            doorno:data.doorNo,
-            pincode:data.pincode,
-            area:data.area,
-            state:data.state,
+            ugDegree: data.ugDegree,
+            pgDegree: data.pgDegree,
+            bEdStatus: data.bEdStatus,
+            certificatesCollected: data.certificatesCollected,
+            previousSchoolName: data.previousSchoolName,
+            previousStandardsHandled: data.previousStandardsHandled,
+            previousSubjectsHandled: data.previousSubjectsHandled,
+            yearsOfExperience: data.yearsOfExperience,
+            dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
+            maritalStatus: data.maritalStatus,
+            numberOfChildren: data.numberOfChildren,
+            address: data.address,
+            pincode: data.pincode,
             bankBranch: data.bankBranch,
-            taluk:data.taluk,
-            district:data.district,
           },
           include: {
             children: { select: { id: true, name: true, standard: true } },
@@ -464,26 +473,29 @@ export class StaffService {
           });
         }
 
-        const existingUser = await tx.user.findUnique({ where: { email: existing.email } });
+        let existingUser = null;
+        if (existing.email) {
+          existingUser = await tx.user.findUnique({ where: { email: existing.email } });
+        }
 
-        if (existingUser) {
+        if (existingUser && data.email) {
           await tx.user.update({
             where: { id: existingUser.id },
             data: {
               name: data.name,
-              email: data.email!,
+              email: data.email,
               role: userRole,
               staffId: staff.id,
               isActive: data.isActive,
               ...(hashedPassword ? { password: hashedPassword } : {}),
             },
           });
-        } else {
+        } else if (data.email && hashedPassword) {
           await tx.user.create({
             data: {
               name: data.name,
-              email: data.email!,
-              password: hashedPassword ?? (await bcrypt.hash('changeme123', 10)),
+              email: data.email,
+              password: hashedPassword,
               role: userRole,
               staffId: staff.id,
               isActive: data.isActive ?? true,
