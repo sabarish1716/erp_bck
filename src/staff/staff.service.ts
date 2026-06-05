@@ -146,7 +146,7 @@ export class StaffService {
             phone: data.phone,
             designation: data.designation,
             department: data.department,
-            qualification: data.otherQualifications,
+            otherQualifications: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
             salary: data.salary,
             isActive,
@@ -434,7 +434,7 @@ export class StaffService {
             phone: data.phone,
             designation: data.designation,
             department: data.department,
-            qualification: data.otherQualifications,
+            otherQualifications: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
             salary: data.salary,
             isActive: data.isActive,
@@ -482,7 +482,7 @@ export class StaffService {
           });
         }
 
-        let existingUser = null;
+        let existingUser: any = null;
         if (existing.email) {
           existingUser = await tx.user.findUnique({ where: { email: existing.email } });
         }
