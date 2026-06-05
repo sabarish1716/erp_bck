@@ -22,8 +22,8 @@ export class HrController {
   // ─── DASHBOARD ─────────────────────────────
   @Get('dashboard')
   @Permissions(Permission.HR_DASHBOARD)
-  getDashboard(@Req() req: any) {
-    return this.hrService.getDashboard(req.user);
+  getDashboard(@Req() req: any, @Query('month') month?: string) {
+    return this.hrService.getDashboard(req.user, month);
   }
 
   // ─── ATTENDANCE ────────────────────────────

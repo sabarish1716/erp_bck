@@ -1265,12 +1265,19 @@ export class HrService {
   // ─── DASHBOARD ────────────────────────────────
   // ═══════════════════════════════════════════════
 
-  async getDashboard(requester?: RequestUser) {
+  async getDashboard(requester?: RequestUser, monthStr?: string) {
     const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+
+    let monthStart, monthEnd;
+    if (monthStr) {
+      monthStart = new Date(`${monthStr}-01T00:00:00.000Z`);
+      monthEnd = new Date(monthStart);
+      monthEnd.setMonth(monthEnd.getMonth() + 1);
+    }
 
     const [
       totalStaff,
@@ -1280,8 +1287,8 @@ export class HrService {
     ] = await Promise.all([
       this.prisma.staff.count({ where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) } }),
       this.prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow }, ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
+      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}), ...(monthStart ? { fromDate: { gte: monthStart, lt: monthEnd } } : {}) } }),
+      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}), ...(monthStart ? { date: { gte: monthStart, lt: monthEnd } } : {}) } }),
     ]);
 
     const present = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
