@@ -475,7 +475,7 @@ model Staff {
   ugDegree      String?
   pgDegree      String?
   bEdStatus     Boolean  @default(false)
-  otherQualifications String?
+  otherQualifications String? @map("qualification")
   certificatesCollected Boolean @default(false)
   
   // Previous Work Experience
