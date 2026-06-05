@@ -166,7 +166,6 @@ export class StaffService {
             yearsOfExperience: data.yearsOfExperience,
             dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
             maritalStatus: data.maritalStatus,
-            address: undefined,
             doorNo: data.doorNo,
             street: data.street,
             area: data.area,
@@ -454,7 +453,6 @@ export class StaffService {
             yearsOfExperience: data.yearsOfExperience,
             dateOfBirth: data.dateOfBirth ? new Date(data.dateOfBirth) : null,
             maritalStatus: data.maritalStatus,
-            address: undefined,
             doorNo: data.doorNo,
             street: data.street,
             area: data.area,
@@ -538,10 +536,12 @@ export class StaffService {
         data: { isActive: false },
       });
 
-      await tx.user.updateMany({
-        where: { email: existing.email },
-        data: { isActive: false },
-      });
+      if (existing.email) {
+        await tx.user.updateMany({
+          where: { email: existing.email },
+          data: { isActive: false },
+        });
+      }
 
       return staff;
     });
