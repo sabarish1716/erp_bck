@@ -244,11 +244,18 @@ export class StaffService {
     }
   }
 
-  async findAll() {
+  async findAll(status?: string) {
+    const whereClause: any = {};
+    if (status === 'alumni') {
+      whereClause.isActive = false;
+    } else if (status === 'all') {
+      // no filter
+    } else {
+      whereClause.isActive = true; // active by default
+    }
+
     const rows = await this.prisma.staff.findMany({
-      where:{
-        isActive:true,
-      },
+      where: whereClause,
       include: {
         children: { select: { id: true, name: true, standard: true } },
         staffStatutory: { select: { dailyRate: true } },

@@ -39,8 +39,8 @@ export class StaffController {
 
   @Get()
   @Permissions(Permission.STAFF_READ)
-  findAll() {
-    return this.staffService.findAll();
+  findAll(@Query('status') status?: string) {
+    return this.staffService.findAll(status);
   }
 
   @Get('transport-managers')
