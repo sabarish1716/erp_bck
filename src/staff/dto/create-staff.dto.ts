@@ -53,8 +53,13 @@ export class CreateStaffDto {
   @IsOptional() @IsNumber() numberOfChildren?: number;
 
   // ADDRESS DETAILS
-  @IsOptional() @IsString() address?: string; // FULL ADDRESS
-  @IsOptional() @IsString() pincode?: string; // PIN CODE
+  @IsOptional() @IsString() doorNo?: string;
+  @IsOptional() @IsString() street?: string;
+  @IsOptional() @IsString() area?: string;
+  @IsOptional() @IsString() taluk?: string;
+  @IsOptional() @IsString() district?: string;
+  @IsOptional() @IsString() state?: string;
+  @IsOptional() @IsString() pincode?: string;
 
   // BANK DETAILS
   @IsOptional() @IsString() paymentMode?: string; // PAYMENT METHOD

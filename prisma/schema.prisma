@@ -502,7 +502,12 @@ model Staff {
   bankIfsc      String?
   bankBranch    String?
   pfJoiningDate DateTime? // Date when PF started
-  address       String?
+  doorNo        String?
+  street        String?
+  area          String?
+  taluk         String?
+  district      String?
+  state         String?
   pincode       String?
 
   // Link to children studying here (for teacher discount)
