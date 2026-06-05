@@ -482,6 +482,7 @@ model Staff {
   previousSchoolName String?
   previousStandardsHandled String?
   previousSubjectsHandled String?
+  yearsOfExperience Int?
   
   // Additional Personal Information
   dateOfBirth   DateTime?
@@ -501,13 +502,8 @@ model Staff {
   bankIfsc      String?
   bankBranch    String?
   pfJoiningDate DateTime? // Date when PF started
-  city          String?
-  area          String?
+  address       String?
   pincode       String?
-  doorno        String?
-  state         String?
-  taluk         String?
-  district      String?
 
   // Link to children studying here (for teacher discount)
   children      Student[] @relation("StaffChildren")

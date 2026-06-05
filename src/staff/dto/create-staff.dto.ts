@@ -45,6 +45,7 @@ export class CreateStaffDto {
   @IsOptional() @IsString() previousSchoolName?: string;
   @IsOptional() @IsString() previousStandardsHandled?: string;
   @IsOptional() @IsString() previousSubjectsHandled?: string;
+  @IsOptional() @IsNumber() yearsOfExperience?: number;
 
   // PERSONAL INFO
   @IsOptional() @IsDateString() dateOfBirth?: string;
@@ -52,12 +53,7 @@ export class CreateStaffDto {
   @IsOptional() @IsNumber() numberOfChildren?: number;
 
   // ADDRESS DETAILS
-  @IsOptional() @IsString() doorNo?: string; // DOOR NO
-  @IsOptional() @IsString() area?: string; // AREA / UNIT
-  @IsOptional() @IsString() town?: string; // TOWN
-  @IsOptional() @IsString() taluk?: string; // TALUK
-  @IsOptional() @IsString() district?: string; // DISTRICT
-  @IsOptional() @IsString() state?: string; // STATE
+  @IsOptional() @IsString() address?: string; // FULL ADDRESS
   @IsOptional() @IsString() pincode?: string; // PIN CODE
 
   // BANK DETAILS
