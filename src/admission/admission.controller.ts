@@ -86,7 +86,7 @@ export class AdmissionController {
     ],
     {
       storage: diskStorage({
-        destination: './uploads',
+        destination: process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents',
         filename: (req, file, cb) => {
           const uniqueSuffix =
             Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -145,7 +145,7 @@ async create(
         parsedBody.documents[key] = {};
       }
 
-      parsedBody.documents[key].path = file.path.replace(/\\/g, '/');
+      parsedBody.documents[key].path = `student_documents/${file.filename}`;
       parsedBody.documents[key].uploaded = true;
     });
   }
@@ -326,7 +326,7 @@ async update(
 
   if (files?.length) {
     files.forEach((file) => {
-      uploadedMap[file.fieldname] = normalizePath(file.path);
+      uploadedMap[file.fieldname] = `student_documents/${file.filename}`;
     });
   }
 

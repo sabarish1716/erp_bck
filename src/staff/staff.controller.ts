@@ -87,7 +87,7 @@ export class StaffController {
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
-        destination: './uploads/documents/staff',
+        destination: process.env.STAFF_DOCS_PATH || 'D:/Staff_Documents',
         filename: (req, file, cb) => {
           const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
           cb(null, `staff-doc-${uniqueSuffix}${extname(file.originalname)}`);

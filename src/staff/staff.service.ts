@@ -348,7 +348,7 @@ export class StaffService {
       throw new BadRequestException('Document file is required');
     }
 
-    const normalizedPath = file.path.replace(/\\/g, '/');
+    const virtualPath = `staff_documents/${file.filename}`;
     const documentType = data.type || StaffDocumentType.OTHER;
     const title = data.title?.trim() || this.buildDocumentTitle(documentType, file.originalname);
 
@@ -357,7 +357,7 @@ export class StaffService {
         staffId,
         type: documentType,
         title,
-        filePath: normalizedPath,
+        filePath: virtualPath,
         originalName: file.originalname,
         mimeType: file.mimetype,
         sizeBytes: file.size,

@@ -4,20 +4,7 @@ import { extname } from 'path';
 export const multerConfig = {
   storage: diskStorage({
     destination: (req, file, cb) => {
-      let folder = './uploads/others';
-
-      if (file.fieldname === 'principalSignature') {
-        folder = './uploads/signatures/principal';
-      } else if (file.fieldname === 'staffSignature') {
-        folder = './uploads/signatures/staff';
-      } else if (file.fieldname === 'aadhar') {
-        folder = './uploads/documents/aadhar';
-      } else if (file.fieldname === 'tc') {
-        folder = './uploads/documents/tc';
-      } else if (file.fieldname === 'birthCert') {
-        folder = './uploads/documents/birth';
-      }
-
+      const folder = process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
       cb(null, folder);
     },
 
