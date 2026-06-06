@@ -834,7 +834,12 @@ export class HrService {
     const otherAllowanceRate = (settings as any).otherAllowanceRate ?? 0;
     const esiDailyWageThreshold = (settings as any).esiDailyWageThreshold ?? 176;
 
-    const staffFilter: any = { isActive: true };
+    const staffFilter: any = {
+      OR: [
+        { isActive: true },
+        { relievingDate: { gte: startDate } }
+      ]
+    };
     if (dto.staffIds?.length) staffFilter.id = { in: dto.staffIds };
     const staffList = await this.prisma.staff.findMany({
       where: staffFilter,
