@@ -1287,8 +1287,8 @@ export class HrService {
     ] = await Promise.all([
       this.prisma.staff.count({ where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) } }),
       this.prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow }, ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}), ...(monthStart ? { fromDate: { gte: monthStart, lt: monthEnd } } : {}) } }),
-      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}), ...(monthStart ? { date: { gte: monthStart, lt: monthEnd } } : {}) } }),
+      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
+      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
     ]);
 
     const present = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
