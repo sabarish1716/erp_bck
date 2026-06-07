@@ -1764,8 +1764,6 @@ async function main() {
         name: 'Mathematics',
         code: `MATH-${String(examStandard).replace('STD_', '')}A`,
         standard: examStandard,
-        maxMarks: 100,
-        passMarks: 35,
       },
     }),
     prisma.examSubject.create({
@@ -1774,8 +1772,6 @@ async function main() {
         name: 'Science',
         code: `SCI-${String(examStandard).replace('STD_', '')}A`,
         standard: examStandard,
-        maxMarks: 100,
-        passMarks: 35,
       },
     }),
   ]);

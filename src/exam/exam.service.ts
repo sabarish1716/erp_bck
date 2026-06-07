@@ -34,6 +34,7 @@ export class ExamService {
         name: dto.name.trim(),
         code: dto.code.trim().toUpperCase(),
         academicYear: dto.academicYear.trim(),
+        maxMarks: dto.maxMarks,
         startDate,
         endDate,
       },
@@ -69,8 +70,6 @@ export class ExamService {
         section: dto.section?.trim(),
         stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
 
-        maxMarks: dto.maxMarks ?? 100,
-        passMarks: dto.passMarks ?? 35,
         teacher: dto.teacherId ? { connect: { id: dto.teacherId } } : undefined,
 
       },
@@ -114,9 +113,7 @@ export class ExamService {
   }
 
   async createTimetable(dto: CreateExamScheduleDto) {
-    if (!dto.hallIds?.length) {
-      throw new BadRequestException('At least one hall is required for a timetable entry');
-    }
+
 
     await this.ensureExamExists(dto.examId);
 
@@ -141,7 +138,7 @@ export class ExamService {
       }
     }
 
-    await this.ensureNoHallOverlap(dto.hallIds, examDate, startsAt, endsAt);
+
     await this.ensureNoClassOverlap(dto.standard, dto.section, dto.academicStreamId, examDate, startsAt, endsAt);
 
 
@@ -151,14 +148,6 @@ export class ExamService {
       await this.ensureNoTeacherClash(subject.teacherId, examDate, startsAt, endsAt, undefined);
     }
 
-    const halls = await this.prisma.examHall.findMany({
-      where: { id: { in: dto.hallIds }, isActive: true },
-      select: { id: true },
-    });
-
-    if (halls.length !== new Set(dto.hallIds).size) {
-      throw new BadRequestException('One or more hall IDs are invalid or inactive');
-    }
 
     return this.prisma.examSchedule.create({
       data: {
@@ -176,9 +165,7 @@ export class ExamService {
         periodEnd: dto.periodEnd ?? null,
         periodType: dto.periodType ?? null,
 
-        halls: {
-          create: halls.map((h) => ({ hallId: h.id })),
-        },
+
       },
       include: {
         subject: {
@@ -188,7 +175,7 @@ export class ExamService {
             },
           },
         },
-        halls: { include: { hall: true } },
+
       },
     });
   }
@@ -319,20 +306,14 @@ export class ExamService {
    *                      STD_2/4/6+ / LKG/UKG → 1–4 EXAM, 5–8 REVISION
    */
   async autoGeneratePeriods(examId: string, dto: AutoGeneratePeriodsDto) {
-    await this.ensureExamExists(examId);
+    const exam = await this.prisma.exam.findUnique({ where: { id: examId } });
+    if (!exam) throw new NotFoundException('Exam not found');
 
     const subject = await this.prisma.examSubject.findUnique({ where: { id: dto.subjectId } });
     if (!subject || subject.examId !== examId) {
       throw new BadRequestException('Invalid subject for the selected exam');
     }
 
-    const halls = await this.prisma.examHall.findMany({
-      where: { id: { in: dto.hallIds }, isActive: true },
-      select: { id: true },
-    });
-    if (halls.length !== new Set(dto.hallIds).size) {
-      throw new BadRequestException('One or more hall IDs are invalid or inactive');
-    }
 
     const examDate = new Date(dto.examDate);
 
@@ -345,7 +326,7 @@ export class ExamService {
 
     const classGroupSwapped = this.isSwappedClassGroup(dto.standard);
 
-    if (dto.marks <= 25) {
+    if (exam.maxMarks <= 25) {
       if (classGroupSwapped) {
         // Same day: 1-2 exam, 3-4 revision
         periodsToCreate.push(
@@ -359,7 +340,7 @@ export class ExamService {
           { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.EXAMINATION },
         );
       }
-    } else if (dto.marks <= 50) {
+    } else if (exam.maxMarks <= 50) {
       if (classGroupSwapped) {
         // Same day: 1-4 EXAM, 5-8 REVISION
         periodsToCreate.push(
@@ -406,7 +387,7 @@ export class ExamService {
       const dayEnd = new Date(p.date);
       dayEnd.setUTCHours(23, 59, 59, 999);
 
-      await this.ensureNoHallOverlapForPeriod(dto.hallIds, p.date, p.periodStart, p.periodEnd);
+
       await this.ensureNoClassOverlapForPeriod(dto.standard, dto.section, dto.academicStreamId, p.date, p.periodStart, p.periodEnd);
 
       if (subject.teacherId) {
@@ -429,9 +410,7 @@ export class ExamService {
           periodEnd: p.periodEnd,
           periodType: p.periodType,
 
-          halls: {
-            create: halls.map((h) => ({ hallId: h.id })),
-          },
+
         },
         include: {
           subject: {
@@ -441,7 +420,7 @@ export class ExamService {
               },
             },
           },
-          halls: { include: { hall: true } },
+
         },
       });
       created.push(entry);
@@ -455,19 +434,10 @@ export class ExamService {
   }
 
   async autoGenerateFullTimetable(examId: string, data: AutoGenerateFullTimetableDto) {
-    await this.ensureExamExists(examId);
+    const exam = await this.prisma.exam.findUnique({ where: { id: examId } });
+    if (!exam) throw new NotFoundException('Exam not found');
 
-    if (!data.hallIds?.length) {
-      throw new BadRequestException('At least one hall is required');
-    }
 
-    const halls = await this.prisma.examHall.findMany({
-      where: { id: { in: data.hallIds }, isActive: true },
-      select: { id: true },
-    });
-    if (halls.length !== new Set(data.hallIds ?? []).size) {
-      throw new BadRequestException('One or more hall IDs are invalid or inactive');
-    }
 
     const subjects = await this.prisma.examSubject.findMany({
       where: {
@@ -490,7 +460,7 @@ export class ExamService {
       throw new BadRequestException('Invalid startDate');
     }
 
-    const pattern = this.getPattern(data.marks, data.standard);
+    const pattern = this.getPattern(exam.maxMarks, data.standard);
     if (pattern.length !== 8) {
       throw new BadRequestException('Unable to derive period pattern for provided marks/standard');
     }
@@ -513,7 +483,7 @@ export class ExamService {
           throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
         }
 
-        if (data.marks >= 100) {
+        if (exam.maxMarks >= 100) {
           for (let i = 0; i < 8; i++) {
             const startHour = 9 + i;
             const startsAt = new Date(currentDate);
@@ -523,7 +493,6 @@ export class ExamService {
 
             await this.validateClashes({
               prisma: tx,
-              hallIds: data.hallIds,
               standard: data.standard,
               section: data.section,
               academicStreamId: data.academicStreamId,
@@ -549,9 +518,7 @@ export class ExamService {
                 periodStart: i + 1,
                 periodEnd: i + 1,
                 periodType: PeriodType.REVISION,
-                halls: {
-                  create: halls.map((h) => ({ hallId: h.id })),
-                },
+
               },
               include: {
                 subject: {
@@ -559,7 +526,7 @@ export class ExamService {
                     teacher: { select: { id: true, name: true, employeeId: true, designation: true, department: true } },
                   },
                 },
-                halls: { include: { hall: true } },
+
               },
             });
             inserted.push(entry);
@@ -583,7 +550,6 @@ export class ExamService {
 
           await this.validateClashes({
             prisma: tx,
-            hallIds: data.hallIds,
             standard: data.standard,
             section: data.section,
             academicStreamId: data.academicStreamId,
@@ -613,9 +579,7 @@ export class ExamService {
               periodEnd: i + 1,
               periodType: type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
 
-              halls: {
-                create: halls.map((h) => ({ hallId: h.id })),
-              },
+
             },
             include: {
               subject: {
@@ -625,7 +589,7 @@ export class ExamService {
                   },
                 },
               },
-              halls: { include: { hall: true } },
+
             },
           });
           inserted.push(entry);
@@ -677,7 +641,6 @@ export class ExamService {
 
     const teacherId = dto.teacherId ?? subject.teacherId ?? undefined;
     await this.validateClashes({
-      hallIds: schedule.halls.map((h) => h.hallId),
       standard: schedule.standard,
       section: schedule.section ?? undefined,
       academicStreamId: schedule.academicStreamId ?? undefined,
@@ -755,7 +718,7 @@ export class ExamService {
   }
 
   private async validateClashes(args: {
-    hallIds: string[];
+
     standard: any;
     section?: string;
     academicStreamId?: any;
@@ -776,18 +739,7 @@ export class ExamService {
         ? { periodStart: { lte: args.periodEnd }, periodEnd: { gte: args.periodStart } }
         : { startsAt: { lt: args.endsAt }, endsAt: { gt: args.startsAt } };
 
-    const hallClash = await db.examSchedule.findFirst({
-      where: {
-        ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
-        examDate: args.examDate,
-        ...overlapFilter,
-        halls: { some: { hallId: { in: args.hallIds } } },
-      },
-      include: { halls: { include: { hall: true } } },
-    });
-    if (hallClash) {
-      throw new BadRequestException('Hall clash detected for this date and period/time slot');
-    }
+
 
     const classClash = await db.examSchedule.findFirst({
       where: {
@@ -915,12 +867,15 @@ export class ExamService {
     });
   }
 
-  async autoAllocateSeats(scheduleId: string) {
+  async autoAllocateSeats(scheduleId: string, hallIds: string[]) {
+    if (!hallIds?.length) {
+      throw new BadRequestException('At least one hall is required');
+    }
+
     const schedule = await this.prisma.examSchedule.findUnique({
       where: { id: scheduleId },
       include: {
         exam: true,
-        halls: { include: { hall: true } },
       },
     });
 
@@ -928,8 +883,12 @@ export class ExamService {
       throw new NotFoundException('Schedule not found');
     }
 
-    if (!schedule.halls.length) {
-      throw new BadRequestException('No halls mapped to this schedule');
+    const halls = await this.prisma.examHall.findMany({
+      where: { id: { in: hallIds }, isActive: true },
+    });
+
+    if (halls.length !== new Set(hallIds).size) {
+      throw new BadRequestException('One or more hall IDs are invalid or inactive');
     }
 
     const rollNumbers = await this.prisma.examRollNumber.findMany({
@@ -947,7 +906,7 @@ export class ExamService {
       throw new BadRequestException('No roll numbers generated for this schedule filters');
     }
 
-    const totalCapacity = schedule.halls.reduce((sum, h) => sum + h.hall.capacity, 0);
+    const totalCapacity = halls.reduce((sum, h) => sum + h.capacity, 0);
     if (rollNumbers.length > totalCapacity) {
       throw new BadRequestException(`Insufficient seats. Required ${rollNumbers.length}, available ${totalCapacity}`);
     }
@@ -961,12 +920,12 @@ export class ExamService {
     }[] = [];
 
     let cursor = 0;
-    for (const sh of schedule.halls) {
-      for (let seatNumber = 1; seatNumber <= sh.hall.capacity && cursor < rollNumbers.length; seatNumber += 1) {
+    for (const hall of halls) {
+      for (let seatNumber = 1; seatNumber <= hall.capacity && cursor < rollNumbers.length; seatNumber += 1) {
         const roll = rollNumbers[cursor];
         allocationRows.push({
           scheduleId,
-          hallId: sh.hallId,
+          hallId: hall.id,
           studentId: roll.studentId,
           rollNumberId: roll.id,
           seatNumber,
@@ -976,6 +935,10 @@ export class ExamService {
     }
 
     await this.prisma.$transaction([
+      this.prisma.examScheduleHall.deleteMany({ where: { scheduleId } }),
+      this.prisma.examScheduleHall.createMany({
+        data: hallIds.map((hallId) => ({ scheduleId, hallId })),
+      }),
       this.prisma.examSeatAllocation.deleteMany({ where: { scheduleId } }),
       this.prisma.examSeatAllocation.createMany({ data: allocationRows }),
     ]);
@@ -1085,6 +1048,13 @@ export class ExamService {
     await this.prisma.$transaction(async (tx) => {
       // Clear old allocations for affected halls only
       const affectedHallIds = dto.halls.map((h) => h.hallId);
+      
+      await tx.examScheduleHall.deleteMany({
+        where: { scheduleId, hallId: { in: affectedHallIds } },
+      });
+      await tx.examScheduleHall.createMany({
+        data: affectedHallIds.map((hallId) => ({ scheduleId, hallId })),
+      });
       await tx.examSeatAllocation.deleteMany({
         where: { scheduleId, hallId: { in: affectedHallIds } },
       });

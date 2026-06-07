@@ -644,6 +644,7 @@ model Exam {
   startDate   DateTime
   endDate     DateTime
   status      ExamStatus      @default(DRAFT)
+  maxMarks    Int             @default(100)
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
 
@@ -665,8 +666,6 @@ model ExamSubject {
   stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
 
 
-  maxMarks     Int            @default(100)
-  passMarks    Int            @default(35)
   teacherId    String?        // Staff member assigned to teach this subject
   createdAt    DateTime       @default(now())
 

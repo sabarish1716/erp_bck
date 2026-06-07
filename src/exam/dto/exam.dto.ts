@@ -16,6 +16,11 @@ export class CreateExamDto {
   @IsNotEmpty()
   academicYear!: string;
 
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  maxMarks!: number;
+
   @IsDateString()
   startDate!: string;
 
@@ -47,22 +52,10 @@ export class CreateExamSubjectDto {
   @IsString()
   academicStreamId?: string;
 
-
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  maxMarks?: number;
-
-  @IsOptional()
-  @IsInt()
-  @Min(1)
-  passMarks?: number;
-
   /** Staff ID of the teacher assigned to this subject */
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
-  teacherId?: string;
+  teacherId!: string;
 }
 
 export class CreateExamHallDto {
@@ -119,9 +112,7 @@ export class CreateExamScheduleDto {
   @IsEnum(ExamSession)
   session!: ExamSession;
 
-  @IsArray()
-  @IsString({ each: true })
-  hallIds!: string[];
+
 
   /** Starting period number (1–8) */
   @IsOptional()
@@ -212,9 +203,7 @@ export class AutoGeneratePeriodsDto {
   @IsDateString()
   revisionDate?: string;
 
-  @IsArray()
-  @IsString({ each: true })
-  hallIds!: string[];
+
 
   @IsEnum(ExamSession)
   session!: ExamSession;
@@ -232,19 +221,10 @@ export class AutoGenerateFullTimetableDto {
   @IsString()
   academicStreamId?: string;
 
-
-
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  marks!: number;
-
   @IsDateString()
   startDate!: string;
 
-  @IsArray()
-  @IsString({ each: true })
-  hallIds!: string[];
+
 }
 
 export class UpdateExamScheduleCellDto {

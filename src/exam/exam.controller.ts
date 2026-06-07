@@ -117,8 +117,8 @@ export class ExamController {
 
   @Post('timetable/:scheduleId/seat-allocation/auto')
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
-  autoAllocateSeats(@Param('scheduleId') scheduleId: string) {
-    return this.examService.autoAllocateSeats(scheduleId);
+  autoAllocateSeats(@Param('scheduleId') scheduleId: string, @Body() body: { hallIds: string[] }) {
+    return this.examService.autoAllocateSeats(scheduleId, body.hallIds);
   }
 
   /** Manual seat allocation: mix two standards per hall with configurable counts */
