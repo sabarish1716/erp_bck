@@ -52,6 +52,14 @@ export class CreateExamSubjectDto {
   @IsString()
   academicStreamId?: string;
 
+  @IsOptional()
+  @IsString()
+  revisionDate?: string;
+
+  @IsOptional()
+  @IsString()
+  examDate?: string;
+
   /** Staff ID of the teacher assigned to this subject */
   @IsNotEmpty()
   @IsString()
@@ -210,8 +218,9 @@ export class AutoGeneratePeriodsDto {
 }
 
 export class AutoGenerateFullTimetableDto {
+  @IsOptional()
   @IsEnum(Standard)
-  standard!: Standard;
+  standard?: Standard;
 
   @IsOptional()
   @IsString()

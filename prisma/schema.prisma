@@ -665,6 +665,8 @@ model ExamSubject {
   academicStreamId String?
   stream           AcademicStream? @relation(fields: [academicStreamId], references: [id])
 
+  revisionDate     DateTime?
+  examDate         DateTime?
 
   teacherId    String?        // Staff member assigned to teach this subject
   createdAt    DateTime       @default(now())

@@ -442,7 +442,7 @@ export class ExamService {
     const subjects = await this.prisma.examSubject.findMany({
       where: {
         examId,
-        standard: data.standard,
+        ...(data.standard ? { standard: data.standard } : {}),
         section: data.section,
         ...(data.academicStreamId ? { academicStreamId: data.academicStreamId } : {}),
 
@@ -460,16 +460,13 @@ export class ExamService {
       throw new BadRequestException('Invalid startDate');
     }
 
-    const pattern = this.getPattern(exam.maxMarks, data.standard);
-    if (pattern.length !== 8) {
-      throw new BadRequestException('Unable to derive period pattern for provided marks/standard');
-    }
+
 
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.examSchedule.deleteMany({
         where: {
           examId,
-          standard: data.standard,
+          ...(data.standard ? { standard: data.standard } : {}),
           section: data.section ?? null,
           academicStreamId: data.academicStreamId ?? null,
 
@@ -483,6 +480,11 @@ export class ExamService {
           throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
         }
 
+        const pattern = this.getPattern(exam.maxMarks, subject.standard);
+        if (pattern.length !== 8) {
+          throw new BadRequestException('Unable to derive period pattern for provided marks/standard');
+        }
+
         if (exam.maxMarks >= 100) {
           for (let i = 0; i < 8; i++) {
             const startHour = 9 + i;
@@ -493,9 +495,9 @@ export class ExamService {
 
             await this.validateClashes({
               prisma: tx,
-              standard: data.standard,
-              section: data.section,
-              academicStreamId: data.academicStreamId,
+              standard: subject.standard,
+              section: subject.section ?? undefined,
+              academicStreamId: subject.academicStreamId,
               examDate: new Date(currentDate),
               startsAt,
               endsAt,
@@ -508,9 +510,9 @@ export class ExamService {
               data: {
                 exam: { connect: { id: examId } },
                 subject: { connect: { id: subject.id } },
-                standard: data.standard,
-                section: data.section,
-                stream: data.academicStreamId ? { connect: { id: data.academicStreamId } } : undefined,
+                standard: subject.standard,
+                section: subject.section,
+                stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
                 examDate: new Date(currentDate),
                 startsAt,
                 endsAt,
@@ -550,9 +552,9 @@ export class ExamService {
 
           await this.validateClashes({
             prisma: tx,
-            standard: data.standard,
-            section: data.section,
-            academicStreamId: data.academicStreamId,
+            standard: subject.standard,
+            section: subject.section ?? undefined,
+            academicStreamId: subject.academicStreamId,
 
 
             examDate: new Date(currentDate),
@@ -567,9 +569,9 @@ export class ExamService {
             data: {
               exam: { connect: { id: examId } },
               subject: { connect: { id: subject.id } },
-              standard: data.standard,
-              section: data.section,
-              stream: data.academicStreamId ? { connect: { id: data.academicStreamId } } : undefined,
+              standard: subject.standard,
+              section: subject.section,
+              stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
 
               examDate: new Date(currentDate),
               startsAt,
@@ -1343,5 +1345,42 @@ export class ExamService {
         `Teacher clash detected: teacher is already assigned to "${clash.subject.code} – ${clash.subject.name}" (${clash.subject.standard} ${clash.subject.section ?? ''}) on the same date and overlapping period/time`,
       );
     }
+  }
+
+  async getStaffAssignments(examId: string) {
+    const schedules = await this.prisma.examSchedule.findMany({
+      where: { examId },
+      include: {
+        subject: { select: { teacherId: true, name: true } },
+        invigilatorAssignments: { select: { staffId: true } }
+      }
+    });
+
+    const assignments: any[] = [];
+    for (const schedule of schedules) {
+      if (schedule.subject?.teacherId) {
+        assignments.push({
+          staffId: schedule.subject.teacherId,
+          scheduleId: schedule.id,
+          type: 'TEACHER',
+          activity: `${schedule.standard}${schedule.section ? '-' + schedule.section : ''} - ${schedule.periodType === 'EXAMINATION' ? 'Exam' : 'Revision'}`,
+          examDate: schedule.examDate,
+          startsAt: schedule.startsAt,
+          endsAt: schedule.endsAt,
+        });
+      }
+      for (const inv of schedule.invigilatorAssignments) {
+        assignments.push({
+          staffId: inv.staffId,
+          scheduleId: schedule.id,
+          type: 'INVIGILATOR',
+          activity: `${schedule.standard}${schedule.section ? '-' + schedule.section : ''} - Invigilation`,
+          examDate: schedule.examDate,
+          startsAt: schedule.startsAt,
+          endsAt: schedule.endsAt,
+        });
+      }
+    }
+    return assignments;
   }
 }

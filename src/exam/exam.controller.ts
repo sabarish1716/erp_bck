@@ -153,6 +153,12 @@ export class ExamController {
     return this.examService.getInvigilatorAssignments(scheduleId);
   }
 
+  @Get(':examId/staff-assignments')
+  @Permissions(Permission.EXAM_READ)
+  getStaffAssignments(@Param('examId') examId: string) {
+    return this.examService.getStaffAssignments(examId);
+  }
+
   @Post('timetable/:scheduleId/invigilators')
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
   assignInvigilator(@Param('scheduleId') scheduleId: string, @Body() dto: AssignInvigilatorDto) {
