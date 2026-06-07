@@ -10,7 +10,9 @@ import {
   CreateExamScheduleDto,
   CreateExamSubjectDto,
   GenerateRollNumbersDto,
+  ManualSeatAllocationDto,
   UpdateExamScheduleCellDto,
+  UpdateScheduleTimingDto,
 } from './dto/exam.dto';
 
 @Injectable()
@@ -231,12 +233,13 @@ export class ExamService {
       orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
     });
 
-    const byDate = new Map<string, Array<{ period: number; subject: string; teacher: string | null; type: PeriodType | null; scheduleId: string }>>();
+    const byDate = new Map<string, Array<{ period: number; periodEnd: number | null; subject: string; teacher: string | null; type: PeriodType | null; scheduleId: string }>>();
     for (const e of entries) {
       const key = e.examDate.toISOString().slice(0, 10);
       if (!byDate.has(key)) byDate.set(key, []);
       byDate.get(key)!.push({
         period: e.periodStart ?? 0,
+        periodEnd: e.periodEnd ?? e.periodStart ?? 0,
         subject: e.subject.name,
         teacher: e.subject.teacher?.name ?? null,
         type: e.periodType ?? null,
@@ -333,9 +336,6 @@ export class ExamService {
 
     const examDate = new Date(dto.examDate);
 
-    // Determine class group for period-split override
-    const classGroupSwapped = this.isSwappedClassGroup(dto.standard);
-
     const periodsToCreate: {
       date: Date;
       periodStart: number;
@@ -343,21 +343,31 @@ export class ExamService {
       periodType: PeriodType;
     }[] = [];
 
+    const classGroupSwapped = this.isSwappedClassGroup(dto.standard);
+
     if (dto.marks <= 25) {
-      // Same day: 1-2 revision, 3-4 exam
-      periodsToCreate.push(
-        { date: examDate, periodStart: 1, periodEnd: 2, periodType: PeriodType.REVISION },
-        { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.EXAMINATION },
-      );
+      if (classGroupSwapped) {
+        // Same day: 1-2 exam, 3-4 revision
+        periodsToCreate.push(
+          { date: examDate, periodStart: 1, periodEnd: 2, periodType: PeriodType.EXAMINATION },
+          { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.REVISION },
+        );
+      } else {
+        // Same day: 1-2 revision, 3-4 exam
+        periodsToCreate.push(
+          { date: examDate, periodStart: 1, periodEnd: 2, periodType: PeriodType.REVISION },
+          { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.EXAMINATION },
+        );
+      }
     } else if (dto.marks <= 50) {
       if (classGroupSwapped) {
-        // 1-4 EXAM, 5-8 REVISION
+        // Same day: 1-4 EXAM, 5-8 REVISION
         periodsToCreate.push(
           { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.EXAMINATION },
           { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.REVISION },
         );
       } else {
-        // 1-4 REVISION, 5-8 EXAM
+        // Same day: 1-4 REVISION, 5-8 EXAM
         periodsToCreate.push(
           { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.REVISION },
           { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.EXAMINATION },
@@ -501,6 +511,64 @@ export class ExamService {
       for (const subject of subjects) {
         if (!subject.teacherId) {
           throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
+        }
+
+        if (data.marks >= 100) {
+          for (let i = 0; i < 8; i++) {
+            const startHour = 9 + i;
+            const startsAt = new Date(currentDate);
+            startsAt.setHours(startHour, 0, 0, 0);
+            const endsAt = new Date(currentDate);
+            endsAt.setHours(startHour + 1, 0, 0, 0);
+
+            await this.validateClashes({
+              prisma: tx,
+              hallIds: data.hallIds,
+              standard: data.standard,
+              section: data.section,
+              academicStreamId: data.academicStreamId,
+              examDate: new Date(currentDate),
+              startsAt,
+              endsAt,
+              teacherId: subject.teacherId,
+              periodStart: i + 1,
+              periodEnd: i + 1,
+            });
+
+            const entry = await tx.examSchedule.create({
+              data: {
+                exam: { connect: { id: examId } },
+                subject: { connect: { id: subject.id } },
+                standard: data.standard,
+                section: data.section,
+                stream: data.academicStreamId ? { connect: { id: data.academicStreamId } } : undefined,
+                examDate: new Date(currentDate),
+                startsAt,
+                endsAt,
+                session: i < 4 ? 'FN' : 'AN',
+                periodStart: i + 1,
+                periodEnd: i + 1,
+                periodType: PeriodType.REVISION,
+                halls: {
+                  create: halls.map((h) => ({ hallId: h.id })),
+                },
+              },
+              include: {
+                subject: {
+                  include: {
+                    teacher: { select: { id: true, name: true, employeeId: true, designation: true, department: true } },
+                  },
+                },
+                halls: { include: { hall: true } },
+              },
+            });
+            inserted.push(entry);
+          }
+
+          // Advance to the Exam Day
+          const nextDate = new Date(currentDate);
+          nextDate.setDate(nextDate.getDate() + 1);
+          currentDate = nextDate;
         }
 
         for (let i = 0; i < pattern.length; i++) {
@@ -663,35 +731,27 @@ export class ExamService {
 
   /** Returns true if the class group uses the "swapped" pattern (exam first, then revision) */
   private isSwappedClassGroup(standard: Standard): boolean {
-    // LKG, UKG, even standards (STD_2, 4, 6, 8, 10, 12) → 1-4 EXAM, 5-8 REVISION
     if (standard === Standard.LKG || standard === Standard.UKG) return true;
     const match = String(standard).match(/^STD_(\d+)$/);
     if (!match) return false;
     const n = parseInt(match[1], 10);
-    return n % 2 === 0; // even → swapped
+    // Classes 2, 4, 6 and above are swapped
+    return n === 2 || n === 4 || n >= 6;
   }
 
   private getPattern(marks: number, standard: string): Array<'R' | 'E' | 'F'> {
-    let pattern: Array<'R' | 'E' | 'F'>;
-
-    if (marks === 25) {
-      pattern = ['R', 'R', 'E', 'E', 'F', 'F', 'F', 'F'];
-    } else {
-      // Base pattern for both 50 and 100, and fallback for custom marks.
-      pattern = ['R', 'R', 'R', 'R', 'E', 'E', 'E', 'E'];
+    const isSwapped = this.isSwappedClassGroup(standard as Standard);
+    
+    if (marks <= 25) {
+      return isSwapped 
+        ? ['E', 'E', 'R', 'R', 'F', 'F', 'F', 'F']
+        : ['R', 'R', 'E', 'E', 'F', 'F', 'F', 'F'];
     }
-
-    const std = String(standard);
-    const isLkgUkg = std === 'LKG' || std === 'UKG';
-    const match = std.match(/^STD_(\d+)$/);
-    const n = match ? parseInt(match[1], 10) : NaN;
-
-    const isExamThenRevisionClass = isLkgUkg || n === 2 || n === 4 || n >= 6;
-    if (isExamThenRevisionClass) {
-      return ['E', 'E', 'E', 'E', 'R', 'R', 'R', 'R'];
-    }
-
-    return pattern;
+    
+    // Base pattern for both 50 and 100, and fallback for custom marks.
+    return isSwapped
+      ? ['E', 'E', 'E', 'E', 'R', 'R', 'R', 'R']
+      : ['R', 'R', 'R', 'R', 'E', 'E', 'E', 'E'];
   }
 
   private async validateClashes(args: {
@@ -938,6 +998,130 @@ export class ExamService {
         rollNumber: { select: { rollNumber: true } },
       },
       orderBy: [{ hall: { name: 'asc' } }, { seatNumber: 'asc' }],
+    });
+  }
+
+  /**
+   * Manual seat allocation: allows mixing two standards into each hall,
+   * with configurable student counts and up to two invigilators per hall.
+   */
+  async manualAllocateSeats(scheduleId: string, dto: ManualSeatAllocationDto) {
+    const schedule = await this.prisma.examSchedule.findUnique({
+      where: { id: scheduleId },
+      include: { exam: true },
+    });
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    const allocationRows: {
+      scheduleId: string;
+      hallId: string;
+      studentId: string;
+      rollNumberId: string;
+      seatNumber: number;
+    }[] = [];
+
+    const invigilatorUpserts: { scheduleId: string; hallId: string; staffId: string }[] = [];
+
+    for (const hallCfg of dto.halls) {
+      // Validate hall exists and is linked to this exam
+      const hall = await this.prisma.examHall.findUnique({
+        where: { id: hallCfg.hallId },
+        select: { id: true, capacity: true },
+      });
+      if (!hall) throw new BadRequestException(`Hall ${hallCfg.hallId} not found`);
+
+      const totalRequested = hallCfg.count1 + (hallCfg.count2 ?? 0);
+      if (totalRequested > hall.capacity) {
+        throw new BadRequestException(
+          `Hall capacity (${hall.capacity}) is less than requested students (${totalRequested})`,
+        );
+      }
+
+      // Fetch roll numbers for group 1
+      const rolls1 = await this.prisma.examRollNumber.findMany({
+        where: { examId: schedule.examId, standard: hallCfg.standard1, section: hallCfg.section1 ?? null },
+        orderBy: { rollNumber: 'asc' },
+        take: hallCfg.count1,
+      });
+
+      // Fetch roll numbers for group 2 (optional)
+      const rolls2 =
+        hallCfg.standard2 && (hallCfg.count2 ?? 0) > 0
+          ? await this.prisma.examRollNumber.findMany({
+              where: { examId: schedule.examId, standard: hallCfg.standard2, section: hallCfg.section2 ?? null },
+              orderBy: { rollNumber: 'asc' },
+              take: hallCfg.count2,
+            })
+          : [];
+
+      // Interleave: seat them alternately (1 from class1, 1 from class2, ...)
+      const combined: { id: string; studentId: string }[] = [];
+      const maxLen = Math.max(rolls1.length, rolls2.length);
+      for (let i = 0; i < maxLen; i++) {
+        if (i < rolls1.length) combined.push(rolls1[i]);
+        if (i < rolls2.length) combined.push(rolls2[i]);
+      }
+
+      combined.forEach((roll, idx) => {
+        allocationRows.push({
+          scheduleId,
+          hallId: hallCfg.hallId,
+          studentId: roll.studentId,
+          rollNumberId: roll.id,
+          seatNumber: idx + 1,
+        });
+      });
+
+      // Collect invigilator assignments
+      if (hallCfg.invigilator1Id) {
+        invigilatorUpserts.push({ scheduleId, hallId: hallCfg.hallId, staffId: hallCfg.invigilator1Id });
+      }
+      if (hallCfg.invigilator2Id) {
+        invigilatorUpserts.push({ scheduleId, hallId: hallCfg.hallId, staffId: hallCfg.invigilator2Id });
+      }
+    }
+
+    // Persist within a transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Clear old allocations for affected halls only
+      const affectedHallIds = dto.halls.map((h) => h.hallId);
+      await tx.examSeatAllocation.deleteMany({
+        where: { scheduleId, hallId: { in: affectedHallIds } },
+      });
+      await tx.examSeatAllocation.createMany({ data: allocationRows });
+
+      // Upsert invigilator assignments
+      for (const inv of invigilatorUpserts) {
+        await tx.examInvigilatorAssignment.upsert({
+          where: { scheduleId_hallId: { scheduleId: inv.scheduleId, hallId: inv.hallId } },
+          update: { staffId: inv.staffId },
+          create: inv,
+        });
+      }
+    });
+
+    return {
+      message: 'Manual seat allocation completed',
+      scheduleId,
+      totalAllocated: allocationRows.length,
+    };
+  }
+
+  /** Update only the start/end times of an existing schedule slot */
+  async updateScheduleTiming(scheduleId: string, dto: UpdateScheduleTimingDto) {
+    const schedule = await this.prisma.examSchedule.findUnique({ where: { id: scheduleId } });
+    if (!schedule) throw new NotFoundException('Schedule not found');
+
+    const startsAt = new Date(dto.startsAt);
+    const endsAt = new Date(dto.endsAt);
+    if (startsAt >= endsAt) {
+      throw new BadRequestException('startsAt must be before endsAt');
+    }
+
+    return this.prisma.examSchedule.update({
+      where: { id: scheduleId },
+      data: { startsAt, endsAt },
+      select: { id: true, examDate: true, startsAt: true, endsAt: true },
     });
   }
 

@@ -10,7 +10,9 @@ import {
   CreateExamScheduleDto,
   CreateExamSubjectDto,
   GenerateRollNumbersDto,
+  ManualSeatAllocationDto,
   UpdateExamScheduleCellDto,
+  UpdateScheduleTimingDto,
 } from './dto/exam.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
@@ -117,6 +119,20 @@ export class ExamController {
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
   autoAllocateSeats(@Param('scheduleId') scheduleId: string) {
     return this.examService.autoAllocateSeats(scheduleId);
+  }
+
+  /** Manual seat allocation: mix two standards per hall with configurable counts */
+  @Post('timetable/:scheduleId/seat-allocation/manual')
+  @Permissions(Permission.EXAM_SEAT_ALLOCATE)
+  manualAllocateSeats(@Param('scheduleId') scheduleId: string, @Body() dto: ManualSeatAllocationDto) {
+    return this.examService.manualAllocateSeats(scheduleId, dto);
+  }
+
+  /** Update exam start/end timings for a schedule slot */
+  @Patch('schedule/:id/timing')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  updateScheduleTiming(@Param('id') id: string, @Body() dto: UpdateScheduleTimingDto) {
+    return this.examService.updateScheduleTiming(id, dto);
   }
 
   @Get('timetable/:scheduleId/seat-allocation')

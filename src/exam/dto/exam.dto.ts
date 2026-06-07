@@ -260,3 +260,60 @@ export class UpdateExamScheduleCellDto {
   @IsEnum(PeriodType)
   periodType?: PeriodType;
 }
+
+/** Manual seat allocation: mix two standards into one or more halls */
+export class ManualHallAllocationDto {
+  @IsString()
+  @IsNotEmpty()
+  hallId!: string;
+
+  @IsEnum(Standard)
+  standard1!: Standard;
+
+  @IsOptional()
+  @IsString()
+  section1?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  count1!: number;
+
+  @IsOptional()
+  @IsEnum(Standard)
+  standard2?: Standard;
+
+  @IsOptional()
+  @IsString()
+  section2?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  count2?: number;
+
+  /** Primary invigilator staff ID */
+  @IsOptional()
+  @IsString()
+  invigilator1Id?: string;
+
+  /** Secondary invigilator staff ID */
+  @IsOptional()
+  @IsString()
+  invigilator2Id?: string;
+}
+
+export class ManualSeatAllocationDto {
+  @IsArray()
+  halls!: ManualHallAllocationDto[];
+}
+
+/** Patch startsAt / endsAt on an ExamSchedule without regenerating */
+export class UpdateScheduleTimingDto {
+  @IsDateString()
+  startsAt!: string;
+
+  @IsDateString()
+  endsAt!: string;
+}
