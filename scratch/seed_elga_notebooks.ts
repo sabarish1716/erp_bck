@@ -20,19 +20,25 @@ async function main() {
   ];
 
   for (const nb of notebooks) {
+    const cat = await prisma.itemCategory.upsert({
+      where: { name: 'NOTEBOOKS' },
+      update: {},
+      create: { name: 'NOTEBOOKS', description: 'Category for NOTEBOOKS' },
+    });
+
     // 1. Upsert StoreItem
     const item = await prisma.storeItem.upsert({
       where: { sku: nb.sku },
       update: {
         name: nb.name,
-        category: ItemCategory.NOTEBOOKS,
+        categoryId: cat.id,
         sellingPrice: nb.sellingPrice,
         isActive: true,
       },
       create: {
         name: nb.name,
         sku: nb.sku,
-        category: ItemCategory.NOTEBOOKS,
+        categoryId: cat.id,
         sellingPrice: nb.sellingPrice,
         costPrice: nb.sellingPrice * 0.6,
         unit: 'pcs',

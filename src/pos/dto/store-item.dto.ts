@@ -2,21 +2,12 @@ import {
   IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsInt, IsEnum, Min,
 } from 'class-validator';
 
-enum ItemCategoryEnum {
-  STATIONERY = 'STATIONERY',
-  UNIFORM = 'UNIFORM',
-  BOOKS = 'BOOKS',
-  SANITARY = 'SANITARY',
-  FURNITURE = 'FURNITURE',
-  ID_CARD = 'ID_CARD',
-  ACCESSORIES = 'ACCESSORIES',
-  OTHER = 'OTHER',
-}
+
 
 export class CreateStoreItemDto {
   @IsNotEmpty() @IsString() name: string;
   @IsOptional() @IsString() sku?: string;
-  @IsOptional() @IsEnum(ItemCategoryEnum) category?: string;
+  @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() image?: string;
   @IsOptional() @IsString() unit?: string;
@@ -30,7 +21,7 @@ export class CreateStoreItemDto {
 export class UpdateStoreItemDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() sku?: string;
-  @IsOptional() @IsEnum(ItemCategoryEnum) category?: string;
+  @IsOptional() @IsString() categoryId?: string;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() image?: string;
   @IsOptional() @IsString() unit?: string;
@@ -40,4 +31,8 @@ export class UpdateStoreItemDto {
   @IsOptional() @IsBoolean() isFreeEligible?: boolean;
   @IsOptional() @IsInt() @Min(0) freeLimit?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
+}
+
+export class CreateItemCategoryDto {
+  @IsNotEmpty() @IsString() name: string;
 }

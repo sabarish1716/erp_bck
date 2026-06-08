@@ -1890,26 +1890,40 @@ async function main() {
     data: { name: 'Uniform Store', description: 'Uniform and accessories outlet' },
   });
 
+  // ── ITEM CATEGORIES ─────────────────────────────
+  const categoriesToSeed = [
+    'STATIONERY', 'UNIFORM', 'BOOKS', 'SANITARY', 'FURNITURE', 'ID_CARD', 'ACCESSORIES', 'NOTEBOOKS', 'OTHER'
+  ];
+  const catMap: Record<string, string> = {};
+  for (const name of categoriesToSeed) {
+    const cat = await prisma.itemCategory.upsert({
+      where: { name },
+      update: {},
+      create: { name, description: `Category for ${name}` },
+    });
+    catMap[name] = cat.id;
+  }
+
   // ── STORE ITEMS ─────────────────────────────────
   const createItem = (data: any) => prisma.storeItem.create({ data });
   const items = {
-    notebook:   await createItem({ name: 'Notebook 200-page', sku: 'STN-NB200', category: ItemCategory.STATIONERY, sellingPrice: 60, costPrice: 40, unit: 'pcs', reorderLevel: 50, isFreeEligible: true, freeLimit: 5 }),
-    pen:        await createItem({ name: 'Ball Pen (Blue)', sku: 'STN-PEN-B', category: ItemCategory.STATIONERY, sellingPrice: 10, costPrice: 5, unit: 'pcs', reorderLevel: 100, isFreeEligible: true, freeLimit: 10 }),
-    pencil:     await createItem({ name: 'HB Pencil', sku: 'STN-PEN-H', category: ItemCategory.STATIONERY, sellingPrice: 8, costPrice: 4, unit: 'pcs', reorderLevel: 100, isFreeEligible: true, freeLimit: 10 }),
-    eraser:     await createItem({ name: 'Eraser (White)', sku: 'STN-ERA-W', category: ItemCategory.STATIONERY, sellingPrice: 5, costPrice: 2, unit: 'pcs', reorderLevel: 80 }),
-    ruler:      await createItem({ name: 'Ruler 30cm', sku: 'STN-RUL30', category: ItemCategory.STATIONERY, sellingPrice: 15, costPrice: 8, unit: 'pcs', reorderLevel: 40, isFreeEligible: true, freeLimit: 2 }),
-    whitener:   await createItem({ name: 'Whitener Pen', sku: 'STN-WHT-P', category: ItemCategory.STATIONERY, sellingPrice: 25, costPrice: 14, unit: 'pcs', reorderLevel: 30, isFreeEligible: true, freeLimit: 3 }),
-    shirtS:     await createItem({ name: 'School Shirt (S)', sku: 'UNF-SHT-S', category: ItemCategory.UNIFORM, sellingPrice: 450, costPrice: 280, unit: 'pcs', reorderLevel: 20 }),
-    shirtM:     await createItem({ name: 'School Shirt (M)', sku: 'UNF-SHT-M', category: ItemCategory.UNIFORM, sellingPrice: 470, costPrice: 290, unit: 'pcs', reorderLevel: 20 }),
-    trouserM:   await createItem({ name: 'School Trouser (M)', sku: 'UNF-TRS-M', category: ItemCategory.UNIFORM, sellingPrice: 520, costPrice: 320, unit: 'pcs', reorderLevel: 20 }),
-    belt:       await createItem({ name: 'School Belt', sku: 'UNF-BELT', category: ItemCategory.ACCESSORIES, sellingPrice: 150, costPrice: 80, unit: 'pcs', reorderLevel: 30 }),
-    idCard:     await createItem({ name: 'ID Card (Blank)', sku: 'ID-BLANK', category: ItemCategory.ID_CARD, sellingPrice: 50, costPrice: 15, unit: 'pcs', reorderLevel: 100 }),
-    mathBook:   await createItem({ name: 'Maths Textbook (10th)', sku: 'BK-MATH10', category: ItemCategory.BOOKS, sellingPrice: 350, costPrice: 220, unit: 'pcs', reorderLevel: 15 }),
-    sciBook:    await createItem({ name: 'Science Textbook (10th)', sku: 'BK-SCI10', category: ItemCategory.BOOKS, sellingPrice: 380, costPrice: 240, unit: 'pcs', reorderLevel: 15 }),
-    handWash:   await createItem({ name: 'Hand Wash 500ml', sku: 'SAN-HW500', category: ItemCategory.SANITARY, sellingPrice: 120, costPrice: 75, unit: 'bottle', reorderLevel: 20 }),
-    sanitizer:  await createItem({ name: 'Sanitizer 200ml', sku: 'SAN-SZ200', category: ItemCategory.SANITARY, sellingPrice: 80, costPrice: 45, unit: 'bottle', reorderLevel: 25 }),
-    bench:      await createItem({ name: 'Classroom Bench (3-seater)', sku: 'FRN-BN03', category: ItemCategory.FURNITURE, sellingPrice: 3500, costPrice: 2200, unit: 'pcs', reorderLevel: 5 }),
-    desk:       await createItem({ name: 'Teacher Desk', sku: 'FRN-TDESK', category: ItemCategory.FURNITURE, sellingPrice: 4800, costPrice: 3200, unit: 'pcs', reorderLevel: 3 }),
+    notebook:   await createItem({ name: 'Notebook 200-page', sku: 'STN-NB200', categoryId: catMap['STATIONERY'], sellingPrice: 60, costPrice: 40, unit: 'pcs', reorderLevel: 50, isFreeEligible: true, freeLimit: 5 }),
+    pen:        await createItem({ name: 'Ball Pen (Blue)', sku: 'STN-PEN-B', categoryId: catMap['STATIONERY'], sellingPrice: 10, costPrice: 5, unit: 'pcs', reorderLevel: 100, isFreeEligible: true, freeLimit: 10 }),
+    pencil:     await createItem({ name: 'HB Pencil', sku: 'STN-PEN-H', categoryId: catMap['STATIONERY'], sellingPrice: 8, costPrice: 4, unit: 'pcs', reorderLevel: 100, isFreeEligible: true, freeLimit: 10 }),
+    eraser:     await createItem({ name: 'Eraser (White)', sku: 'STN-ERA-W', categoryId: catMap['STATIONERY'], sellingPrice: 5, costPrice: 2, unit: 'pcs', reorderLevel: 80 }),
+    ruler:      await createItem({ name: 'Ruler 30cm', sku: 'STN-RUL30', categoryId: catMap['STATIONERY'], sellingPrice: 15, costPrice: 8, unit: 'pcs', reorderLevel: 40, isFreeEligible: true, freeLimit: 2 }),
+    whitener:   await createItem({ name: 'Whitener Pen', sku: 'STN-WHT-P', categoryId: catMap['STATIONERY'], sellingPrice: 25, costPrice: 14, unit: 'pcs', reorderLevel: 30, isFreeEligible: true, freeLimit: 3 }),
+    shirtS:     await createItem({ name: 'School Shirt (S)', sku: 'UNF-SHT-S', categoryId: catMap['UNIFORM'], sellingPrice: 450, costPrice: 280, unit: 'pcs', reorderLevel: 20 }),
+    shirtM:     await createItem({ name: 'School Shirt (M)', sku: 'UNF-SHT-M', categoryId: catMap['UNIFORM'], sellingPrice: 470, costPrice: 290, unit: 'pcs', reorderLevel: 20 }),
+    trouserM:   await createItem({ name: 'School Trouser (M)', sku: 'UNF-TRS-M', categoryId: catMap['UNIFORM'], sellingPrice: 520, costPrice: 320, unit: 'pcs', reorderLevel: 20 }),
+    belt:       await createItem({ name: 'School Belt', sku: 'UNF-BELT', categoryId: catMap['ACCESSORIES'], sellingPrice: 150, costPrice: 80, unit: 'pcs', reorderLevel: 30 }),
+    idCard:     await createItem({ name: 'ID Card (Blank)', sku: 'ID-BLANK', categoryId: catMap['ID_CARD'], sellingPrice: 50, costPrice: 15, unit: 'pcs', reorderLevel: 100 }),
+    mathBook:   await createItem({ name: 'Maths Textbook (10th)', sku: 'BK-MATH10', categoryId: catMap['BOOKS'], sellingPrice: 350, costPrice: 220, unit: 'pcs', reorderLevel: 15 }),
+    sciBook:    await createItem({ name: 'Science Textbook (10th)', sku: 'BK-SCI10', categoryId: catMap['BOOKS'], sellingPrice: 380, costPrice: 240, unit: 'pcs', reorderLevel: 15 }),
+    handWash:   await createItem({ name: 'Hand Wash 500ml', sku: 'SAN-HW500', categoryId: catMap['SANITARY'], sellingPrice: 120, costPrice: 75, unit: 'bottle', reorderLevel: 20 }),
+    sanitizer:  await createItem({ name: 'Sanitizer 200ml', sku: 'SAN-SZ200', categoryId: catMap['SANITARY'], sellingPrice: 80, costPrice: 45, unit: 'bottle', reorderLevel: 25 }),
+    bench:      await createItem({ name: 'Classroom Bench (3-seater)', sku: 'FRN-BN03', categoryId: catMap['FURNITURE'], sellingPrice: 3500, costPrice: 2200, unit: 'pcs', reorderLevel: 5 }),
+    desk:       await createItem({ name: 'Teacher Desk', sku: 'FRN-TDESK', categoryId: catMap['FURNITURE'], sellingPrice: 4800, costPrice: 3200, unit: 'pcs', reorderLevel: 3 }),
   };
 
   // ── SUPPLIERS ───────────────────────────────────

@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
-import { CreateStoreItemDto, UpdateStoreItemDto } from './dto/store-item.dto';
+import { CreateStoreItemDto, UpdateStoreItemDto, CreateItemCategoryDto } from './dto/store-item.dto';
 import { CreateSupplierDto, UpdateSupplierDto, CreatePurchaseDto } from './dto/purchase.dto';
 import { CreateStockTransferDto } from './dto/stock-transfer.dto';
 import { CreateSaleDto } from './dto/sale.dto';
@@ -43,6 +43,27 @@ export class PosService {
   }
 
   // ═══════════════════════════════════════════════
+  // CATEGORIES
+  // ═══════════════════════════════════════════════
+
+  async createCategory(data: CreateItemCategoryDto) {
+    const existing = await this.prisma.itemCategory.findUnique({
+      where: { name: data.name },
+    });
+    if (existing) {
+      throw new BadRequestException(`Category "${data.name}" already exists`);
+    }
+    return this.prisma.itemCategory.create({ data });
+  }
+
+  async getAllCategories() {
+    return this.prisma.itemCategory.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  // ═══════════════════════════════════════════════
   // STORE ITEMS (CATALOG)
   // ═══════════════════════════════════════════════
 
@@ -51,7 +72,7 @@ export class PosService {
       data: {
         name: data.name,
         sku: data.sku,
-        category: (data.category as any) || 'OTHER',
+        categoryId: data.categoryId,
         description: data.description,
         image: data.image,
         unit: data.unit || 'pcs',
@@ -67,10 +88,7 @@ export class PosService {
   async updateStoreItem(id: string, data: UpdateStoreItemDto) {
     return this.prisma.storeItem.update({
       where: { id },
-      data: {
-        ...data,
-        category: data.category ? (data.category as any) : undefined,
-      },
+      data,
     });
   }
 
@@ -78,21 +96,21 @@ export class PosService {
     if (storeId) {
       // Find all stock entries for this store, include item details
       const stockItems = await this.prisma.storeStock.findMany({
-        where: { storeId, item: { isActive: true, category: category ? (category as any) : undefined } },
-        include: { item: true }
+        where: { storeId, item: { isActive: true, categoryId: category ? category : undefined } },
+        include: { item: { include: { category: true } } }
       });
       // Optionally filter by category
       return category
-        ? stockItems.filter(s => s.item.category === category)
+        ? stockItems.filter(s => s.item.categoryId === category)
         : stockItems;
     } else {
       // Fallback: all items, optionally by category, only isActive
       const where: any = { isActive: true };
-      if (category) where.category = category;
+      if (category) where.categoryId = category;
       return this.prisma.storeItem.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: { stockItems: { include: { store: true } } }
+        include: { category: true, stockItems: { include: { store: true } } }
       });
     }
   }
@@ -100,7 +118,7 @@ export class PosService {
   async getStoreItem(id: string) {
     const item = await this.prisma.storeItem.findUnique({
       where: { id },
-      include: { stockItems: { include: { store: true } } },
+      include: { category: true, stockItems: { include: { store: true } } },
     });
     if (!item) throw new NotFoundException('Store item not found');
     return item;

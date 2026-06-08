@@ -9,7 +9,7 @@ import { PosService } from './pos.service';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
-import { CreateStoreItemDto, UpdateStoreItemDto } from './dto/store-item.dto';
+import { CreateStoreItemDto, UpdateStoreItemDto, CreateItemCategoryDto } from './dto/store-item.dto';
 import { CreateSupplierDto, UpdateSupplierDto, CreatePurchaseDto } from './dto/purchase.dto';
 import { CreateStockTransferDto } from './dto/stock-transfer.dto';
 import { CreateSaleDto } from './dto/sale.dto';
@@ -50,6 +50,20 @@ export class PosController {
   @Permissions(Permission.POS_READ)
   getStore(@Param('id') id: string) {
     return this.posService.getStore(id);
+  }
+
+  // ─── CATEGORIES ────────────────────────────────
+  
+  @Get('categories')
+  @Permissions(Permission.POS_READ)
+  getAllCategories() {
+    return this.posService.getAllCategories();
+  }
+
+  @Post('categories')
+  @Permissions(Permission.POS_MANAGE)
+  createCategory(@Body() dto: CreateItemCategoryDto) {
+    return this.posService.createCategory(dto);
   }
 
   // ─── STORE ITEMS (CATALOG) ─────────────────────

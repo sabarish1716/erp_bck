@@ -1627,16 +1627,15 @@ model StaffAdvance {
 // POS / STORE MANAGEMENT
 // ═══════════════════════════════════════════════
 
-enum ItemCategory {
-  STATIONERY
-  UNIFORM
-  BOOKS
-  SANITARY
-  FURNITURE
-  ID_CARD
-  ACCESSORIES
-  NOTEBOOKS
-  OTHER
+model ItemCategory {
+  id          String      @id @default(uuid())
+  name        String      @unique
+  description String?
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  items       StoreItem[]
 }
 
 // Store locations (Master Store, Stationery Shop, etc.)
@@ -1661,7 +1660,8 @@ model StoreItem {
   id            String       @id @default(uuid())
   name          String
   sku           String?      @unique
-  category      ItemCategory @default(OTHER)
+  categoryId    String?
+  category      ItemCategory? @relation(fields: [categoryId], references: [id])
   description   String?
   image         String?      // file path or URL
   unit          String       @default("pcs") // pcs, kg, box, etc.
