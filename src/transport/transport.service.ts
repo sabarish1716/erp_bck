@@ -1,8 +1,8 @@
-
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
+import { FeesService } from '../fees/fees.service';
 import {
   CreateTransportRouteDto,
   AssignStudentTransportDto,
@@ -132,6 +132,7 @@ export class TransportService {
   constructor(
     private prisma: PrismaService,
     private supabase: SupabaseService,
+    @Inject(forwardRef(() => FeesService)) private feesService: FeesService,
   ) { }
 
   private async buildWorkbookBuffer(workbook: ExcelJS.Workbook) {
@@ -652,9 +653,10 @@ export class TransportService {
       existingAssignment.routeId === data.routeId &&
       (existingAssignment.stopId || null) === (data.stopId || null) &&
       existingAssignment.academicYear === academicYear &&
-      Boolean(existingAssignment.isSplClass) === Boolean(data.isSplClass)
+      Boolean(existingAssignment.isSplClass) === Boolean(data.isSplClass) &&
+      (existingAssignment.busno || null) === (data.busno || null)
     ) {
-      throw new ConflictException('Transport is already assigned to this student for the selected academic year');
+      return this.resolveAssignmentResponse(existingAssignment, 'No changes made to transport assignment');
     }
 
     try {
@@ -694,6 +696,22 @@ export class TransportService {
             student: { select: { id: true, name: true, standard: true } },
           },
         });
+
+      // Automatically recalculate and sync the student fee if it exists for the current academic year.
+      try {
+        const studentFee = await this.prisma.studentFee.findUnique({
+          where: { studentId_academicYear: { studentId: data.studentId, academicYear } }
+        });
+        if (studentFee) {
+          const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
+          const splSurcharge = assignment.isSplClass ? assignment.route.splClassFee : 0;
+          const totalNewTransportFee = baseFee + splSurcharge;
+
+          await this.feesService.recalcTransportFee(data.studentId, academicYear, totalNewTransportFee);
+        }
+      } catch (err) {
+        console.error("Failed to sync transport fee with student fee", err);
+      }
 
       return this.resolveAssignmentResponse(
         assignment,
@@ -745,7 +763,7 @@ export class TransportService {
         }
 
         // 4. Create or Update Assignment
-        await this.prisma.studentTransport.upsert({
+        const assignment = await this.prisma.studentTransport.upsert({
           where: { studentId: admission.studentId },
           update: {
             routeId: route.id,
@@ -759,8 +777,26 @@ export class TransportService {
             stopId: stopId || null,
             busno: item.busNo || null,
             academicYear,
+            isSplClass: false,
+            splClassStartDate: null,
           },
+          include: { route: true, stop: true }
         });
+
+        // 5. Sync with StudentFee if it exists
+        try {
+          const studentFee = await this.prisma.studentFee.findUnique({
+            where: { studentId_academicYear: { studentId: admission.studentId, academicYear } }
+          });
+          if (studentFee) {
+            const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
+            const splSurcharge = assignment.isSplClass ? assignment.route.splClassFee : 0;
+            const totalNewTransportFee = baseFee + splSurcharge;
+            await this.feesService.recalcTransportFee(admission.studentId, academicYear, totalNewTransportFee);
+          }
+        } catch (err) {
+          console.error("Failed to sync transport fee in bulk", err);
+        }
 
         results.success++;
       } catch (err) {

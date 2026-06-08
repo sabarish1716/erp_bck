@@ -188,8 +188,9 @@ export class FeesController {
   recalcTransportFee(
     @Param('studentId') studentId: string,
     @Query('academicYear') academicYear: string,
+    @Body('overrideFee') overrideFee?: number,
   ) {
-    return this.feesService.recalcTransportFee(studentId, academicYear);
+    return this.feesService.recalcTransportFee(studentId, academicYear, overrideFee);
   }
 
   @Get('transport-breakdown/:studentId')

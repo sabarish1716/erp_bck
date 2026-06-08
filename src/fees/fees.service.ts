@@ -541,7 +541,14 @@ export class FeesService {
 
     // Helper: split tuition across core terms; others are lumped into the first term
     const buildComponentSplit = (termsArray: any[]): { tuition: number[]; transport: number[]; specialClass: number[]; specialClassTransport: number[]; book: number[]; hostel: number[]; other: number[]; application: number[] } => {
-      const coreTerms = termsArray.filter(t => t.termName && String(t.termName).toLowerCase().includes('term'));
+      const isCoreTermFilter = (t: any) => {
+        const lowerName = String(t.termName || '').toLowerCase();
+        if (lowerName.includes('special class')) return false;
+        if (lowerName.includes('application fee')) return false;
+        if (lowerName.includes('store')) return false;
+        return true;
+      };
+      const coreTerms = termsArray.filter(isCoreTermFilter);
       const nCore = coreTerms.length > 0 ? coreTerms.length : termsArray.length;
       const nTerms = termsArray.length;
 
@@ -557,13 +564,13 @@ export class FeesService {
         return arr;
       };
 
-      const fullTuition = splitEvenly(tuitionFee, nTerms);
+      const coreTuition = splitEvenly(tuitionFee, nCore);
       const coreTransport = splitEvenly(transportFee, nCore);
-      const fullSpecialClass = firstOnly(specialClassFee * specialClassMonths, nTerms);
-      const fullSpecialClassTransport = firstOnly(specialClassTransportFee * specialClassTransportMonths, nTerms);
-      const fullHostel = firstOnly(hostelFee, nTerms);
-      const fullOther = firstOnly(otherFee, nTerms);
-      const fullApplication = firstOnly(applicationFee, nTerms);
+      const fullSpecialClass = splitEvenly(specialClassFee * specialClassMonths, nCore);
+      const fullSpecialClassTransport = splitEvenly(specialClassTransportFee * specialClassTransportMonths, nCore);
+      const fullHostel = splitEvenly(hostelFee, nCore);
+      const fullOther = splitEvenly(otherFee, nCore);
+      const fullApplication = splitEvenly(applicationFee, nCore);
 
       // Kit items split
       const kitSplit = Array(nTerms).fill(0);
@@ -580,26 +587,45 @@ export class FeesService {
       kitSplit[0] += remainder;
 
       const transportArr: number[] = [];
+      const tuitionArr: number[] = [];
+      const specialClassArr: number[] = [];
+      const specialClassTransportArr: number[] = [];
+      const hostelArr: number[] = [];
+      const otherArr: number[] = [];
+      const applicationArr: number[] = [];
+      
       let coreIdx = 0;
       for (const t of termsArray) {
-        const isCore = coreTerms.length > 0 ? !!(t.termName && String(t.termName).toLowerCase().includes('term')) : true;
+        const isCore = isCoreTermFilter(t);
         if (isCore) {
           transportArr.push(coreTransport[coreIdx] || 0);
+          tuitionArr.push(coreTuition[coreIdx] || 0);
+          specialClassArr.push(fullSpecialClass[coreIdx] || 0);
+          specialClassTransportArr.push(fullSpecialClassTransport[coreIdx] || 0);
+          hostelArr.push(fullHostel[coreIdx] || 0);
+          otherArr.push(fullOther[coreIdx] || 0);
+          applicationArr.push(fullApplication[coreIdx] || 0);
           coreIdx++;
         } else {
           transportArr.push(0);
+          tuitionArr.push(0);
+          specialClassArr.push(0);
+          specialClassTransportArr.push(0);
+          hostelArr.push(0);
+          otherArr.push(0);
+          applicationArr.push(0);
         }
       }
 
       return {
-        tuition: fullTuition,
+        tuition: tuitionArr,
         transport: transportArr,
-        specialClass: fullSpecialClass,
-        specialClassTransport: fullSpecialClassTransport,
+        specialClass: specialClassArr,
+        specialClassTransport: specialClassTransportArr,
         book: kitSplit,
-        hostel: fullHostel,
-        other: fullOther,
-        application: fullApplication,
+        hostel: hostelArr,
+        other: otherArr,
+        application: applicationArr,
       };
     };
 
@@ -1844,7 +1870,7 @@ export class FeesService {
   // TRANSPORT FEE MID-TERM RECALCULATION
   // ═══════════════════════════════════════════════
 
-  async recalcTransportFee(studentId: string, academicYear: string) {
+  async recalcTransportFee(studentId: string, academicYear: string, overrideFee?: number) {
     const studentFee = await this.prisma.studentFee.findUnique({
       where: { studentId_academicYear: { studentId, academicYear } },
       include: { terms: { orderBy: { termNumber: 'asc' } }, payments: true, discounts: true, customItems: true },
@@ -1853,10 +1879,14 @@ export class FeesService {
 
     // Get current transport fee from route assignment
     let newTransportFee = 0;
-    try {
-      newTransportFee = await this.transportService.getTransportFeeForStudentProRata(studentId);
-    } catch {
-      newTransportFee = 0;
+    if (overrideFee != null) {
+      newTransportFee = Number(overrideFee);
+    } else {
+      try {
+        newTransportFee = await this.transportService.getTransportFeeForStudentProRata(studentId);
+      } catch {
+        newTransportFee = 0;
+      }
     }
 
     const oldTransportFee = studentFee.transportFee;
@@ -1865,11 +1895,20 @@ export class FeesService {
     }
 
     // Find which terms are already PAID — don't change those
-    const paidTerms = studentFee.terms.filter((t) => t.status === 'PAID');
-    const unpaidTerms = studentFee.terms.filter((t) => t.status !== 'PAID');
+    // ONLY apply transport fee to CORE terms (Term 1, Term 2, etc).
+    // Exclude placeholder terms like "Special Class", "Application Fee"
+    const isCoreTerm = (t: any) => {
+      const lowerName = String(t.termName || '').toLowerCase();
+      if (lowerName.includes('special class')) return false;
+      if (lowerName.includes('application fee')) return false;
+      if (lowerName.includes('store')) return false;
+      return true;
+    };
+    const coreTerms = studentFee.terms.filter(t => isCoreTerm(t));
+    const unpaidTerms = coreTerms.filter((t) => t.status !== 'PAID');
 
     // Recalculate: the transport fee difference applies only to unpaid terms
-    const totalTerms = studentFee.terms.length || 1;
+    const totalTerms = coreTerms.length || 1;
     const oldPerTermTransport = oldTransportFee / totalTerms;
     const newPerTermTransport = newTransportFee / totalTerms;
     const diffPerTerm = newPerTermTransport - oldPerTermTransport;
@@ -1913,9 +1952,13 @@ export class FeesService {
     // Update unpaid term amounts
     const termUpdates = unpaidTerms.map((t) => {
       const newAmount = Math.round((t.amount + diffPerTerm) * 100) / 100;
+      const newTransportAmount = Math.round(((t as any).transportAmount + diffPerTerm) * 100) / 100;
       return this.prisma.studentFeeTerm.update({
         where: { id: t.id },
-        data: { amount: Math.max(newAmount, 0) },
+        data: { 
+          amount: Math.max(newAmount, 0),
+          transportAmount: Math.max(newTransportAmount, 0)
+        },
       });
     });
 
