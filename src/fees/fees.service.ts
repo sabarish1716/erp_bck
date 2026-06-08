@@ -1091,52 +1091,94 @@ export class FeesService {
     }
     discountAmount = Math.min(discountAmount, totalFee);
     const netFee = Math.max(totalFee - discountAmount, 0);
-    const numberOfTerms = existing.numberOfTerms;
+    const numberOfTerms = data.terms?.length || existing.numberOfTerms;
 
-    const firstOnly = (val: number, n: number) => {
-      if (n <= 0) return [];
-      const arr = Array(n).fill(0);
-      arr[0] = val;
-      return arr;
-    };
+    // Use provided terms or fetch existing terms to maintain structure
+    let baseTerms = data.terms;
+    if (!baseTerms || baseTerms.length === 0) {
+      baseTerms = await this.prisma.studentFeeTerm.findMany({
+        where: { studentFeeId: id },
+        orderBy: { termNumber: 'asc' },
+      });
+    }
 
-    // Rebuild student term records — only tuition is split
-    let studentTerms: { termNumber: number; termName: string; amount: number; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
-    if (numberOfTerms > 0) {
+    let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
+
+    if (baseTerms && baseTerms.length > 0) {
+      const isCoreTermFilter = (t: any) => {
+        const lowerName = String(t.termName || '').toLowerCase();
+        if (lowerName.includes('special class')) return false;
+        if (lowerName.includes('application fee')) return false;
+        if (lowerName.includes('store')) return false;
+        return true;
+      };
+
+      const coreTermsCount = baseTerms.filter(isCoreTermFilter).length || baseTerms.length;
+      const nTerms = baseTerms.length;
+
       const splitEvenly = (val: number, n: number) => {
         if (n <= 0) return [];
         const pt = Math.round((val / n) * 100) / 100;
         return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
       };
+      
+      const firstOnly = (val: number, n: number) => {
+        if (n <= 0) return [];
+        const arr = Array(n).fill(0);
+        arr[0] = val;
+        return arr;
+      };
 
       const specialClassFeeTotal = (data.specialClassFee ?? existing.specialClassFee) * (data.specialClassMonths ?? existing.specialClassMonths);
       const specialClassTransportFeeTotal = (data.specialClassTransportFee ?? existing.specialClassTransportFee) * (data.specialClassTransportMonths ?? existing.specialClassTransportMonths);
 
-      const tSplit = splitEvenly(tuitionFee, numberOfTerms);
-      const trSplit = splitEvenly(transportFee, numberOfTerms);
-      const bkSplit = firstOnly(bookFee, numberOfTerms);
-      const hSplit = splitEvenly(hostelFee, numberOfTerms);
-      const oSplit = firstOnly(otherFee, numberOfTerms);
-      const appSplit = firstOnly(applicationFee, numberOfTerms);
-      const scSplit = firstOnly(specialClassFeeTotal, numberOfTerms);
-      const sctSplit = firstOnly(specialClassTransportFeeTotal, numberOfTerms);
+      const tSplit = splitEvenly(tuitionFee, coreTermsCount);
+      const trSplit = splitEvenly(transportFee, coreTermsCount);
+      const bkSplit = firstOnly(bookFee, nTerms);
+      const hSplit = splitEvenly(hostelFee, coreTermsCount);
+      const oSplit = firstOnly(otherFee, coreTermsCount);
+      const appSplit = firstOnly(applicationFee, coreTermsCount);
+      const scSplit = firstOnly(specialClassFeeTotal, coreTermsCount);
+      const sctSplit = firstOnly(specialClassTransportFeeTotal, coreTermsCount);
 
-      for (let i = 1; i <= numberOfTerms; i++) {
-        const idx = i - 1;
-        const termAmount = tSplit[idx] + trSplit[idx] + bkSplit[idx] + hSplit[idx] + oSplit[idx] + appSplit[idx] + scSplit[idx] + sctSplit[idx];
+      let coreIdx = 0;
+      for (let i = 0; i < baseTerms.length; i++) {
+        const t = baseTerms[i];
+        const isCore = isCoreTermFilter(t);
+        const trAmt = isCore ? (trSplit[coreIdx] || 0) : 0;
+        const tAmt = isCore ? (tSplit[coreIdx] || 0) : 0;
+        const hAmt = isCore ? (hSplit[coreIdx] || 0) : 0;
+        const oAmt = isCore ? (oSplit[coreIdx] || 0) : 0;
+        const bkAmt = bkSplit[i] || 0;
+        
+        let scAmt = 0;
+        let sctAmt = 0;
+        let appAmt = 0;
+        
+        const lowerName = String(t.termName || '').toLowerCase();
+        if (lowerName === 'special class') scAmt = specialClassFeeTotal;
+        if (lowerName === 'special class transport') sctAmt = specialClassTransportFeeTotal;
+        if (lowerName === 'application fee') appAmt = applicationFee;
+
+        // If using data.terms, amount is already calculated from frontend, otherwise re-sum
+        const finalAmount = t.amount != null ? t.amount : Math.round((tAmt + trAmt + bkAmt + hAmt + oAmt + scAmt + sctAmt + appAmt) * 100) / 100;
+        
         studentTerms.push({
-          termNumber: i,
-          termName: `Term ${i}`,
-          amount: Math.round(termAmount * 100) / 100,
-          tuitionAmount: tSplit[idx],
-          transportAmount: trSplit[idx],
-          bookAmount: bkSplit[idx],
-          hostelAmount: hSplit[idx],
-          otherAmount: oSplit[idx],
-          applicationAmount: appSplit[idx],
-          specialClassAmount: scSplit[idx],
-          specialClassTransportAmount: sctSplit[idx],
+          termNumber: t.termNumber,
+          termName: t.termName,
+          amount: finalAmount,
+          dueDate: t.dueDate ? new Date(t.dueDate) : null,
+          tuitionAmount: tAmt,
+          transportAmount: trAmt,
+          bookAmount: bkAmt,
+          hostelAmount: hAmt,
+          otherAmount: oAmt,
+          applicationAmount: appAmt,
+          specialClassAmount: scAmt,
+          specialClassTransportAmount: sctAmt,
         });
+        
+        if (isCore) coreIdx++;
       }
     }
 

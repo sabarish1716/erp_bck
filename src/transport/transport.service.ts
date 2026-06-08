@@ -2751,120 +2751,15 @@ export class TransportService {
     });
 
     if (studentFee) {
-      const tuitionFee = studentFee.tuitionFee;
-      const bookFee = studentFee.bookFee;
-      const hostelFee = studentFee.hostelFee;
-      const otherFee = studentFee.otherFee;
-      const applicationFee = studentFee.applicationFee;
-      const specialClassFee = studentFee.specialClassFee;
-      const specialClassMonths = studentFee.specialClassMonths;
-
-      const customItems = await this.prisma.studentCustomFeeItem.findMany({
-        where: { studentFeeId: studentFee.id },
-      });
-      const customTotal = customItems.reduce((s, c) => s + c.amount, 0);
-      const billableSpecialClassTransportMonths =
-        configuredSpecialClassTransportMonths > 0 ? configuredSpecialClassTransportMonths : specialClassTransportMonths;
-
-      const totalFee =
-        tuitionFee +
-        totalTransportFee +
-        bookFee +
-        hostelFee +
-        otherFee +
-        applicationFee +
-        (specialClassFee * specialClassMonths) +
-        (specialClassTransportFee * billableSpecialClassTransportMonths) +
-        customTotal;
-
-      const discounts = await this.prisma.discount.findMany({
-        where: { studentFeeId: studentFee.id },
-      });
-
-      let discountAmount = 0;
-      for (const d of discounts) {
-        if (d.type === 'FLAT') {
-          discountAmount += d.value;
-        } else if (d.type === 'TEACHER_DISCOUNT') {
-          discountAmount += Math.round((tuitionFee * d.value) / 100 * 100) / 100;
-        } else if (d.type === 'SIBLING_DISCOUNT') {
-          discountAmount += Math.round((totalTransportFee * d.value) / 100 * 100) / 100;
-        } else if (d.type === 'RTE_COMMUNITY') {
-          const rteBasis = tuitionFee + totalTransportFee + bookFee + applicationFee;
-          discountAmount += Math.round((rteBasis * d.value) / 100 * 100) / 100;
-        } else if (d.applicableHeads && Array.isArray(d.applicableHeads)) {
-          let basis = 0;
-          const heads = d.applicableHeads as string[];
-          if (heads.includes("tuitionFee")) basis += tuitionFee;
-          if (heads.includes("transportFee")) basis += totalTransportFee;
-          if (heads.includes("bookFee")) basis += bookFee;
-          if (heads.includes("hostelFee")) basis += hostelFee;
-          if (heads.includes("otherFee")) basis += otherFee;
-          if (heads.includes("applicationFee")) basis += applicationFee;
-          if (heads.includes("specialClassFee")) basis += (specialClassFee * specialClassMonths);
-          if (heads.includes("specialClassTransportFee")) basis += (specialClassTransportFee * billableSpecialClassTransportMonths);
-          if (heads.includes("customItems")) basis += customTotal;
-
-          discountAmount += Math.round((basis * d.value) / 100 * 100) / 100;
-        } else {
-          discountAmount += Math.round((totalFee * d.value) / 100 * 100) / 100;
-        }
-      }
-      discountAmount = Math.min(discountAmount, totalFee);
-      const netFee = Math.max(totalFee - discountAmount, 0);
-
-      const numberOfTerms = studentFee.numberOfTerms;
-      const terms = await this.prisma.studentFeeTerm.findMany({
-        where: { studentFeeId: studentFee.id },
-        orderBy: { termNumber: 'asc' },
-      });
-
-      if (numberOfTerms > 0 && terms.length > 0) {
-        const splitEvenly = (val: number, n: number) => {
-          if (n <= 0) return [];
-          const pt = Math.round((val / n) * 100) / 100;
-          return Array.from({ length: n }, (_, i) => i === n - 1 ? Math.round((val - pt * (n - 1)) * 100) / 100 : pt);
-        };
-
-        const tSplit = splitEvenly(tuitionFee, numberOfTerms);
-        const trSplit = splitEvenly(totalTransportFee, numberOfTerms);
-        const bkSplit = splitEvenly(bookFee, numberOfTerms);
-        const hSplit = splitEvenly(hostelFee, numberOfTerms);
-        const oSplit = splitEvenly(otherFee, numberOfTerms);
-        const appSplit = splitEvenly(applicationFee, numberOfTerms);
-        const scSplit = splitEvenly(specialClassFee * specialClassMonths, numberOfTerms);
-        const sctSplit = splitEvenly(specialClassTransportFee * billableSpecialClassTransportMonths, numberOfTerms);
-
-        for (let i = 0; i < terms.length; i++) {
-          const termAmount = tSplit[i] + trSplit[i] + bkSplit[i] + hSplit[i] + oSplit[i] + appSplit[i] + scSplit[i] + sctSplit[i];
-          await this.prisma.studentFeeTerm.update({
-            where: { id: terms[i].id },
-            data: {
-              amount: Math.round(termAmount * 100) / 100,
-              tuitionAmount: tSplit[i],
-              transportAmount: trSplit[i],
-              bookAmount: bkSplit[i],
-              hostelAmount: hSplit[i],
-              otherAmount: oSplit[i],
-              applicationAmount: appSplit[i],
-              specialClassAmount: scSplit[i],
-              specialClassTransportAmount: sctSplit[i],
-            },
-          });
-        }
-      }
-
-      await this.prisma.studentFee.update({
-        where: { id: studentFee.id },
-        data: {
+      try {
+        await this.feesService.updateStudentFee(studentFee.id, {
           transportFee: totalTransportFee,
-          specialClassTransportFee,
+          specialClassTransportFee: specialClassTransportFee,
           specialClassTransportMonths: billableSpecialClassTransportMonths,
-          totalFee,
-          discount: discountAmount,
-          netFee,
-        },
-      });
+        } as any);
+      } catch (err) {
+        console.error("Failed to sync student timeline fees via updateStudentFee", err);
+      }
     }
   }
 
