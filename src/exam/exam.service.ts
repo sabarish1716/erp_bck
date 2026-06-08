@@ -754,9 +754,13 @@ export class ExamService {
         examDate: args.examDate,
         ...overlapFilter,
       },
+      include: { subject: true }
     });
     if (classClash) {
-      throw new BadRequestException('Class clash detected for this date and period/time slot');
+      const subjectName = classClash.subject?.name || 'an unknown subject';
+      const formattedDate = new Date(classClash.examDate).toLocaleDateString('en-GB').replace(/\//g, '-');
+      const sectionInfo = classClash.section ? ` - Section ${classClash.section}` : '';
+      throw new BadRequestException(`Class clash detected: ${classClash.standard}${sectionInfo} already has ${subjectName} scheduled on ${formattedDate} during ${classClash.periodStr ? `Period ${classClash.periodStr}` : 'the selected time slot'}.`);
     }
 
     if (args.teacherId) {
