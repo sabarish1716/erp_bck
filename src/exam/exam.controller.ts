@@ -189,4 +189,54 @@ export class ExamController {
   autoGeneratePeriods(@Param('examId') examId: string, @Body() dto: AutoGeneratePeriodsDto) {
     return this.examService.autoGeneratePeriods(examId, dto);
   }
+
+  // --- CRUD additions ---
+
+  @Patch(':id')
+  @Permissions(Permission.EXAM_UPDATE)
+  updateExam(@Param('id') id: string, @Body() dto: Partial<CreateExamDto>) {
+    return this.examService.updateExam(id, dto);
+  }
+
+  @Delete(':id')
+  @Permissions(Permission.EXAM_DELETE)
+  deleteExam(@Param('id') id: string) {
+    return this.examService.deleteExam(id);
+  }
+
+  @Patch('subjects/:id')
+  @Permissions(Permission.EXAM_SUBJECT_MANAGE)
+  updateSubject(@Param('id') id: string, @Body() dto: Partial<CreateExamSubjectDto>) {
+    return this.examService.updateSubject(id, dto);
+  }
+
+  @Delete('subjects/:id')
+  @Permissions(Permission.EXAM_SUBJECT_MANAGE)
+  deleteSubject(@Param('id') id: string) {
+    return this.examService.deleteSubject(id);
+  }
+
+  @Patch('halls/:id')
+  @Permissions(Permission.EXAM_HALL_MANAGE)
+  updateHall(@Param('id') id: string, @Body() dto: Partial<CreateExamHallDto>) {
+    return this.examService.updateHall(id, dto);
+  }
+
+  @Delete('halls/:id')
+  @Permissions(Permission.EXAM_HALL_MANAGE)
+  deleteHall(@Param('id') id: string) {
+    return this.examService.deleteHall(id);
+  }
+
+  @Delete('schedule/:id')
+  @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
+  deleteSchedule(@Param('id') id: string) {
+    return this.examService.deleteSchedule(id);
+  }
+
+  @Delete('timetable/:scheduleId/seat-allocation')
+  @Permissions(Permission.EXAM_SEAT_ALLOCATE)
+  clearSeatAllocations(@Param('scheduleId') scheduleId: string) {
+    return this.examService.clearSeatAllocations(scheduleId);
+  }
 }

@@ -486,11 +486,12 @@ export class ExamService {
         }
 
         if (exam.maxMarks >= 100) {
+          const revDate = subject.revisionDate ? new Date(subject.revisionDate) : new Date(currentDate);
           for (let i = 0; i < 8; i++) {
             const startHour = 9 + i;
-            const startsAt = new Date(currentDate);
+            const startsAt = new Date(revDate);
             startsAt.setHours(startHour, 0, 0, 0);
-            const endsAt = new Date(currentDate);
+            const endsAt = new Date(revDate);
             endsAt.setHours(startHour + 1, 0, 0, 0);
 
             await this.validateClashes({
@@ -498,7 +499,7 @@ export class ExamService {
               standard: subject.standard,
               section: subject.section ?? undefined,
               academicStreamId: subject.academicStreamId,
-              examDate: new Date(currentDate),
+              examDate: new Date(revDate),
               startsAt,
               endsAt,
               teacherId: subject.teacherId,
@@ -513,7 +514,7 @@ export class ExamService {
                 standard: subject.standard,
                 section: subject.section,
                 stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
-                examDate: new Date(currentDate),
+                examDate: new Date(revDate),
                 startsAt,
                 endsAt,
                 session: i < 4 ? 'FN' : 'AN',
@@ -540,14 +541,15 @@ export class ExamService {
           currentDate = nextDate;
         }
 
+        const exDate = subject.examDate ? new Date(subject.examDate) : new Date(currentDate);
         for (let i = 0; i < pattern.length; i++) {
           const type = pattern[i];
           if (type === 'F') continue;
 
           const startHour = 9 + i;
-          const startsAt = new Date(currentDate);
+          const startsAt = new Date(exDate);
           startsAt.setHours(startHour, 0, 0, 0);
-          const endsAt = new Date(currentDate);
+          const endsAt = new Date(exDate);
           endsAt.setHours(startHour + 1, 0, 0, 0);
 
           await this.validateClashes({
@@ -557,7 +559,7 @@ export class ExamService {
             academicStreamId: subject.academicStreamId,
 
 
-            examDate: new Date(currentDate),
+            examDate: new Date(exDate),
             startsAt,
             endsAt,
             teacherId: subject.teacherId,
@@ -573,7 +575,7 @@ export class ExamService {
               section: subject.section,
               stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
 
-              examDate: new Date(currentDate),
+              examDate: new Date(exDate),
               startsAt,
               endsAt,
               session: i < 4 ? 'FN' : 'AN',
@@ -1386,5 +1388,70 @@ export class ExamService {
       }
     }
     return assignments;
+  }
+
+  // --- CRUD additions for fully manageable examination module ---
+
+  async updateExam(id: string, dto: Partial<CreateExamDto>) {
+    return this.prisma.exam.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.maxMarks !== undefined && { maxMarks: dto.maxMarks }),
+        ...(dto.academicYear && { academicYear: dto.academicYear }),
+      },
+    });
+  }
+
+  async deleteExam(id: string) {
+    return this.prisma.exam.delete({ where: { id } });
+  }
+
+  async updateSubject(id: string, dto: Partial<CreateExamSubjectDto>) {
+    return this.prisma.examSubject.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.code && { code: dto.code }),
+        ...(dto.standard && { standard: dto.standard }),
+        ...(dto.section !== undefined && { section: dto.section }),
+        ...(dto.academicStreamId !== undefined && { academicStreamId: dto.academicStreamId }),
+        ...(dto.revisionDate !== undefined && { revisionDate: dto.revisionDate ? new Date(dto.revisionDate) : null }),
+        ...(dto.examDate !== undefined && { examDate: dto.examDate ? new Date(dto.examDate) : null }),
+        ...(dto.teacherId !== undefined && { teacherId: dto.teacherId }),
+      },
+    });
+  }
+
+  async deleteSubject(id: string) {
+    return this.prisma.examSubject.delete({ where: { id } });
+  }
+
+  async updateHall(id: string, dto: Partial<CreateExamHallDto>) {
+    return this.prisma.examHall.update({
+      where: { id },
+      data: {
+        ...(dto.name && { name: dto.name }),
+        ...(dto.building !== undefined && { building: dto.building }),
+        ...(dto.floor !== undefined && { floor: dto.floor }),
+        ...(dto.capacity !== undefined && { capacity: dto.capacity }),
+      },
+    });
+  }
+
+  async deleteHall(id: string) {
+    return this.prisma.examHall.delete({ where: { id } });
+  }
+
+  async deleteSchedule(id: string) {
+    return this.prisma.examSchedule.delete({ where: { id } });
+  }
+
+  async clearSeatAllocations(scheduleId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      await tx.examSeatAllocation.deleteMany({ where: { scheduleId } });
+      await tx.examScheduleHall.deleteMany({ where: { scheduleId } });
+    });
+    return { message: 'Seat allocations cleared successfully' };
   }
 }

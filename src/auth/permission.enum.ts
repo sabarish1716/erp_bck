@@ -103,6 +103,8 @@ export enum Permission {
   // ─── EXAM MANAGEMENT ──────────────────────
   EXAM_CREATE = 'exam:create',
   EXAM_READ = 'exam:read',
+  EXAM_UPDATE = 'exam:update',
+  EXAM_DELETE = 'exam:delete',
   EXAM_SUBJECT_MANAGE = 'exam:subject:manage',
   EXAM_HALL_MANAGE = 'exam:hall:manage',
   EXAM_TIMETABLE_MANAGE = 'exam:timetable:manage',
