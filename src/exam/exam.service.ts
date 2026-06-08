@@ -1399,6 +1399,8 @@ export class ExamService {
         ...(dto.name && { name: dto.name }),
         ...(dto.maxMarks !== undefined && { maxMarks: dto.maxMarks }),
         ...(dto.academicYear && { academicYear: dto.academicYear }),
+        ...(dto.startDate && { startDate: new Date(dto.startDate) }),
+        ...(dto.endDate && { endDate: new Date(dto.endDate) }),
       },
     });
   }

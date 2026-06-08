@@ -2755,7 +2755,7 @@ export class TransportService {
         await this.feesService.updateStudentFee(studentFee.id, {
           transportFee: totalTransportFee,
           specialClassTransportFee: specialClassTransportFee,
-          specialClassTransportMonths: billableSpecialClassTransportMonths,
+          specialClassTransportMonths: specialClassTransportMonths,
         } as any);
       } catch (err) {
         console.error("Failed to sync student timeline fees via updateStudentFee", err);

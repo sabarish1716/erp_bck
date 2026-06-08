@@ -1096,10 +1096,16 @@ export class FeesService {
     // Use provided terms or fetch existing terms to maintain structure
     let baseTerms = data.terms;
     if (!baseTerms || baseTerms.length === 0) {
-      baseTerms = await this.prisma.studentFeeTerm.findMany({
+      const dbTerms = await this.prisma.studentFeeTerm.findMany({
         where: { studentFeeId: id },
         orderBy: { termNumber: 'asc' },
       });
+      baseTerms = dbTerms.map((t) => ({
+        termNumber: t.termNumber,
+        termName: t.termName,
+        amount: t.amount,
+        dueDate: t.dueDate ? t.dueDate.toISOString() : undefined,
+      }));
     }
 
     let studentTerms: { termNumber: number; termName: string; amount: number; dueDate?: Date | null; tuitionAmount: number; transportAmount: number; bookAmount: number; hostelAmount: number; otherAmount: number, applicationAmount: number, specialClassAmount: number, specialClassTransportAmount: number }[] = [];
