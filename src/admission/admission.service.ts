@@ -707,7 +707,10 @@ export class AdmissionService {
     if (!docs) return docs;
     const fs = await import('fs/promises');
     const path = await import('path');
-    const folderName = `${admissionNo}_${standard}`;
+    
+    // Sanitize admission number to avoid creating nested folders because of slashes
+    const safeAdmissionNo = admissionNo.replace(/[\/\\]/g, '_');
+    const folderName = `${safeAdmissionNo}_${standard}`;
     const baseStoragePath = process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
     const targetDir = path.join(baseStoragePath, folderName);
 
@@ -723,16 +726,38 @@ export class AdmissionService {
 
     const moveFile = async (currentPath: string) => {
       if (!currentPath) return '';
-      // Move if it is in the general uploads folder and not already in our target folder
-      if (!currentPath.includes(`/${folderName}/`) && !currentPath.includes(`\\${folderName}\\`) && (currentPath.startsWith('uploads/') || currentPath.startsWith('uploads\\'))) {
+      
+      const fileName = path.basename(currentPath);
+      
+      // If already in target folder
+      if (currentPath.includes(`/${folderName}/`) || currentPath.includes(`\\${folderName}\\`)) {
+        return normalizePath(currentPath);
+      }
+
+      // Check if it's in the base storage paths
+      if (currentPath.startsWith('student_documents/') || currentPath.startsWith('student_documents\\') || 
+          currentPath.startsWith('uploads/') || currentPath.startsWith('uploads\\')) {
         try {
           await ensureDir();
-          const fileName = path.basename(currentPath);
+          
+          let physicalSrcPath = '';
+          if (currentPath.startsWith('student_documents')) {
+            physicalSrcPath = path.join(baseStoragePath, fileName);
+          } else {
+            physicalSrcPath = path.join(process.cwd(), 'uploads', fileName);
+          }
+
           const newPath = path.join(targetDir, fileName);
-          await fs.rename(currentPath, newPath);
+          
+          // Verify source exists before moving
+          await fs.access(physicalSrcPath);
+          await fs.rename(physicalSrcPath, newPath);
+          
           return `student_documents/${folderName}/${fileName}`;
-        } catch (err) {
-          console.error(`Failed to move file ${currentPath} to ${targetDir}:`, err);
+        } catch (err: any) {
+          if (err.code !== 'ENOENT') {
+            console.error(`Failed to move file ${currentPath} to ${targetDir}:`, err);
+          }
           return normalizePath(currentPath);
         }
       }
