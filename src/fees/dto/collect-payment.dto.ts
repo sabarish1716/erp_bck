@@ -39,22 +39,8 @@ export class CollectPaymentDto {
   @Type(() => TermPaymentDto)
   splitPayments?: TermPaymentDto[];
   @IsOptional()
-  @IsArray()
-  @IsIn(
-    [
-      'tuitionFee',
-      'transportFee',
-      'bookFee',
-      'hostelFee',
-      'otherFee',
-      'customItems',
-      'manualDiscount',
-    ],
-    {
-      each: true,
-    },
-  )
-  receiptComponents?: string[];
+  @IsObject()
+  receiptComponents?: Record<string, number>;
 
   @IsOptional()
   @IsObject()

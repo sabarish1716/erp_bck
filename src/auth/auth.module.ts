@@ -16,7 +16,19 @@ import { RolePermissionsService } from './role-permissions.service';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard, PermissionsGuard, PrismaService, RolePermissionsService],
-  exports: [AuthService, JwtAuthGuard, PermissionsGuard, RolePermissionsService],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    JwtAuthGuard,
+    PermissionsGuard,
+    PrismaService,
+    RolePermissionsService,
+  ],
+  exports: [
+    AuthService,
+    JwtAuthGuard,
+    PermissionsGuard,
+    RolePermissionsService,
+  ],
 })
 export class AuthModule {}

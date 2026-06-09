@@ -11,7 +11,10 @@ interface FeeResult {
   netFee: number;
 }
 
-export function calculateNetFee(structure: FeeStructure, discount: number = 0): FeeResult {
+export function calculateNetFee(
+  structure: FeeStructure,
+  discount: number = 0,
+): FeeResult {
   const total: number =
     structure.tuitionFee +
     (structure.transportFee || 0) +

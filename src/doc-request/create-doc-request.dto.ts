@@ -1,4 +1,10 @@
-import { IsEnum, IsOptional, IsString, IsBoolean, IsDateString } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsDateString,
+} from 'class-validator';
 
 export enum DocRequestType {
   TRANSFER_CERTIFICATE = 'TRANSFER_CERTIFICATE',
@@ -60,7 +66,11 @@ export class CreateDocRequestDto {
 }
 
 export class ReviewDocRequestDto {
-  @IsEnum({ APPROVED: 'APPROVED', REJECTED: 'REJECTED', IN_REVIEW: 'IN_REVIEW' })
+  @IsEnum({
+    APPROVED: 'APPROVED',
+    REJECTED: 'REJECTED',
+    IN_REVIEW: 'IN_REVIEW',
+  })
   status: 'APPROVED' | 'REJECTED' | 'IN_REVIEW';
 
   @IsOptional()

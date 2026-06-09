@@ -17,27 +17,54 @@ class TransportStopDto {
   @IsOptional() @IsString() id?: string;
   @IsNotEmpty() @IsString() stopName: string;
   @Type(() => Number)
-  @IsNotEmpty() @IsInt() stopOrder: number;
+  @IsNotEmpty()
+  @IsInt()
+  stopOrder: number;
   @Type(() => Number)
-  @IsOptional() @IsNumber() distanceKm?: number;
-  @IsOptional() @IsString() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'pickupTime must be in HH:mm format' }) pickupTime?: string;
-  @IsOptional() @IsString() @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, { message: 'dropTime must be in HH:mm format' }) dropTime?: string;
+  @IsOptional()
+  @IsNumber()
+  distanceKm?: number;
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'pickupTime must be in HH:mm format',
+  })
+  pickupTime?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/, {
+    message: 'dropTime must be in HH:mm format',
+  })
+  dropTime?: string;
   @Type(() => Number)
-  @IsOptional() @IsNumber() fee?: number;
+  @IsOptional()
+  @IsNumber()
+  fee?: number;
 }
 
 export class CreateTransportRouteDto {
   @IsNotEmpty() @IsString() routeName: string;
   @IsOptional() @IsString() routeNo?: string;
   @Type(() => Number)
-  @IsNotEmpty() @IsNumber() baseFee: number;
+  @IsNotEmpty()
+  @IsNumber()
+  baseFee: number;
   @Type(() => Number)
-  @IsOptional() @IsNumber() splClassFee?: number;
+  @IsOptional()
+  @IsNumber()
+  splClassFee?: number;
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsString() conductorName?: string;
-  @IsOptional() @IsString() @Matches(/^\d{10}$/, { message: 'conductorPhone must be exactly 10 digits' }) conductorPhone?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{10}$/, { message: 'conductorPhone must be exactly 10 digits' })
+  conductorPhone?: string;
   @Type(() => Number)
-  @IsOptional() @IsInt() @Min(1) @Max(4) numberOfTerms?: number;
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(4)
+  numberOfTerms?: number;
 
   @IsOptional()
   @IsArray()
@@ -53,7 +80,9 @@ export class AssignStudentTransportDto {
   @IsOptional() @IsString() busno?: string; // optional override if student is on a different bus than the route's main bus
   @IsOptional() @IsString() academicYear?: string;
   @Type(() => Boolean)
-  @IsOptional() @IsBoolean() isSplClass?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  isSplClass?: boolean;
 }
 
 // ════════════════════════════════════════════════
@@ -70,7 +99,7 @@ export class CreateDriverDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() bloodGroup?: string;
   @IsOptional() @IsString() status?: string;
-  @IsOptional()  @IsString()  route?: string; // For assigning a route to the driver
+  @IsOptional() @IsString() route?: string; // For assigning a route to the driver
 }
 
 export class UpdateDriverDto {
@@ -83,9 +112,8 @@ export class UpdateDriverDto {
   @IsOptional() @IsString() address?: string;
   @IsOptional() @IsString() bloodGroup?: string;
   @IsOptional() @IsString() status?: string;
-  @IsOptional()  @IsString()  route?: string; // For assigning a route to the driver
+  @IsOptional() @IsString() route?: string; // For assigning a route to the driver
 }
-
 
 // ════════════════════════════════════════════════
 // VEHICLE DRIVER MANAGEMENT
@@ -107,7 +135,9 @@ export class CreateBusDto {
   @IsOptional() @IsString() routeName?: string;
   @IsOptional() @IsString() routeId?: string;
   @Type(() => Number)
-  @IsOptional() @IsInt() capacity?: number;
+  @IsOptional()
+  @IsInt()
+  capacity?: number;
 }
 
 export class UpdateBusDto {
@@ -115,5 +145,7 @@ export class UpdateBusDto {
   @IsOptional() @IsString() routeName?: string;
   @IsOptional() @IsString() routeId?: string;
   @Type(() => Number)
-  @IsOptional() @IsInt() capacity?: number;
+  @IsOptional()
+  @IsInt()
+  capacity?: number;
 }

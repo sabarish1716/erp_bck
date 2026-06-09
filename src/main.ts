@@ -1,5 +1,3 @@
-
-
 import 'reflect-metadata';
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
@@ -18,16 +16,22 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '15mb' }));
   app.enableCors();
   app.setGlobalPrefix('erp/api');
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/erp/api/uploads/' });
-  app.useStaticAssets(process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents', { prefix: '/erp/api/student_documents/' });
-  app.useStaticAssets(process.env.STAFF_DOCS_PATH || 'D:/Staff_Documents', { prefix: '/erp/api/staff_documents/' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/erp/api/uploads/',
+  });
+  app.useStaticAssets(process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents', {
+    prefix: '/erp/api/student_documents/',
+  });
+  app.useStaticAssets(process.env.STAFF_DOCS_PATH || 'D:/Staff_Documents', {
+    prefix: '/erp/api/staff_documents/',
+  });
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true,        // remove extra fields
+      whitelist: true, // remove extra fields
       forbidNonWhitelisted: true,
-      transform: true,        // auto transform types
+      transform: true, // auto transform types
     }),
   );
-await app.listen(3000, '0.0.0.0');
+  await app.listen(3000, '0.0.0.0');
 }
 bootstrap();

@@ -39,8 +39,12 @@ describe('LocationService', () => {
   it('imports recent Supabase locations before reading live drivers', async () => {
     await service.getLiveDriverLocations();
 
-    expect(supabase.importRecentDriverLocationsToLocal).toHaveBeenCalledTimes(1);
-    expect(supabase.importRecentDriverLocationsToLocal).toHaveBeenCalledWith(expect.any(Date));
+    expect(supabase.importRecentDriverLocationsToLocal).toHaveBeenCalledTimes(
+      1,
+    );
+    expect(supabase.importRecentDriverLocationsToLocal).toHaveBeenCalledWith(
+      expect.any(Date),
+    );
   });
 
   it('uses a 15 minute default live window', async () => {

@@ -1,6 +1,14 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query,
-  UploadedFile, UseInterceptors,
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -9,17 +17,31 @@ import { PosService } from './pos.service';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
-import { CreateStoreItemDto, UpdateStoreItemDto, CreateItemCategoryDto } from './dto/store-item.dto';
-import { CreateSupplierDto, UpdateSupplierDto, CreatePurchaseDto } from './dto/purchase.dto';
+import {
+  CreateStoreItemDto,
+  UpdateStoreItemDto,
+  CreateItemCategoryDto,
+} from './dto/store-item.dto';
+import {
+  CreateSupplierDto,
+  UpdateSupplierDto,
+  CreatePurchaseDto,
+} from './dto/purchase.dto';
 import { CreateStockTransferDto } from './dto/stock-transfer.dto';
 import { CreateSaleDto } from './dto/sale.dto';
-import { GiveTeacherFreeItemDto, ReturnTeacherFreeItemDto } from './dto/teacher-free-item.dto';
+import {
+  GiveTeacherFreeItemDto,
+  ReturnTeacherFreeItemDto,
+} from './dto/teacher-free-item.dto';
 import { CreatePosTransactionDto } from './dto/pos-transaction.dto';
 
 const imageStorage = diskStorage({
   destination: './uploads/pos',
   filename: (_req, file, cb) =>
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname)}`),
+    cb(
+      null,
+      `${Date.now()}-${Math.round(Math.random() * 1e9)}${extname(file.originalname)}`,
+    ),
 });
 
 @Controller('pos')
@@ -53,7 +75,7 @@ export class PosController {
   }
 
   // ─── CATEGORIES ────────────────────────────────
-  
+
   @Get('categories')
   @Permissions(Permission.POS_READ)
   getAllCategories() {
@@ -82,7 +104,10 @@ export class PosController {
 
   @Get('items')
   @Permissions(Permission.POS_READ)
-  getAllStoreItems(@Query('category') category?: string, @Query('storeId') storeId?: string) {
+  getAllStoreItems(
+    @Query('category') category?: string,
+    @Query('storeId') storeId?: string,
+  ) {
     return this.posService.getAllStoreItems(category, storeId);
   }
 
@@ -101,7 +126,10 @@ export class PosController {
   @Post('items/:id/image')
   @Permissions(Permission.POS_MANAGE)
   @UseInterceptors(FileInterceptor('image', { storage: imageStorage }))
-  async uploadItemImage(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+  async uploadItemImage(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
     if (!file) return { error: 'No file uploaded' };
     return this.posService.updateStoreItem(id, { image: file.path });
   }
@@ -155,7 +183,10 @@ export class PosController {
   @Post('purchases/:id/receipt')
   @Permissions(Permission.POS_PURCHASE)
   @UseInterceptors(FileInterceptor('receipt', { storage: imageStorage }))
-  async uploadPurchaseReceipt(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+  async uploadPurchaseReceipt(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
     if (!file) return { error: 'No file uploaded' };
     return this.posService.updatePurchaseReceipt(id, file.path);
   }

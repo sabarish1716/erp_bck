@@ -1,5 +1,13 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsOptional, IsString, MaxLength, Matches, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Matches,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 
 const ASSET_VALUE_PATTERN =
   /^(data:image\/(?:png|jpeg|jpg|webp|svg\+xml);base64,[A-Za-z0-9+/=]+|https?:\/\/[^\s]+|[A-Za-z0-9_./\\-]+)$/i;

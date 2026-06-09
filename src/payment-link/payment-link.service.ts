@@ -33,7 +33,10 @@ export class PaymentLinkService {
     const status = payment.status || 'SUCCESS';
     if (status === 'CANCELLED') return 0;
     if (status === 'REFUNDED') {
-      const netAmount = Math.max(baseAmount - Number(payment.refundAmount ?? payment.amount), 0);
+      const netAmount = Math.max(
+        baseAmount - Number(payment.refundAmount ?? payment.amount),
+        0,
+      );
       if (baseAmount <= 0) return 0;
       const discountShare = manualDiscount * (netAmount / baseAmount);
       return netAmount + discountShare;
@@ -74,7 +77,9 @@ export class PaymentLinkService {
   private isPhonePeSuccess(phonePeStatus: any): boolean {
     const code = String(phonePeStatus?.code || '').toUpperCase();
     const state = String(phonePeStatus?.data?.state || '').toUpperCase();
-    const responseCode = String(phonePeStatus?.data?.responseCode || '').toUpperCase();
+    const responseCode = String(
+      phonePeStatus?.data?.responseCode || '',
+    ).toUpperCase();
 
     return (
       code === 'PAYMENT_SUCCESS' ||
@@ -98,13 +103,18 @@ export class PaymentLinkService {
       where: { id: paymentLinkId },
       include: {
         studentFee: {
-          include: { payments: true, terms: { orderBy: { termNumber: 'asc' } } },
+          include: {
+            payments: true,
+            terms: { orderBy: { termNumber: 'asc' } },
+          },
         },
       },
     });
 
     if (!paymentLink) {
-      this.logger.warn(`PhonePe reconcile: PaymentLink not found (${paymentLinkId})`);
+      this.logger.warn(
+        `PhonePe reconcile: PaymentLink not found (${paymentLinkId})`,
+      );
       return;
     }
 
@@ -130,8 +140,7 @@ export class PaymentLinkService {
           where: { id: paymentLink.id },
           data: {
             status: 'FAILED',
-            notificationError:
-              `Payment received but amount exceeds current pending balance (pending: ₹${pending.toFixed(2)}). Please reconcile manually.`,
+            notificationError: `Payment received but amount exceeds current pending balance (pending: ₹${pending.toFixed(2)}). Please reconcile manually.`,
           },
         });
         this.logger.warn(
@@ -189,8 +198,13 @@ export class PaymentLinkService {
     if (paymentLink.status !== 'PENDING') return;
 
     if (this.isPhonePeSuccess(phonePeStatus)) {
-      const phonePeTxnId = String(phonePeStatus?.data?.transactionId || '').trim();
-      await this.recordSuccessfulPaymentForLink(paymentLink.id, phonePeTxnId || undefined);
+      const phonePeTxnId = String(
+        phonePeStatus?.data?.transactionId || '',
+      ).trim();
+      await this.recordSuccessfulPaymentForLink(
+        paymentLink.id,
+        phonePeTxnId || undefined,
+      );
       return;
     }
 
@@ -198,7 +212,9 @@ export class PaymentLinkService {
       return;
     }
 
-    const statusCode = String(phonePeStatus?.code || phonePeStatus?.data?.state || 'FAILED');
+    const statusCode = String(
+      phonePeStatus?.code || phonePeStatus?.data?.state || 'FAILED',
+    );
     await this.prisma.paymentLink.update({
       where: { id: paymentLink.id },
       data: {
@@ -235,7 +251,8 @@ export class PaymentLinkService {
       },
     });
 
-    if (!studentFee) throw new NotFoundException('Student fee record not found');
+    if (!studentFee)
+      throw new NotFoundException('Student fee record not found');
 
     // 2. Validate amount against pending balance
     const totalPaid = studentFee.payments.reduce(
@@ -271,25 +288,25 @@ export class PaymentLinkService {
     // 5. Persist the link record
     const record = await this.prisma.paymentLink.create({
       data: {
-        studentFeeId:          dto.studentFeeId,
-        amount:                dto.amount,
-        phoneNumber:           dto.phoneNumber,
-        channel:               dto.channel,
+        studentFeeId: dto.studentFeeId,
+        amount: dto.amount,
+        phoneNumber: dto.phoneNumber,
+        channel: dto.channel,
         merchantTransactionId,
-        phonePeUrl:            paymentUrl,
-        status:                'PENDING',
+        phonePeUrl: paymentUrl,
+        status: 'PENDING',
       },
     });
 
     // 6. Send notification (non-blocking — failure only warns, link still usable)
     const studentName = studentFee.student.name;
-    const schoolName  = process.env.SCHOOL_NAME || 'School';
+    const schoolName = process.env.SCHOOL_NAME || 'School';
     const message =
       `Dear Parent, please pay ₹${dto.amount} towards ${studentName}'s school fees.\n` +
       `Click here to pay: ${paymentUrl}\n` +
       `This link expires in 20 minutes. - ${schoolName}`;
 
-    let notificationSent  = false;
+    let notificationSent = false;
     let notificationError: string | null = null;
 
     try {
@@ -301,7 +318,9 @@ export class PaymentLinkService {
       notificationSent = true;
     } catch (err) {
       notificationError = (err as Error).message;
-      this.logger.warn(`${dto.channel} notification failed for link ${record.id}: ${notificationError}`);
+      this.logger.warn(
+        `${dto.channel} notification failed for link ${record.id}: ${notificationError}`,
+      );
     }
 
     const updated = await this.prisma.paymentLink.update({
@@ -331,7 +350,9 @@ export class PaymentLinkService {
     for (const link of links) {
       if (link.status !== 'PENDING') continue;
       try {
-        const status = await this.phonePe.checkPaymentStatus(link.merchantTransactionId);
+        const status = await this.phonePe.checkPaymentStatus(
+          link.merchantTransactionId,
+        );
         await this.reconcilePaymentLinkByStatus(link.id, status);
       } catch (err) {
         this.logger.warn(
@@ -353,10 +374,15 @@ export class PaymentLinkService {
    * Body is:  { "response": "<base64_encoded_json>" }
    * X-VERIFY: sha256(base64Response + saltKey)###saltIndex
    */
-  async handlePhonePeWebhook(base64Response: string, xVerify: string): Promise<void> {
+  async handlePhonePeWebhook(
+    base64Response: string,
+    xVerify: string,
+  ): Promise<void> {
     // Verify signature
     if (!this.phonePe.verifyWebhookSignature(base64Response, xVerify)) {
-      this.logger.warn('PhonePe webhook: signature verification failed — ignoring');
+      this.logger.warn(
+        'PhonePe webhook: signature verification failed — ignoring',
+      );
       return;
     }
 
@@ -371,7 +397,7 @@ export class PaymentLinkService {
     }
 
     const merchantTransactionId: string = event?.data?.merchantTransactionId;
-    const phonePeTransactionId:  string = event?.data?.transactionId || '';
+    const phonePeTransactionId: string = event?.data?.transactionId || '';
 
     if (!merchantTransactionId) {
       this.logger.warn('PhonePe webhook: missing merchantTransactionId');
@@ -383,28 +409,39 @@ export class PaymentLinkService {
       where: { merchantTransactionId },
       include: {
         studentFee: {
-          include: { payments: true, terms: { orderBy: { termNumber: 'asc' } } },
+          include: {
+            payments: true,
+            terms: { orderBy: { termNumber: 'asc' } },
+          },
         },
       },
     });
 
     if (!paymentLink) {
-      this.logger.warn(`PhonePe webhook: no PaymentLink found for ${merchantTransactionId}`);
+      this.logger.warn(
+        `PhonePe webhook: no PaymentLink found for ${merchantTransactionId}`,
+      );
       return;
     }
 
     if (paymentLink.status !== 'PENDING') {
-      this.logger.log(`PhonePe webhook: ${merchantTransactionId} already processed (${paymentLink.status})`);
+      this.logger.log(
+        `PhonePe webhook: ${merchantTransactionId} already processed (${paymentLink.status})`,
+      );
       return;
     }
 
     try {
       await this.reconcilePaymentLinkByStatus(paymentLink.id, event);
       if (this.isPhonePeSuccess(event)) {
-        this.logger.log(`PhonePe webhook: success reconciled for ${merchantTransactionId} (${phonePeTransactionId})`);
+        this.logger.log(
+          `PhonePe webhook: success reconciled for ${merchantTransactionId} (${phonePeTransactionId})`,
+        );
       }
     } catch (err) {
-      this.logger.error(`PhonePe webhook: error reconciling payment — ${(err as Error).message}`);
+      this.logger.error(
+        `PhonePe webhook: error reconciling payment — ${(err as Error).message}`,
+      );
     }
   }
 
@@ -415,14 +452,20 @@ export class PaymentLinkService {
       where: { merchantTransactionId },
     });
 
-    if (!paymentLinkBefore) throw new NotFoundException('Payment link not found');
+    if (!paymentLinkBefore)
+      throw new NotFoundException('Payment link not found');
 
     if (paymentLinkBefore.status !== 'PENDING') {
       return { paymentLink: paymentLinkBefore, phonePeStatus: null };
     }
 
-    const phonePeStatus = await this.phonePe.checkPaymentStatus(merchantTransactionId);
-    await this.reconcilePaymentLinkByStatus(paymentLinkBefore.id, phonePeStatus);
+    const phonePeStatus = await this.phonePe.checkPaymentStatus(
+      merchantTransactionId,
+    );
+    await this.reconcilePaymentLinkByStatus(
+      paymentLinkBefore.id,
+      phonePeStatus,
+    );
 
     const paymentLinkAfter = await this.prisma.paymentLink.findUnique({
       where: { merchantTransactionId },

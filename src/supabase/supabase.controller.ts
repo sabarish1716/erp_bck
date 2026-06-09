@@ -23,8 +23,12 @@ export class SupabaseController {
     @Query('cursor') cursor?: string,
   ) {
     return this.supabaseService.listSyncJobs({
-      status: status && Object.values(SyncJobStatus).includes(status) ? status : undefined,
-      type: type && Object.values(SyncJobType).includes(type) ? type : undefined,
+      status:
+        status && Object.values(SyncJobStatus).includes(status)
+          ? status
+          : undefined,
+      type:
+        type && Object.values(SyncJobType).includes(type) ? type : undefined,
       limit: Number(limit),
       cursor,
     });

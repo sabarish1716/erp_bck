@@ -1,5 +1,12 @@
 import { StaffDocumentType } from '@prisma/client';
-import { IsBoolean, IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 
 export class CreateStaffDocumentDto {
   @IsOptional()
@@ -30,6 +37,6 @@ export class CreateStaffDocumentDto {
   expiryDate?: string;
 
   @IsOptional()
-//   @IsBoolean()
+  //   @IsBoolean()
   isVerified?: boolean;
 }

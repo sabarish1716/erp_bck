@@ -87,11 +87,16 @@ export class SettingsService {
 
     return {
       ...merged,
-      documentAssets: this.normalizeDocumentAssets((merged as Record<string, unknown>).documentAssets),
+      documentAssets: this.normalizeDocumentAssets(
+        (merged as Record<string, unknown>).documentAssets,
+      ),
     };
   }
 
-  async updateAdminSettings(data: UpdateAdminSettingsDto, updatedByEmail?: string) {
+  async updateAdminSettings(
+    data: UpdateAdminSettingsDto,
+    updatedByEmail?: string,
+  ) {
     const existing = await this.prisma.appSetting.findUnique({
       where: { key: SETTINGS_KEY },
     });
@@ -102,7 +107,9 @@ export class SettingsService {
       ...data,
     };
 
-    const safeDocumentAssets = this.normalizeDocumentAssets((merged as Record<string, unknown>).documentAssets);
+    const safeDocumentAssets = this.normalizeDocumentAssets(
+      (merged as Record<string, unknown>).documentAssets,
+    );
 
     const finalValue = {
       ...merged,
@@ -130,9 +137,16 @@ export class SettingsService {
     };
   }
 
-  private normalizeDocumentAssets(value: unknown): Record<DocumentAssetKey, string> {
-    const input = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
-    const normalized: Record<DocumentAssetKey, string> = { ...DEFAULT_DOCUMENT_ASSETS };
+  private normalizeDocumentAssets(
+    value: unknown,
+  ): Record<DocumentAssetKey, string> {
+    const input =
+      value && typeof value === 'object'
+        ? (value as Record<string, unknown>)
+        : {};
+    const normalized: Record<DocumentAssetKey, string> = {
+      ...DEFAULT_DOCUMENT_ASSETS,
+    };
 
     for (const key of DOCUMENT_ASSET_KEYS) {
       const raw = input[key];
@@ -146,11 +160,15 @@ export class SettingsService {
     return this.rolePermissionsService.getRolePermissionsConfig();
   }
 
-  async updateRolePermissionsConfig(rolePermissions: Record<string, string[]>, updatedByEmail?: string) {
-    const savedRolePermissions = await this.rolePermissionsService.updateRolePermissionsMap(
-      rolePermissions,
-      updatedByEmail,
-    );
+  async updateRolePermissionsConfig(
+    rolePermissions: Record<string, string[]>,
+    updatedByEmail?: string,
+  ) {
+    const savedRolePermissions =
+      await this.rolePermissionsService.updateRolePermissionsMap(
+        rolePermissions,
+        updatedByEmail,
+      );
 
     return {
       rolePermissions: savedRolePermissions,
@@ -213,11 +231,18 @@ export class SettingsService {
     };
   }
 
-  async updateFeeReceiptFields(fields: Record<string, any>, updatedByEmail?: string) {
+  async updateFeeReceiptFields(
+    fields: Record<string, any>,
+    updatedByEmail?: string,
+  ) {
     const saved = await this.prisma.appSetting.upsert({
       where: { key: FEE_RECEIPT_FIELDS_KEY },
       update: { value: fields, updatedByEmail: updatedByEmail ?? null },
-      create: { key: FEE_RECEIPT_FIELDS_KEY, value: fields, updatedByEmail: updatedByEmail ?? null },
+      create: {
+        key: FEE_RECEIPT_FIELDS_KEY,
+        value: fields,
+        updatedByEmail: updatedByEmail ?? null,
+      },
     });
     return saved.value;
   }

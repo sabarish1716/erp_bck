@@ -13,22 +13,41 @@ import {
 import { Type } from 'class-transformer';
 import { Gender, Community } from '@prisma/client';
 
-
 class FamilyDto {
   @IsOptional() @IsString() fatherName?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) fatherPhone?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{10})?$/, {
+    message: 'Phone must be exactly 10 digits or empty',
+  })
+  fatherPhone?: string;
   @IsOptional() @IsString() fatherWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) fatherAadhar?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{12})?$/, {
+    message: 'Aadhar must be exactly 12 digits or empty',
+  })
+  fatherAadhar?: string;
 
   @IsOptional() @IsString() fatherOccupation?: string;
-  
+
   @IsOptional() @IsString() motherName?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) motherPhone?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{10})?$/, {
+    message: 'Phone must be exactly 10 digits or empty',
+  })
+  motherPhone?: string;
   @IsOptional() @IsString() motherWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) motherAadhar?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{12})?$/, {
+    message: 'Aadhar must be exactly 12 digits or empty',
+  })
+  motherAadhar?: string;
 
   @IsOptional() @IsString() motherOccupation?: string;
-  
+
   @IsOptional() @IsString() otherWhatsapp?: string;
   @IsOptional() familyIncome?: string;
   @IsOptional() @IsString() siblings?: string;
@@ -37,9 +56,19 @@ class FamilyDto {
   // Single parent & guardian
   @IsOptional() @IsBoolean() isSingleParent?: boolean;
   @IsOptional() @IsString() guardianName?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{10})?$/, { message: 'Phone must be exactly 10 digits or empty' }) guardianPhone?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{10})?$/, {
+    message: 'Phone must be exactly 10 digits or empty',
+  })
+  guardianPhone?: string;
   @IsOptional() @IsString() guardianWhatsapp?: string;
-  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) guardianAadhar?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{12})?$/, {
+    message: 'Aadhar must be exactly 12 digits or empty',
+  })
+  guardianAadhar?: string;
 
   @IsOptional() @IsString() guardianOccupation?: string;
   @IsOptional() @IsString() guardianRelation?: string;
@@ -57,7 +86,7 @@ class FamilyDto {
   @IsOptional() @IsString() sibling2OtherSchoolName?: string;
 
   @IsOptional() @IsString() siblingSchool?: string;
-@IsOptional() @IsString() otherSchoolName?: string;
+  @IsOptional() @IsString() otherSchoolName?: string;
 }
 
 class AddressDto {
@@ -77,7 +106,7 @@ class AddressDto {
 }
 class DocumentsDto {
   @IsOptional() @IsBoolean() photo?: boolean;
-  @IsOptional()  photoPath?: string;
+  @IsOptional() photoPath?: string;
 
   @IsOptional() @IsBoolean() birthCert?: boolean;
   @IsOptional() @IsString() birthCertPath?: string;
@@ -104,15 +133,15 @@ class DocumentsDto {
 class SubjectMarkDto {
   @IsNotEmpty() @IsString() subjectName?: string;
   @IsNotEmpty() @IsNumber() maxMarks?: number;
-  @IsNotEmpty() @IsNumber() obtainedMarks? : number;
+  @IsNotEmpty() @IsNumber() obtainedMarks?: number;
   @IsOptional() @IsNumber() percentage?: number;
 }
 
 class AcademicDto {
-  @IsOptional() @IsString() examName?: string;       // SSLC / MATRIC / CBSE
-  @IsOptional() @IsString() boardName?: string;       // "State Board" (default) or custom board name
+  @IsOptional() @IsString() examName?: string; // SSLC / MATRIC / CBSE
+  @IsOptional() @IsString() boardName?: string; // "State Board" (default) or custom board name
   @IsOptional() @IsString() registerNo?: string;
-  @IsOptional() @IsString() monthYear?: string;       // e.g. "March 2024"
+  @IsOptional() @IsString() monthYear?: string; // e.g. "March 2024"
   // TOTAL row fields from the qualifying examination table
   @IsOptional() @IsNumber() totalMaxMarks?: number;
   @IsOptional() @IsNumber() totalObtainedMarks?: number;
@@ -151,12 +180,17 @@ export class CreateAdmissionDto {
   @IsOptional() @IsString() religion?: string;
   @IsOptional() @IsString() caste?: string;
   @IsOptional() @IsString() motherTongue?: string;
-  
+
   // Update: Allow empty values for optional phone/aadhar fields
-  @IsOptional() @IsString() @Matches(/^(\d{12})?$/, { message: 'Aadhar must be exactly 12 digits or empty' }) aadharNo?: string;
+  @IsOptional()
+  @IsString()
+  @Matches(/^(\d{12})?$/, {
+    message: 'Aadhar must be exactly 12 digits or empty',
+  })
+  aadharNo?: string;
 
   @IsOptional() @IsString() bloodGroup?: string;
-  
+
   @IsOptional() @IsString() identification1?: string;
   @IsOptional() @IsString() identification2?: string;
   @IsOptional() @IsString() previousSchool?: string;

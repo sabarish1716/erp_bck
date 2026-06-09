@@ -1,12 +1,27 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { CreateStoreDto, UpdateStoreDto } from './dto/store.dto';
-import { CreateStoreItemDto, UpdateStoreItemDto, CreateItemCategoryDto } from './dto/store-item.dto';
-import { CreateSupplierDto, UpdateSupplierDto, CreatePurchaseDto } from './dto/purchase.dto';
+import {
+  CreateStoreItemDto,
+  UpdateStoreItemDto,
+  CreateItemCategoryDto,
+} from './dto/store-item.dto';
+import {
+  CreateSupplierDto,
+  UpdateSupplierDto,
+  CreatePurchaseDto,
+} from './dto/purchase.dto';
 import { CreateStockTransferDto } from './dto/stock-transfer.dto';
 import { CreateSaleDto } from './dto/sale.dto';
-import { GiveTeacherFreeItemDto, ReturnTeacherFreeItemDto } from './dto/teacher-free-item.dto';
+import {
+  GiveTeacherFreeItemDto,
+  ReturnTeacherFreeItemDto,
+} from './dto/teacher-free-item.dto';
 import { CreatePosTransactionDto } from './dto/pos-transaction.dto';
 
 @Injectable()
@@ -19,8 +34,11 @@ export class PosService {
 
   async createStore(data: CreateStoreDto) {
     if (data.isMaster) {
-      const existing = await this.prisma.store.findFirst({ where: { isMaster: true } });
-      if (existing) throw new BadRequestException('A master store already exists');
+      const existing = await this.prisma.store.findFirst({
+        where: { isMaster: true },
+      });
+      if (existing)
+        throw new BadRequestException('A master store already exists');
     }
     return this.prisma.store.create({ data });
   }
@@ -96,12 +114,15 @@ export class PosService {
     if (storeId) {
       // Find all stock entries for this store, include item details
       const stockItems = await this.prisma.storeStock.findMany({
-        where: { storeId, item: { isActive: true, categoryId: category ? category : undefined } },
-        include: { item: { include: { category: true } } }
+        where: {
+          storeId,
+          item: { isActive: true, categoryId: category ? category : undefined },
+        },
+        include: { item: { include: { category: true } } },
       });
       // Optionally filter by category
       return category
-        ? stockItems.filter(s => s.item.categoryId === category)
+        ? stockItems.filter((s) => s.item.categoryId === category)
         : stockItems;
     } else {
       // Fallback: all items, optionally by category, only isActive
@@ -110,7 +131,7 @@ export class PosService {
       return this.prisma.storeItem.findMany({
         where,
         orderBy: { name: 'asc' },
-        include: { category: true, stockItems: { include: { store: true } } }
+        include: { category: true, stockItems: { include: { store: true } } },
       });
     }
   }
@@ -125,7 +146,10 @@ export class PosService {
   }
 
   async deleteStoreItem(id: string) {
-    return this.prisma.storeItem.update({ where: { id }, data: { isActive: false } });
+    return this.prisma.storeItem.update({
+      where: { id },
+      data: { isActive: false },
+    });
   }
 
   // ═══════════════════════════════════════════════
@@ -158,12 +182,17 @@ export class PosService {
   // ═══════════════════════════════════════════════
 
   async createPurchase(data: CreatePurchaseDto) {
-    if (!data.items?.length) throw new BadRequestException('At least one item is required');
+    if (!data.items?.length)
+      throw new BadRequestException('At least one item is required');
 
-    const store = await this.prisma.store.findUnique({ where: { id: data.storeId } });
+    const store = await this.prisma.store.findUnique({
+      where: { id: data.storeId },
+    });
     if (!store) throw new NotFoundException('Store not found');
 
-    const supplier = await this.prisma.supplier.findUnique({ where: { id: data.supplierId } });
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id: data.supplierId },
+    });
     if (!supplier) throw new NotFoundException('Supplier not found');
 
     return this.prisma.$transaction(async (tx) => {
@@ -171,8 +200,11 @@ export class PosService {
       const itemsData: any[] = [];
 
       for (const item of data.items) {
-        const storeItem = await tx.storeItem.findUnique({ where: { id: item.itemId } });
-        if (!storeItem) throw new NotFoundException(`Item ${item.itemId} not found`);
+        const storeItem = await tx.storeItem.findUnique({
+          where: { id: item.itemId },
+        });
+        if (!storeItem)
+          throw new NotFoundException(`Item ${item.itemId} not found`);
 
         const lineTotal = item.quantity * item.unitPrice;
         totalAmount += lineTotal;
@@ -185,9 +217,15 @@ export class PosService {
 
         // Update stock
         await tx.storeStock.upsert({
-          where: { storeId_itemId: { storeId: data.storeId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.storeId, itemId: item.itemId },
+          },
           update: { quantity: { increment: item.quantity } },
-          create: { storeId: data.storeId, itemId: item.itemId, quantity: item.quantity },
+          create: {
+            storeId: data.storeId,
+            itemId: item.itemId,
+            quantity: item.quantity,
+          },
         });
       }
 
@@ -201,7 +239,8 @@ export class PosService {
         nextInvoice = 'PO-0001';
         if (lastPurchase?.invoiceNo) {
           const match = lastPurchase.invoiceNo.match(/PO-(\d+)/);
-          if (match) nextInvoice = `PO-${String(parseInt(match[1], 10) + 1).padStart(4, '0')}`;
+          if (match)
+            nextInvoice = `PO-${String(parseInt(match[1], 10) + 1).padStart(4, '0')}`;
         }
       }
 
@@ -210,7 +249,9 @@ export class PosService {
           supplierId: data.supplierId,
           storeId: data.storeId,
           invoiceNo: nextInvoice,
-          invoiceDate: data.invoiceDate ? new Date(data.invoiceDate) : new Date(),
+          invoiceDate: data.invoiceDate
+            ? new Date(data.invoiceDate)
+            : new Date(),
           receiptImage: data.receiptImage,
           totalAmount,
           remarks: data.remarks,
@@ -263,8 +304,10 @@ export class PosService {
   // ═══════════════════════════════════════════════
 
   async createStockTransfer(data: CreateStockTransferDto) {
-    if (!data.items?.length) throw new BadRequestException('At least one item is required');
-    if (data.fromStoreId === data.toStoreId) throw new BadRequestException('Cannot transfer to the same store');
+    if (!data.items?.length)
+      throw new BadRequestException('At least one item is required');
+    if (data.fromStoreId === data.toStoreId)
+      throw new BadRequestException('Cannot transfer to the same store');
 
     return this.prisma.$transaction(async (tx) => {
       const itemsData: any[] = [];
@@ -272,10 +315,14 @@ export class PosService {
       for (const item of data.items) {
         // Check source stock
         const sourceStock = await tx.storeStock.findUnique({
-          where: { storeId_itemId: { storeId: data.fromStoreId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.fromStoreId, itemId: item.itemId },
+          },
         });
         if (!sourceStock || sourceStock.quantity < item.quantity) {
-          const storeItem = await tx.storeItem.findUnique({ where: { id: item.itemId } });
+          const storeItem = await tx.storeItem.findUnique({
+            where: { id: item.itemId },
+          });
           throw new BadRequestException(
             `Insufficient stock for "${storeItem?.name || item.itemId}" (available: ${sourceStock?.quantity || 0}, requested: ${item.quantity})`,
           );
@@ -283,15 +330,23 @@ export class PosService {
 
         // Deduct from source
         await tx.storeStock.update({
-          where: { storeId_itemId: { storeId: data.fromStoreId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.fromStoreId, itemId: item.itemId },
+          },
           data: { quantity: { decrement: item.quantity } },
         });
 
         // Add to destination
         await tx.storeStock.upsert({
-          where: { storeId_itemId: { storeId: data.toStoreId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.toStoreId, itemId: item.itemId },
+          },
           update: { quantity: { increment: item.quantity } },
-          create: { storeId: data.toStoreId, itemId: item.itemId, quantity: item.quantity },
+          create: {
+            storeId: data.toStoreId,
+            itemId: item.itemId,
+            quantity: item.quantity,
+          },
         });
 
         itemsData.push({ itemId: item.itemId, quantity: item.quantity });
@@ -315,7 +370,11 @@ export class PosService {
 
   async getAllStockTransfers() {
     return this.prisma.stockTransfer.findMany({
-      include: { fromStore: true, toStore: true, items: { include: { item: true } } },
+      include: {
+        fromStore: true,
+        toStore: true,
+        items: { include: { item: true } },
+      },
       orderBy: { transferDate: 'desc' },
     });
   }
@@ -325,15 +384,19 @@ export class PosService {
   // ═══════════════════════════════════════════════
 
   async createSale(data: CreateSaleDto) {
-    if (!data.items?.length) throw new BadRequestException('At least one item is required');
+    if (!data.items?.length)
+      throw new BadRequestException('At least one item is required');
 
     return this.prisma.$transaction(async (tx) => {
       let totalAmount = 0;
       const itemsData: any[] = [];
 
       for (const item of data.items) {
-        const storeItem = await tx.storeItem.findUnique({ where: { id: item.itemId } });
-        if (!storeItem) throw new NotFoundException(`Item ${item.itemId} not found`);
+        const storeItem = await tx.storeItem.findUnique({
+          where: { id: item.itemId },
+        });
+        if (!storeItem)
+          throw new NotFoundException(`Item ${item.itemId} not found`);
 
         const unitPrice = item.unitPrice ?? storeItem.sellingPrice;
         const lineTotal = item.quantity * unitPrice;
@@ -347,7 +410,9 @@ export class PosService {
 
         // Deduct from store stock
         const stock = await tx.storeStock.findUnique({
-          where: { storeId_itemId: { storeId: data.storeId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.storeId, itemId: item.itemId },
+          },
         });
         if (!stock || stock.quantity < item.quantity) {
           throw new BadRequestException(
@@ -355,7 +420,9 @@ export class PosService {
           );
         }
         await tx.storeStock.update({
-          where: { storeId_itemId: { storeId: data.storeId, itemId: item.itemId } },
+          where: {
+            storeId_itemId: { storeId: data.storeId, itemId: item.itemId },
+          },
           data: { quantity: { decrement: item.quantity } },
         });
       }
@@ -372,7 +439,8 @@ export class PosService {
       let nextInvoice = 'INV-0001';
       if (lastSale?.invoiceNo) {
         const match = lastSale.invoiceNo.match(/INV-(\d+)/);
-        if (match) nextInvoice = `INV-${String(parseInt(match[1], 10) + 1).padStart(4, '0')}`;
+        if (match)
+          nextInvoice = `INV-${String(parseInt(match[1], 10) + 1).padStart(4, '0')}`;
       }
 
       const sale = await tx.sale.create({
@@ -435,16 +503,27 @@ export class PosService {
   // ═══════════════════════════════════════════════
 
   async giveTeacherFreeItem(data: GiveTeacherFreeItemDto) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: data.staffId } });
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: data.staffId },
+    });
     if (!staff) throw new NotFoundException('Staff not found');
 
-    const item = await this.prisma.storeItem.findUnique({ where: { id: data.itemId } });
+    const item = await this.prisma.storeItem.findUnique({
+      where: { id: data.itemId },
+    });
     if (!item) throw new NotFoundException('Item not found');
-    if (!item.isFreeEligible) throw new BadRequestException(`"${item.name}" is not eligible for free distribution`);
+    if (!item.isFreeEligible)
+      throw new BadRequestException(
+        `"${item.name}" is not eligible for free distribution`,
+      );
 
     // Check limit: total given this year minus returned
     const existing = await this.prisma.teacherFreeItem.findMany({
-      where: { staffId: data.staffId, itemId: data.itemId, academicYear: data.academicYear },
+      where: {
+        staffId: data.staffId,
+        itemId: data.itemId,
+        academicYear: data.academicYear,
+      },
     });
     const totalGiven = existing.reduce((s, e) => s + e.quantityGiven, 0);
     const totalReturned = existing.reduce((s, e) => s + e.quantityReturned, 0);
@@ -457,19 +536,28 @@ export class PosService {
     }
 
     // Deduct from master store stock
-    const masterStore = await this.prisma.store.findFirst({ where: { isMaster: true } });
-    if (!masterStore) throw new BadRequestException('No master store configured');
+    const masterStore = await this.prisma.store.findFirst({
+      where: { isMaster: true },
+    });
+    if (!masterStore)
+      throw new BadRequestException('No master store configured');
 
     const stock = await this.prisma.storeStock.findUnique({
-      where: { storeId_itemId: { storeId: masterStore.id, itemId: data.itemId } },
+      where: {
+        storeId_itemId: { storeId: masterStore.id, itemId: data.itemId },
+      },
     });
     if (!stock || stock.quantity < data.quantity) {
-      throw new BadRequestException(`Insufficient master store stock for "${item.name}"`);
+      throw new BadRequestException(
+        `Insufficient master store stock for "${item.name}"`,
+      );
     }
 
     return this.prisma.$transaction(async (tx) => {
       await tx.storeStock.update({
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: data.itemId } },
+        where: {
+          storeId_itemId: { storeId: masterStore.id, itemId: data.itemId },
+        },
         data: { quantity: { decrement: data.quantity } },
       });
 
@@ -490,32 +578,47 @@ export class PosService {
       where: { id: data.teacherFreeItemId },
       include: { item: true },
     });
-    if (!record) throw new NotFoundException('Teacher free item record not found');
+    if (!record)
+      throw new NotFoundException('Teacher free item record not found');
 
     const canReturn = record.quantityGiven - record.quantityReturned;
     if (data.quantity > canReturn) {
-      throw new BadRequestException(`Can only return up to ${canReturn} of "${record.item.name}"`);
+      throw new BadRequestException(
+        `Can only return up to ${canReturn} of "${record.item.name}"`,
+      );
     }
 
-    const masterStore = await this.prisma.store.findFirst({ where: { isMaster: true } });
-    if (!masterStore) throw new BadRequestException('No master store configured');
+    const masterStore = await this.prisma.store.findFirst({
+      where: { isMaster: true },
+    });
+    if (!masterStore)
+      throw new BadRequestException('No master store configured');
 
     return this.prisma.$transaction(async (tx) => {
       // Return stock to master store
       await tx.storeStock.upsert({
-        where: { storeId_itemId: { storeId: masterStore.id, itemId: record.itemId } },
+        where: {
+          storeId_itemId: { storeId: masterStore.id, itemId: record.itemId },
+        },
         update: { quantity: { increment: data.quantity } },
-        create: { storeId: masterStore.id, itemId: record.itemId, quantity: data.quantity },
+        create: {
+          storeId: masterStore.id,
+          itemId: record.itemId,
+          quantity: data.quantity,
+        },
       });
 
       const newReturned = record.quantityReturned + data.quantity;
-      const status = newReturned >= record.quantityGiven ? 'RETURNED' : 'PARTIAL_RETURNED';
+      const status =
+        newReturned >= record.quantityGiven ? 'RETURNED' : 'PARTIAL_RETURNED';
 
       return tx.teacherFreeItem.update({
         where: { id: data.teacherFreeItemId },
         data: {
           quantityReturned: newReturned,
-          returnedDate: data.returnedDate ? new Date(data.returnedDate) : new Date(),
+          returnedDate: data.returnedDate
+            ? new Date(data.returnedDate)
+            : new Date(),
           status,
         },
         include: { staff: true, item: true },
@@ -541,7 +644,16 @@ export class PosService {
     });
 
     // Group by item
-    const summary: Record<string, { itemName: string; freeLimit: number; totalGiven: number; totalReturned: number; netHeld: number }> = {};
+    const summary: Record<
+      string,
+      {
+        itemName: string;
+        freeLimit: number;
+        totalGiven: number;
+        totalReturned: number;
+        netHeld: number;
+      }
+    > = {};
     for (const r of records) {
       if (!summary[r.itemId]) {
         summary[r.itemId] = {
@@ -554,7 +666,8 @@ export class PosService {
       }
       summary[r.itemId].totalGiven += r.quantityGiven;
       summary[r.itemId].totalReturned += r.quantityReturned;
-      summary[r.itemId].netHeld = summary[r.itemId].totalGiven - summary[r.itemId].totalReturned;
+      summary[r.itemId].netHeld =
+        summary[r.itemId].totalGiven - summary[r.itemId].totalReturned;
     }
 
     return { staffId, academicYear, items: Object.values(summary), records };
@@ -587,7 +700,10 @@ export class PosService {
       if (from) where.date.gte = new Date(from);
       if (to) where.date.lte = new Date(to + 'T23:59:59.999Z');
     }
-    return this.prisma.posTransaction.findMany({ where, orderBy: { date: 'desc' } });
+    return this.prisma.posTransaction.findMany({
+      where,
+      orderBy: { date: 'desc' },
+    });
   }
 
   // ═══════════════════════════════════════════════
@@ -602,30 +718,32 @@ export class PosService {
       if (to) dateFilter.date.lte = new Date(to + 'T23:59:59.999Z');
     }
 
-    const [totalIncome, totalExpense, recentSales, lowStock] = await Promise.all([
-      this.prisma.posTransaction.aggregate({
-        where: { type: 'INCOME', ...dateFilter },
-        _sum: { amount: true },
-      }),
-      this.prisma.posTransaction.aggregate({
-        where: { type: 'EXPENSE', ...dateFilter },
-        _sum: { amount: true },
-      }),
-      this.prisma.sale.findMany({
-        include: { store: true, items: { include: { item: true } } },
-        orderBy: { saleDate: 'desc' },
-        take: 10,
-      }),
-      this.prisma.storeStock.findMany({
-        where: { quantity: { lte: 5 } },
-        include: { item: true, store: true },
-      }),
-    ]);
+    const [totalIncome, totalExpense, recentSales, lowStock] =
+      await Promise.all([
+        this.prisma.posTransaction.aggregate({
+          where: { type: 'INCOME', ...dateFilter },
+          _sum: { amount: true },
+        }),
+        this.prisma.posTransaction.aggregate({
+          where: { type: 'EXPENSE', ...dateFilter },
+          _sum: { amount: true },
+        }),
+        this.prisma.sale.findMany({
+          include: { store: true, items: { include: { item: true } } },
+          orderBy: { saleDate: 'desc' },
+          take: 10,
+        }),
+        this.prisma.storeStock.findMany({
+          where: { quantity: { lte: 5 } },
+          include: { item: true, store: true },
+        }),
+      ]);
 
     return {
       totalSales: totalIncome._sum.amount || 0,
       totalPurchases: totalExpense._sum.amount || 0,
-      profitLoss: (totalIncome._sum.amount || 0) - (totalExpense._sum.amount || 0),
+      profitLoss:
+        (totalIncome._sum.amount || 0) - (totalExpense._sum.amount || 0),
       recentSales,
       lowStockAlerts: lowStock,
     };

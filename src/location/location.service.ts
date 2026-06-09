@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateLocationDto } from './dto/create-location.dto';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -32,7 +36,7 @@ export class LocationService {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
-// 13.01496, 80.15369
+  // 13.01496, 80.15369
   getGeofenceConfig() {
     const centerLat = Number(process.env.SCHOOL_GEOFENCE_LAT || 13.01496);
     const centerLng = Number(process.env.SCHOOL_GEOFENCE_LNG || 80.15369);
@@ -58,7 +62,7 @@ export class LocationService {
   private async resolveDriverAndBus(dto: CreateLocationDto) {
     const driverRef = String(dto.driverId || '').trim();
     console.log(`[LocationService] Resolving locator for: ${driverRef}`);
-    
+
     if (!driverRef) {
       throw new BadRequestException('driverId is required');
     }
@@ -80,14 +84,20 @@ export class LocationService {
           include: { bus: true },
         });
         const target = refDigits.slice(-10);
-        const phoneMatches = allDrivers.filter((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target);
+        const phoneMatches = allDrivers.filter(
+          (d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target,
+        );
         driver = phoneMatches.find((d) => d.busId) || phoneMatches[0] || null;
         if (!driver) {
-          console.error('[LocationService] No driver matched. Debug phone numbers:');
+          console.error(
+            '[LocationService] No driver matched. Debug phone numbers:',
+          );
           allDrivers.forEach((d) => {
             const phone = d.phone || '';
             const last10 = phone.replace(/\D/g, '').slice(-10);
-            console.error(`Driver: ${d.name}, Phone: ${phone}, Last10: ${last10}`);
+            console.error(
+              `Driver: ${d.name}, Phone: ${phone}, Last10: ${last10}`,
+            );
           });
         }
       }
@@ -95,16 +105,24 @@ export class LocationService {
 
     if (!driver) {
       console.error(`[LocationService] Driver NOT found: ${driverRef}`);
-      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+      throw new NotFoundException(
+        `Driver not found for reference: ${driverRef}`,
+      );
     }
 
     const busId = dto.busId || driver.busId;
     if (!busId) {
-      console.error(`[LocationService] Bus not mapped for driver ${driver.name} (Ref: ${driverRef})`);
-      throw new BadRequestException(`Bus is not mapped for driver ${driver.name}. Use HR management to assign a bus first.`);
+      console.error(
+        `[LocationService] Bus not mapped for driver ${driver.name} (Ref: ${driverRef})`,
+      );
+      throw new BadRequestException(
+        `Bus is not mapped for driver ${driver.name}. Use HR management to assign a bus first.`,
+      );
     }
 
-    console.log(`[LocationService] Resolved to Driver: ${driver.name}, Bus: ${busId}`);
+    console.log(
+      `[LocationService] Resolved to Driver: ${driver.name}, Bus: ${busId}`,
+    );
     return { driver, busId };
   }
 
@@ -114,7 +132,7 @@ export class LocationService {
       data: {
         latitude: dto.latitude,
         longitude: dto.longitude,
-      driverId: driver.id,
+        driverId: driver.id,
         busId,
         createdAt: new Date(),
       },
@@ -133,9 +151,13 @@ export class LocationService {
     return location;
   }
 
-  async saveMileageFromDriver(data: { driverId: string; distanceKm: number; date: string }) {
+  async saveMileageFromDriver(data: {
+    driverId: string;
+    distanceKm: number;
+    date: string;
+  }) {
     const driverRef = String(data.driverId || '').trim();
-    
+
     // Resolve driver
     let driver = await this.prisma.driver.findFirst({
       where: {
@@ -152,12 +174,17 @@ export class LocationService {
           include: { bus: true },
         });
         const target = refDigits.slice(-10);
-        driver = allDrivers.find((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target) || null;
+        driver =
+          allDrivers.find(
+            (d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target,
+          ) || null;
       }
     }
 
     if (!driver) {
-      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+      throw new NotFoundException(
+        `Driver not found for reference: ${driverRef}`,
+      );
     }
 
     // Queue mileage sync for the background worker.
@@ -207,7 +234,10 @@ export class LocationService {
         });
         const target = refDigits.slice(-10);
         const found = allDrivers.find(
-          (d) => String(d.phone || '').replace(/\D/g, '').slice(-10) === target,
+          (d) =>
+            String(d.phone || '')
+              .replace(/\D/g, '')
+              .slice(-10) === target,
         );
         if (found) {
           driver = { id: found.id };
@@ -216,7 +246,9 @@ export class LocationService {
     }
 
     if (!driver) {
-      throw new NotFoundException(`Driver not found for reference: ${driverRef}`);
+      throw new NotFoundException(
+        `Driver not found for reference: ${driverRef}`,
+      );
     }
 
     return this.prisma.location.findFirst({
@@ -230,7 +262,9 @@ export class LocationService {
 
     const now = new Date();
     const liveWindowMinutes = this.getLiveWindowMinutes();
-    const liveWindowStart = new Date(now.getTime() - liveWindowMinutes * 60 * 1000);
+    const liveWindowStart = new Date(
+      now.getTime() - liveWindowMinutes * 60 * 1000,
+    );
 
     try {
       await this.supabase.importRecentDriverLocationsToLocal(liveWindowStart);
@@ -311,7 +345,8 @@ export class LocationService {
       drivers,
       total: drivers.length,
       insideGeofenceCount: drivers.filter((x) => x.insideSchoolGeofence).length,
-      outsideGeofenceCount: drivers.filter((x) => !x.insideSchoolGeofence).length,
+      outsideGeofenceCount: drivers.filter((x) => !x.insideSchoolGeofence)
+        .length,
       lastUpdatedAt: new Date().toISOString(),
     };
   }

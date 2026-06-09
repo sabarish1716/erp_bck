@@ -93,7 +93,14 @@ export class TransportController {
     @Query('to') to?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.transportService.getTripEvents({ plateNo, deviceId, event, from, to, limit: limit ? parseInt(limit) : undefined });
+    return this.transportService.getTripEvents({
+      plateNo,
+      deviceId,
+      event,
+      from,
+      to,
+      limit: limit ? parseInt(limit) : undefined,
+    });
   }
 
   @Get('trip-summary')
@@ -104,7 +111,10 @@ export class TransportController {
 
   @Get('bus-report')
   @Permissions(Permission.TRANSPORT_READ)
-  getBusReport(@Query('plateNo') plateNo: string, @Query('date') date?: string) {
+  getBusReport(
+    @Query('plateNo') plateNo: string,
+    @Query('date') date?: string,
+  ) {
     return this.transportService.getBusReport(plateNo, date);
   }
 
@@ -125,7 +135,13 @@ export class TransportController {
     @Query('from') from?: string,
     @Query('to') to?: string,
   ) {
-    return this.transportService.getFuelLogs({ plateNo, busId, driverId, from, to });
+    return this.transportService.getFuelLogs({
+      plateNo,
+      busId,
+      driverId,
+      from,
+      to,
+    });
   }
 
   @Get('buses/:id/fuel-report')
@@ -146,9 +162,16 @@ export class TransportController {
     @Query('to') to: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const file = await this.transportService.exportBusFuelReportExcel(id, from, to);
+    const file = await this.transportService.exportBusFuelReportExcel(
+      id,
+      from,
+      to,
+    );
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
     return new StreamableFile(file.content);
   }
 
@@ -160,9 +183,16 @@ export class TransportController {
     @Query('to') to: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const file = await this.transportService.exportBusFuelReportPdf(id, from, to);
+    const file = await this.transportService.exportBusFuelReportPdf(
+      id,
+      from,
+      to,
+    );
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
     return new StreamableFile(file.content);
   }
 
@@ -180,7 +210,8 @@ export class TransportController {
       storage: diskStorage({
         destination: './uploads/fuel-logs',
         filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          const uniqueSuffix =
+            Date.now() + '-' + Math.round(Math.random() * 1e9);
           const ext = extname(file.originalname);
           cb(null, `fuel-${uniqueSuffix}${ext}`);
         },
@@ -202,7 +233,7 @@ export class TransportController {
     // Use uploaded file path if present, otherwise accept either camelCase or snake_case image URL keys.
     const imageUrl = file
       ? `/uploads/fuel-logs/${file.filename}`
-      : (dto.imageUrl || dto.image_url || null);
+      : dto.imageUrl || dto.image_url || null;
     return this.transportService.createFuelLogFromDriver({ ...dto, imageUrl });
   }
 
@@ -230,9 +261,16 @@ export class TransportController {
     @Query('to') to: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const file = await this.transportService.exportBusMileageReportExcel(id, from, to);
+    const file = await this.transportService.exportBusMileageReportExcel(
+      id,
+      from,
+      to,
+    );
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
     return new StreamableFile(file.content);
   }
 
@@ -244,12 +282,18 @@ export class TransportController {
     @Query('to') to: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const file = await this.transportService.exportBusMileageReportPdf(id, from, to);
+    const file = await this.transportService.exportBusMileageReportPdf(
+      id,
+      from,
+      to,
+    );
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
     return new StreamableFile(file.content);
   }
-
 
   @Post('routes')
   @Permissions(Permission.TRANSPORT_ROUTE_CREATE)
@@ -301,7 +345,6 @@ export class TransportController {
     return this.transportService.bulkAssignTransport(dto);
   }
 
-
   @Get('students/pending')
   @Permissions(Permission.TRANSPORT_READ)
   getPendingTransportStudents(@Query('academicYear') academicYear?: string) {
@@ -332,7 +375,10 @@ export class TransportController {
     @Param('studentId') studentId: string,
     @Query('academicYear') academicYear?: string,
   ) {
-    return this.transportService.getTransportFeeBreakdown(studentId, academicYear);
+    return this.transportService.getTransportFeeBreakdown(
+      studentId,
+      academicYear,
+    );
   }
 
   // ─── SPECIAL CLASS PRO-RATA ───────────────────
@@ -349,7 +395,11 @@ export class TransportController {
     @Param('studentId') studentId: string,
     @Body() body: { daysUsed: number; totalWorkingDays: number },
   ) {
-    return this.transportService.stopSplClass(studentId, body.daysUsed, body.totalWorkingDays);
+    return this.transportService.stopSplClass(
+      studentId,
+      body.daysUsed,
+      body.totalWorkingDays,
+    );
   }
 
   // ─── STUDENT TRANSPORT TIMELINE & DRIVER ROTATION ───────
@@ -360,7 +410,10 @@ export class TransportController {
     @Param('studentId') studentId: string,
     @Query('academicYear') academicYear: string,
   ) {
-    return this.transportService.getStudentTransportTimeline(studentId, academicYear);
+    return this.transportService.getStudentTransportTimeline(
+      studentId,
+      academicYear,
+    );
   }
 
   @Post('student/timeline')
@@ -390,7 +443,6 @@ export class TransportController {
     return this.transportService.updateDriverRotation(dto);
   }
 
-
   // ─── DRIVER CRUD ──────────────────────────────
 
   @Post('drivers')
@@ -404,8 +456,6 @@ export class TransportController {
   updateDriver(@Param('id') id: string, @Body() dto: UpdateDriverDto) {
     return this.transportService.updateDriver(id, dto);
   }
-
-
 
   @Get('drivers/:id')
   @Permissions(Permission.TRANSPORT_READ)

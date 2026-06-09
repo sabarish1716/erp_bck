@@ -11,9 +11,10 @@ function toStandardEnum(val?: string): Standard {
   const numMatch = upper.replace(/[^0-9]/g, '');
   if (numMatch) {
     const num = parseInt(numMatch, 10);
-    if (num >= 1 && num <= 12) return (`STD_${num}` as Standard);
+    if (num >= 1 && num <= 12) return `STD_${num}` as Standard;
   }
-  if (Object.values(Standard).includes(upper as Standard)) return upper as Standard;
+  if (Object.values(Standard).includes(upper as Standard))
+    return upper as Standard;
   return Standard.STD_1;
 }
 
@@ -47,13 +48,17 @@ export class StudentService {
   }
 
   findAll() {
-    return this.prisma.student.findMany({ include: { family: true, address: true } });
+    return this.prisma.student.findMany({
+      include: { family: true, address: true },
+    });
   }
-
 
   // Fetch student with siblings (for full bio)
   async findOneWithSiblings(id: string) {
-    const student = await this.prisma.student.findUnique({ where: { id }, include: { family: true, address: true } });
+    const student = await this.prisma.student.findUnique({
+      where: { id },
+      include: { family: true, address: true },
+    });
     if (!student || !student.siblingGroupId) {
       return { ...student, siblings: [] };
     }
@@ -66,7 +71,11 @@ export class StudentService {
   }
 
   async linkMultipleSiblings(id: string, siblingIds: string[]) {
-    const targetIds = [...new Set((siblingIds || []).filter(Boolean).filter((sid) => sid !== id))];
+    const targetIds = [
+      ...new Set(
+        (siblingIds || []).filter(Boolean).filter((sid) => sid !== id),
+      ),
+    ];
     if (targetIds.length === 0) {
       throw new BadRequestException('At least one sibling is required');
     }
@@ -81,7 +90,13 @@ export class StudentService {
       throw new BadRequestException('One or more students not found');
     }
 
-    const existingGroupIds = [...new Set(selectedStudents.map((s) => s.siblingGroupId).filter(Boolean) as string[])];
+    const existingGroupIds = [
+      ...new Set(
+        selectedStudents
+          .map((s) => s.siblingGroupId)
+          .filter(Boolean) as string[],
+      ),
+    ];
     const siblingGroupId = existingGroupIds[0] || `SIB-${Date.now()}`;
 
     const idsToLink = new Set(uniqueIds);
@@ -126,7 +141,7 @@ export class StudentService {
   // Get distinct sections for a given standard and academic year
   async getSectionsByStandard(standard: string, academicYear?: string) {
     const standardEnum = toStandardEnum(standard);
-    
+
     const students = await this.prisma.student.findMany({
       where: {
         standard: standardEnum,
@@ -137,7 +152,7 @@ export class StudentService {
     });
 
     const sections = students
-      .map(s => s.section)
+      .map((s) => s.section)
       .filter((section): section is string => !!section)
       .sort();
 
@@ -145,9 +160,13 @@ export class StudentService {
   }
 
   // Get students by standard and section
-  async getStudentsByStandardAndSection(standard: string, section?: string, academicYear?: string) {
+  async getStudentsByStandardAndSection(
+    standard: string,
+    section?: string,
+    academicYear?: string,
+  ) {
     const standardEnum = toStandardEnum(standard);
-    
+
     const where: any = {
       standard: standardEnum,
       admission: { isApproved: true },

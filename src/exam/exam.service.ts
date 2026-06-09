@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PeriodType, Standard } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -17,9 +21,6 @@ import {
 
 @Injectable()
 export class ExamService {
-
-
-  
   constructor(private readonly prisma: PrismaService) {}
 
   async createExam(dto: CreateExamDto) {
@@ -57,7 +58,9 @@ export class ExamService {
         select: { id: true, isActive: true },
       });
       if (!teacher || !teacher.isActive) {
-        throw new BadRequestException('Assigned teacher is invalid or inactive');
+        throw new BadRequestException(
+          'Assigned teacher is invalid or inactive',
+        );
       }
     }
 
@@ -68,14 +71,21 @@ export class ExamService {
         code: dto.code.trim().toUpperCase(),
         standard: dto.standard,
         section: dto.section?.trim(),
-        stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+        stream: dto.academicStreamId
+          ? { connect: { id: dto.academicStreamId } }
+          : undefined,
 
         teacher: dto.teacherId ? { connect: { id: dto.teacherId } } : undefined,
-
       },
       include: {
         teacher: {
-          select: { id: true, name: true, employeeId: true, designation: true, department: true },
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            department: true,
+          },
         },
       },
     });
@@ -87,7 +97,13 @@ export class ExamService {
       where: { examId },
       include: {
         teacher: {
-          select: { id: true, name: true, employeeId: true, designation: true, department: true },
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            department: true,
+          },
         },
       },
       orderBy: [{ standard: 'asc' }, { section: 'asc' }, { code: 'asc' }],
@@ -113,8 +129,6 @@ export class ExamService {
   }
 
   async createTimetable(dto: CreateExamScheduleDto) {
-
-
     await this.ensureExamExists(dto.examId);
 
     const subject = await this.prisma.examSubject.findUnique({
@@ -134,20 +148,32 @@ export class ExamService {
 
     if (dto.periodStart !== undefined && dto.periodEnd !== undefined) {
       if (dto.periodStart > dto.periodEnd) {
-        throw new BadRequestException('periodStart must be less than or equal to periodEnd');
+        throw new BadRequestException(
+          'periodStart must be less than or equal to periodEnd',
+        );
       }
     }
 
-
-    await this.ensureNoClassOverlap(dto.standard, dto.section, dto.academicStreamId, examDate, startsAt, endsAt);
-
+    await this.ensureNoClassOverlap(
+      dto.standard,
+      dto.section,
+      dto.academicStreamId,
+      examDate,
+      startsAt,
+      endsAt,
+    );
 
     // Teacher clash check: if the subject has an assigned teacher, ensure they are not
     // already teaching another subject/class at the same date + overlapping time slot.
     if (subject.teacherId) {
-      await this.ensureNoTeacherClash(subject.teacherId, examDate, startsAt, endsAt, undefined);
+      await this.ensureNoTeacherClash(
+        subject.teacherId,
+        examDate,
+        startsAt,
+        endsAt,
+        undefined,
+      );
     }
-
 
     return this.prisma.examSchedule.create({
       data: {
@@ -155,7 +181,9 @@ export class ExamService {
         subject: { connect: { id: dto.subjectId } },
         standard: dto.standard,
         section: dto.section?.trim(),
-        stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+        stream: dto.academicStreamId
+          ? { connect: { id: dto.academicStreamId } }
+          : undefined,
 
         examDate,
         startsAt,
@@ -164,18 +192,21 @@ export class ExamService {
         periodStart: dto.periodStart ?? null,
         periodEnd: dto.periodEnd ?? null,
         periodType: dto.periodType ?? null,
-
-
       },
       include: {
         subject: {
           include: {
             teacher: {
-              select: { id: true, name: true, employeeId: true, designation: true, department: true },
+              select: {
+                id: true,
+                name: true,
+                employeeId: true,
+                designation: true,
+                department: true,
+              },
             },
           },
         },
-
       },
     });
   }
@@ -188,18 +219,32 @@ export class ExamService {
         subject: {
           include: {
             teacher: {
-              select: { id: true, name: true, employeeId: true, designation: true, department: true },
+              select: {
+                id: true,
+                name: true,
+                employeeId: true,
+                designation: true,
+                department: true,
+              },
             },
           },
         },
         halls: { include: { hall: true } },
       },
-      orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
+      orderBy: [
+        { examDate: 'asc' },
+        { periodStart: 'asc' },
+        { startsAt: 'asc' },
+      ],
     });
   }
 
   /** Class-wise timetable: all schedule entries for a given class/section across the exam */
-  async getClassTimetable(examId: string, standard: Standard, section?: string) {
+  async getClassTimetable(
+    examId: string,
+    standard: Standard,
+    section?: string,
+  ) {
     await this.ensureExamExists(examId);
     const entries = await this.prisma.examSchedule.findMany({
       where: {
@@ -211,16 +256,36 @@ export class ExamService {
         subject: {
           include: {
             teacher: {
-              select: { id: true, name: true, employeeId: true, designation: true, department: true },
+              select: {
+                id: true,
+                name: true,
+                employeeId: true,
+                designation: true,
+                department: true,
+              },
             },
           },
         },
         halls: { include: { hall: true } },
       },
-      orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
+      orderBy: [
+        { examDate: 'asc' },
+        { periodStart: 'asc' },
+        { startsAt: 'asc' },
+      ],
     });
 
-    const byDate = new Map<string, Array<{ period: number; periodEnd: number | null; subject: string; teacher: string | null; type: PeriodType | null; scheduleId: string }>>();
+    const byDate = new Map<
+      string,
+      Array<{
+        period: number;
+        periodEnd: number | null;
+        subject: string;
+        teacher: string | null;
+        type: PeriodType | null;
+        scheduleId: string;
+      }>
+    >();
     for (const e of entries) {
       const key = e.examDate.toISOString().slice(0, 10);
       if (!byDate.has(key)) byDate.set(key, []);
@@ -251,7 +316,13 @@ export class ExamService {
 
     const teacher = await this.prisma.staff.findUnique({
       where: { id: staffId },
-      select: { id: true, name: true, employeeId: true, designation: true, department: true },
+      select: {
+        id: true,
+        name: true,
+        employeeId: true,
+        designation: true,
+        department: true,
+      },
     });
     if (!teacher) throw new NotFoundException('Teacher (staff) not found');
 
@@ -264,16 +335,36 @@ export class ExamService {
         subject: {
           include: {
             teacher: {
-              select: { id: true, name: true, employeeId: true, designation: true, department: true },
+              select: {
+                id: true,
+                name: true,
+                employeeId: true,
+                designation: true,
+                department: true,
+              },
             },
           },
         },
         halls: { include: { hall: true } },
       },
-      orderBy: [{ examDate: 'asc' }, { periodStart: 'asc' }, { startsAt: 'asc' }],
+      orderBy: [
+        { examDate: 'asc' },
+        { periodStart: 'asc' },
+        { startsAt: 'asc' },
+      ],
     });
 
-    const byDate = new Map<string, Array<{ period: number; subject: string; standard: Standard; section: string | null; type: PeriodType | null; scheduleId: string }>>();
+    const byDate = new Map<
+      string,
+      Array<{
+        period: number;
+        subject: string;
+        standard: Standard;
+        section: string | null;
+        type: PeriodType | null;
+        scheduleId: string;
+      }>
+    >();
     for (const e of entries) {
       const key = e.examDate.toISOString().slice(0, 10);
       if (!byDate.has(key)) byDate.set(key, []);
@@ -309,11 +400,12 @@ export class ExamService {
     const exam = await this.prisma.exam.findUnique({ where: { id: examId } });
     if (!exam) throw new NotFoundException('Exam not found');
 
-    const subject = await this.prisma.examSubject.findUnique({ where: { id: dto.subjectId } });
+    const subject = await this.prisma.examSubject.findUnique({
+      where: { id: dto.subjectId },
+    });
     if (!subject || subject.examId !== examId) {
       throw new BadRequestException('Invalid subject for the selected exam');
     }
-
 
     const examDate = new Date(dto.examDate);
 
@@ -330,51 +422,116 @@ export class ExamService {
       if (classGroupSwapped) {
         // Same day: 1-2 exam, 3-4 revision
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 2, periodType: PeriodType.EXAMINATION },
-          { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.REVISION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 2,
+            periodType: PeriodType.EXAMINATION,
+          },
+          {
+            date: examDate,
+            periodStart: 3,
+            periodEnd: 4,
+            periodType: PeriodType.REVISION,
+          },
         );
       } else {
         // Same day: 1-2 revision, 3-4 exam
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 2, periodType: PeriodType.REVISION },
-          { date: examDate, periodStart: 3, periodEnd: 4, periodType: PeriodType.EXAMINATION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 2,
+            periodType: PeriodType.REVISION,
+          },
+          {
+            date: examDate,
+            periodStart: 3,
+            periodEnd: 4,
+            periodType: PeriodType.EXAMINATION,
+          },
         );
       }
     } else if (exam.maxMarks <= 50) {
       if (classGroupSwapped) {
         // Same day: 1-4 EXAM, 5-8 REVISION
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.EXAMINATION },
-          { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.REVISION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 4,
+            periodType: PeriodType.EXAMINATION,
+          },
+          {
+            date: examDate,
+            periodStart: 5,
+            periodEnd: 8,
+            periodType: PeriodType.REVISION,
+          },
         );
       } else {
         // Same day: 1-4 REVISION, 5-8 EXAM
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.REVISION },
-          { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.EXAMINATION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 4,
+            periodType: PeriodType.REVISION,
+          },
+          {
+            date: examDate,
+            periodStart: 5,
+            periodEnd: 8,
+            periodType: PeriodType.EXAMINATION,
+          },
         );
       }
     } else {
       // 100+ marks
       if (!dto.revisionDate) {
-        throw new BadRequestException('revisionDate is required for 100-mark exams');
+        throw new BadRequestException(
+          'revisionDate is required for 100-mark exams',
+        );
       }
       const revisionDate = new Date(dto.revisionDate);
       // Previous day: all 8 periods REVISION
-      periodsToCreate.push(
-        { date: revisionDate, periodStart: 1, periodEnd: 8, periodType: PeriodType.REVISION },
-      );
+      periodsToCreate.push({
+        date: revisionDate,
+        periodStart: 1,
+        periodEnd: 8,
+        periodType: PeriodType.REVISION,
+      });
       if (classGroupSwapped) {
         // Exam day: 1-4 EXAM, 5-8 REVISION
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.EXAMINATION },
-          { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.REVISION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 4,
+            periodType: PeriodType.EXAMINATION,
+          },
+          {
+            date: examDate,
+            periodStart: 5,
+            periodEnd: 8,
+            periodType: PeriodType.REVISION,
+          },
         );
       } else {
         // Exam day: 1-4 REVISION, 5-8 EXAM
         periodsToCreate.push(
-          { date: examDate, periodStart: 1, periodEnd: 4, periodType: PeriodType.REVISION },
-          { date: examDate, periodStart: 5, periodEnd: 8, periodType: PeriodType.EXAMINATION },
+          {
+            date: examDate,
+            periodStart: 1,
+            periodEnd: 4,
+            periodType: PeriodType.REVISION,
+          },
+          {
+            date: examDate,
+            periodStart: 5,
+            periodEnd: 8,
+            periodType: PeriodType.EXAMINATION,
+          },
         );
       }
     }
@@ -387,11 +544,25 @@ export class ExamService {
       const dayEnd = new Date(p.date);
       dayEnd.setUTCHours(23, 59, 59, 999);
 
-
-      await this.ensureNoClassOverlapForPeriod(dto.standard, dto.section, dto.academicStreamId, p.date, p.periodStart, p.periodEnd);
+      await this.ensureNoClassOverlapForPeriod(
+        dto.standard,
+        dto.section,
+        dto.academicStreamId,
+        p.date,
+        p.periodStart,
+        p.periodEnd,
+      );
 
       if (subject.teacherId) {
-        await this.ensureNoTeacherClash(subject.teacherId, p.date, dayStart, dayEnd, undefined, p.periodStart, p.periodEnd);
+        await this.ensureNoTeacherClash(
+          subject.teacherId,
+          p.date,
+          dayStart,
+          dayEnd,
+          undefined,
+          p.periodStart,
+          p.periodEnd,
+        );
       }
 
       const entry = await this.prisma.examSchedule.create({
@@ -400,7 +571,9 @@ export class ExamService {
           subject: { connect: { id: dto.subjectId } },
           standard: dto.standard,
           section: dto.section?.trim(),
-          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+          stream: dto.academicStreamId
+            ? { connect: { id: dto.academicStreamId } }
+            : undefined,
 
           examDate: p.date,
           startsAt: dayStart,
@@ -409,18 +582,21 @@ export class ExamService {
           periodStart: p.periodStart,
           periodEnd: p.periodEnd,
           periodType: p.periodType,
-
-
         },
         include: {
           subject: {
             include: {
               teacher: {
-                select: { id: true, name: true, employeeId: true, designation: true, department: true },
+                select: {
+                  id: true,
+                  name: true,
+                  employeeId: true,
+                  designation: true,
+                  department: true,
+                },
               },
             },
           },
-
         },
       });
       created.push(entry);
@@ -433,20 +609,21 @@ export class ExamService {
     };
   }
 
-  async autoGenerateFullTimetable(examId: string, data: AutoGenerateFullTimetableDto) {
+  async autoGenerateFullTimetable(
+    examId: string,
+    data: AutoGenerateFullTimetableDto,
+  ) {
     const exam = await this.prisma.exam.findUnique({ where: { id: examId } });
     if (!exam) throw new NotFoundException('Exam not found');
-
-
 
     const subjects = await this.prisma.examSubject.findMany({
       where: {
         examId,
         ...(data.standard ? { standard: data.standard } : {}),
         section: data.section,
-        ...(data.academicStreamId ? { academicStreamId: data.academicStreamId } : {}),
-
-
+        ...(data.academicStreamId
+          ? { academicStreamId: data.academicStreamId }
+          : {}),
       },
       orderBy: [{ code: 'asc' }, { name: 'asc' }],
     });
@@ -460,8 +637,6 @@ export class ExamService {
       throw new BadRequestException('Invalid startDate');
     }
 
-
-
     const created = await this.prisma.$transaction(async (tx) => {
       await tx.examSchedule.deleteMany({
         where: {
@@ -469,24 +644,28 @@ export class ExamService {
           ...(data.standard ? { standard: data.standard } : {}),
           section: data.section ?? null,
           academicStreamId: data.academicStreamId ?? null,
-
-
         },
       });
 
       const inserted: any[] = [];
       for (const subject of subjects) {
         if (!subject.teacherId) {
-          throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
+          throw new BadRequestException(
+            `Teacher not assigned for ${subject.name}`,
+          );
         }
 
         const pattern = this.getPattern(exam.maxMarks, subject.standard);
         if (pattern.length !== 8) {
-          throw new BadRequestException('Unable to derive period pattern for provided marks/standard');
+          throw new BadRequestException(
+            'Unable to derive period pattern for provided marks/standard',
+          );
         }
 
         if (exam.maxMarks >= 100) {
-          const revDate = subject.revisionDate ? new Date(subject.revisionDate) : new Date(currentDate);
+          const revDate = subject.revisionDate
+            ? new Date(subject.revisionDate)
+            : new Date(currentDate);
           for (let i = 0; i < 8; i++) {
             const startHour = 9 + i;
             const startsAt = new Date(revDate);
@@ -513,7 +692,9 @@ export class ExamService {
                 subject: { connect: { id: subject.id } },
                 standard: subject.standard,
                 section: subject.section,
-                stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
+                stream: subject.academicStreamId
+                  ? { connect: { id: subject.academicStreamId } }
+                  : undefined,
                 examDate: new Date(revDate),
                 startsAt,
                 endsAt,
@@ -521,15 +702,21 @@ export class ExamService {
                 periodStart: i + 1,
                 periodEnd: i + 1,
                 periodType: PeriodType.REVISION,
-
               },
               include: {
                 subject: {
                   include: {
-                    teacher: { select: { id: true, name: true, employeeId: true, designation: true, department: true } },
+                    teacher: {
+                      select: {
+                        id: true,
+                        name: true,
+                        employeeId: true,
+                        designation: true,
+                        department: true,
+                      },
+                    },
                   },
                 },
-
               },
             });
             inserted.push(entry);
@@ -541,7 +728,9 @@ export class ExamService {
           currentDate = nextDate;
         }
 
-        const exDate = subject.examDate ? new Date(subject.examDate) : new Date(currentDate);
+        const exDate = subject.examDate
+          ? new Date(subject.examDate)
+          : new Date(currentDate);
         for (let i = 0; i < pattern.length; i++) {
           const type = pattern[i];
           if (type === 'F') continue;
@@ -558,7 +747,6 @@ export class ExamService {
             section: subject.section ?? undefined,
             academicStreamId: subject.academicStreamId,
 
-
             examDate: new Date(exDate),
             startsAt,
             endsAt,
@@ -573,7 +761,9 @@ export class ExamService {
               subject: { connect: { id: subject.id } },
               standard: subject.standard,
               section: subject.section,
-              stream: subject.academicStreamId ? { connect: { id: subject.academicStreamId } } : undefined,
+              stream: subject.academicStreamId
+                ? { connect: { id: subject.academicStreamId } }
+                : undefined,
 
               examDate: new Date(exDate),
               startsAt,
@@ -581,19 +771,23 @@ export class ExamService {
               session: i < 4 ? 'FN' : 'AN',
               periodStart: i + 1,
               periodEnd: i + 1,
-              periodType: type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
-
-
+              periodType:
+                type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
             },
             include: {
               subject: {
                 include: {
                   teacher: {
-                    select: { id: true, name: true, employeeId: true, designation: true, department: true },
+                    select: {
+                      id: true,
+                      name: true,
+                      employeeId: true,
+                      designation: true,
+                      department: true,
+                    },
                   },
                 },
               },
-
             },
           });
           inserted.push(entry);
@@ -628,7 +822,9 @@ export class ExamService {
     }
 
     const subjectId = dto.subjectId ?? schedule.subjectId;
-    const subject = await this.prisma.examSubject.findUnique({ where: { id: subjectId } });
+    const subject = await this.prisma.examSubject.findUnique({
+      where: { id: subjectId },
+    });
     if (!subject || subject.examId !== schedule.examId) {
       throw new BadRequestException('Invalid subject for this exam');
     }
@@ -639,7 +835,9 @@ export class ExamService {
         select: { id: true, isActive: true },
       });
       if (!teacher || !teacher.isActive) {
-        throw new BadRequestException('Assigned teacher is invalid or inactive');
+        throw new BadRequestException(
+          'Assigned teacher is invalid or inactive',
+        );
       }
     }
 
@@ -676,7 +874,13 @@ export class ExamService {
           subject: {
             include: {
               teacher: {
-                select: { id: true, name: true, employeeId: true, designation: true, department: true },
+                select: {
+                  id: true,
+                  name: true,
+                  employeeId: true,
+                  designation: true,
+                  department: true,
+                },
               },
             },
           },
@@ -688,7 +892,9 @@ export class ExamService {
 
   async resetTimetable(examId: string) {
     await this.ensureExamExists(examId);
-    const deleted = await this.prisma.examSchedule.deleteMany({ where: { examId } });
+    const deleted = await this.prisma.examSchedule.deleteMany({
+      where: { examId },
+    });
     return {
       message: 'Timetable reset successfully',
       examId,
@@ -708,13 +914,13 @@ export class ExamService {
 
   private getPattern(marks: number, standard: string): Array<'R' | 'E' | 'F'> {
     const isSwapped = this.isSwappedClassGroup(standard as Standard);
-    
+
     if (marks <= 25) {
-      return isSwapped 
+      return isSwapped
         ? ['E', 'E', 'R', 'R', 'F', 'F', 'F', 'F']
         : ['R', 'R', 'E', 'E', 'F', 'F', 'F', 'F'];
     }
-    
+
     // Base pattern for both 50 and 100, and fallback for custom marks.
     return isSwapped
       ? ['E', 'E', 'E', 'E', 'R', 'R', 'R', 'R']
@@ -722,7 +928,6 @@ export class ExamService {
   }
 
   private async validateClashes(args: {
-
     standard: any;
     section?: string;
     academicStreamId?: any;
@@ -740,35 +945,45 @@ export class ExamService {
 
     const overlapFilter =
       args.periodStart !== undefined && args.periodEnd !== undefined
-        ? { periodStart: { lte: args.periodEnd }, periodEnd: { gte: args.periodStart } }
+        ? {
+            periodStart: { lte: args.periodEnd },
+            periodEnd: { gte: args.periodStart },
+          }
         : { startsAt: { lt: args.endsAt }, endsAt: { gt: args.startsAt } };
-
-
 
     const classClash = await db.examSchedule.findFirst({
       where: {
-        ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
+        ...(args.excludeScheduleId
+          ? { id: { not: args.excludeScheduleId } }
+          : {}),
         standard: args.standard,
         section: args.section ?? null,
         academicStreamId: args.academicStreamId ?? null,
 
-
         examDate: args.examDate,
         ...overlapFilter,
       },
-      include: { subject: true }
+      include: { subject: true },
     });
     if (classClash) {
       const subjectName = classClash.subject?.name || 'an unknown subject';
-      const formattedDate = new Date(classClash.examDate).toLocaleDateString('en-GB').replace(/\//g, '-');
-      const sectionInfo = classClash.section ? ` - Section ${classClash.section}` : '';
-      throw new BadRequestException(`Class clash detected: ${classClash.standard}${sectionInfo} already has ${subjectName} scheduled on ${formattedDate} during ${classClash.periodStr ? `Period ${classClash.periodStr}` : 'the selected time slot'}.`);
+      const formattedDate = new Date(classClash.examDate)
+        .toLocaleDateString('en-GB')
+        .replace(/\//g, '-');
+      const sectionInfo = classClash.section
+        ? ` - Section ${classClash.section}`
+        : '';
+      throw new BadRequestException(
+        `Class clash detected: ${classClash.standard}${sectionInfo} already has ${subjectName} scheduled on ${formattedDate} during ${classClash.periodStr ? `Period ${classClash.periodStr}` : 'the selected time slot'}.`,
+      );
     }
 
     if (args.teacherId) {
       const teacherClash = await db.examSchedule.findFirst({
         where: {
-          ...(args.excludeScheduleId ? { id: { not: args.excludeScheduleId } } : {}),
+          ...(args.excludeScheduleId
+            ? { id: { not: args.excludeScheduleId } }
+            : {}),
           examDate: args.examDate,
           ...overlapFilter,
           subject: { teacherId: args.teacherId },
@@ -794,15 +1009,17 @@ export class ExamService {
         standard: dto.standard,
         section: dto.section,
         academicYear,
-        ...(dto.academicStreamId ? { academicStreamId: dto.academicStreamId } : {}),
-
-
+        ...(dto.academicStreamId
+          ? { academicStreamId: dto.academicStreamId }
+          : {}),
       },
       include: { admission: { select: { admissionNo: true } } },
     });
 
     if (!students.length) {
-      throw new BadRequestException('No students found for the selected filters');
+      throw new BadRequestException(
+        'No students found for the selected filters',
+      );
     }
 
     students.sort((a, b) => {
@@ -827,10 +1044,11 @@ export class ExamService {
           rollNumber,
           standard: dto.standard,
           section: dto.section,
-          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+          stream: dto.academicStreamId
+            ? { connect: { id: dto.academicStreamId } }
+            : undefined,
 
           academicYear,
-
         },
         create: {
           exam: { connect: { id: examId } },
@@ -838,10 +1056,11 @@ export class ExamService {
           rollNumber,
           standard: dto.standard,
           section: dto.section,
-          stream: dto.academicStreamId ? { connect: { id: dto.academicStreamId } } : undefined,
+          stream: dto.academicStreamId
+            ? { connect: { id: dto.academicStreamId } }
+            : undefined,
 
           academicYear,
-
         },
       });
     });
@@ -896,7 +1115,9 @@ export class ExamService {
     });
 
     if (halls.length !== new Set(hallIds).size) {
-      throw new BadRequestException('One or more hall IDs are invalid or inactive');
+      throw new BadRequestException(
+        'One or more hall IDs are invalid or inactive',
+      );
     }
 
     const rollNumbers = await this.prisma.examRollNumber.findMany({
@@ -905,18 +1126,21 @@ export class ExamService {
         standard: schedule.standard,
         section: schedule.section,
         academicStreamId: schedule.academicStreamId ?? undefined,
-
       },
       orderBy: { rollNumber: 'asc' },
     });
 
     if (!rollNumbers.length) {
-      throw new BadRequestException('No roll numbers generated for this schedule filters');
+      throw new BadRequestException(
+        'No roll numbers generated for this schedule filters',
+      );
     }
 
     const totalCapacity = halls.reduce((sum, h) => sum + h.capacity, 0);
     if (rollNumbers.length > totalCapacity) {
-      throw new BadRequestException(`Insufficient seats. Required ${rollNumbers.length}, available ${totalCapacity}`);
+      throw new BadRequestException(
+        `Insufficient seats. Required ${rollNumbers.length}, available ${totalCapacity}`,
+      );
     }
 
     const allocationRows: {
@@ -929,7 +1153,11 @@ export class ExamService {
 
     let cursor = 0;
     for (const hall of halls) {
-      for (let seatNumber = 1; seatNumber <= hall.capacity && cursor < rollNumbers.length; seatNumber += 1) {
+      for (
+        let seatNumber = 1;
+        seatNumber <= hall.capacity && cursor < rollNumbers.length;
+        seatNumber += 1
+      ) {
         const roll = rollNumbers[cursor];
         allocationRows.push({
           scheduleId,
@@ -965,7 +1193,9 @@ export class ExamService {
       where: { scheduleId },
       include: {
         hall: true,
-        student: { select: { id: true, name: true, standard: true, section: true } },
+        student: {
+          select: { id: true, name: true, standard: true, section: true },
+        },
         rollNumber: { select: { rollNumber: true } },
       },
       orderBy: [{ hall: { name: 'asc' } }, { seatNumber: 'asc' }],
@@ -991,7 +1221,11 @@ export class ExamService {
       seatNumber: number;
     }[] = [];
 
-    const invigilatorUpserts: { scheduleId: string; hallId: string; staffId: string }[] = [];
+    const invigilatorUpserts: {
+      scheduleId: string;
+      hallId: string;
+      staffId: string;
+    }[] = [];
 
     for (const hallCfg of dto.halls) {
       // Validate hall exists and is linked to this exam
@@ -999,7 +1233,8 @@ export class ExamService {
         where: { id: hallCfg.hallId },
         select: { id: true, capacity: true },
       });
-      if (!hall) throw new BadRequestException(`Hall ${hallCfg.hallId} not found`);
+      if (!hall)
+        throw new BadRequestException(`Hall ${hallCfg.hallId} not found`);
 
       const totalRequested = hallCfg.count1 + (hallCfg.count2 ?? 0);
       if (totalRequested > hall.capacity) {
@@ -1010,7 +1245,11 @@ export class ExamService {
 
       // Fetch roll numbers for group 1
       const rolls1 = await this.prisma.examRollNumber.findMany({
-        where: { examId: schedule.examId, standard: hallCfg.standard1, section: hallCfg.section1 ?? null },
+        where: {
+          examId: schedule.examId,
+          standard: hallCfg.standard1,
+          section: hallCfg.section1 ?? null,
+        },
         orderBy: { rollNumber: 'asc' },
         take: hallCfg.count1,
       });
@@ -1019,7 +1258,11 @@ export class ExamService {
       const rolls2 =
         hallCfg.standard2 && (hallCfg.count2 ?? 0) > 0
           ? await this.prisma.examRollNumber.findMany({
-              where: { examId: schedule.examId, standard: hallCfg.standard2, section: hallCfg.section2 ?? null },
+              where: {
+                examId: schedule.examId,
+                standard: hallCfg.standard2,
+                section: hallCfg.section2 ?? null,
+              },
               orderBy: { rollNumber: 'asc' },
               take: hallCfg.count2,
             })
@@ -1045,10 +1288,18 @@ export class ExamService {
 
       // Collect invigilator assignments
       if (hallCfg.invigilator1Id) {
-        invigilatorUpserts.push({ scheduleId, hallId: hallCfg.hallId, staffId: hallCfg.invigilator1Id });
+        invigilatorUpserts.push({
+          scheduleId,
+          hallId: hallCfg.hallId,
+          staffId: hallCfg.invigilator1Id,
+        });
       }
       if (hallCfg.invigilator2Id) {
-        invigilatorUpserts.push({ scheduleId, hallId: hallCfg.hallId, staffId: hallCfg.invigilator2Id });
+        invigilatorUpserts.push({
+          scheduleId,
+          hallId: hallCfg.hallId,
+          staffId: hallCfg.invigilator2Id,
+        });
       }
     }
 
@@ -1056,7 +1307,7 @@ export class ExamService {
     await this.prisma.$transaction(async (tx) => {
       // Clear old allocations for affected halls only
       const affectedHallIds = dto.halls.map((h) => h.hallId);
-      
+
       await tx.examScheduleHall.deleteMany({
         where: { scheduleId, hallId: { in: affectedHallIds } },
       });
@@ -1071,7 +1322,12 @@ export class ExamService {
       // Upsert invigilator assignments
       for (const inv of invigilatorUpserts) {
         await tx.examInvigilatorAssignment.upsert({
-          where: { scheduleId_hallId: { scheduleId: inv.scheduleId, hallId: inv.hallId } },
+          where: {
+            scheduleId_hallId: {
+              scheduleId: inv.scheduleId,
+              hallId: inv.hallId,
+            },
+          },
           update: { staffId: inv.staffId },
           create: inv,
         });
@@ -1087,7 +1343,9 @@ export class ExamService {
 
   /** Update only the start/end times of an existing schedule slot */
   async updateScheduleTiming(scheduleId: string, dto: UpdateScheduleTimingDto) {
-    const schedule = await this.prisma.examSchedule.findUnique({ where: { id: scheduleId } });
+    const schedule = await this.prisma.examSchedule.findUnique({
+      where: { id: scheduleId },
+    });
     if (!schedule) throw new NotFoundException('Schedule not found');
 
     const startsAt = new Date(dto.startsAt);
@@ -1144,15 +1402,15 @@ export class ExamService {
       },
     });
 
-    
-
     if (!schedule) {
       throw new NotFoundException('Schedule not found');
     }
 
     const hallMapped = schedule.halls.some((h) => h.hallId === dto.hallId);
     if (!hallMapped) {
-      throw new BadRequestException('Selected hall is not mapped to this schedule');
+      throw new BadRequestException(
+        'Selected hall is not mapped to this schedule',
+      );
     }
 
     const staff = await this.prisma.staff.findUnique({
@@ -1160,28 +1418,31 @@ export class ExamService {
       select: { id: true, isActive: true },
     });
     if (!staff || !staff.isActive) {
-      throw new BadRequestException('Selected invigilator is invalid or inactive');
+      throw new BadRequestException(
+        'Selected invigilator is invalid or inactive',
+      );
     }
 
-    const overlappingAssignment = await this.prisma.examInvigilatorAssignment.findFirst({
-      where: {
-        staffId: dto.staffId,
-        schedule: {
-          id: { not: scheduleId },
-          examDate: schedule.examDate,
-          startsAt: { lt: schedule.endsAt },
-          endsAt: { gt: schedule.startsAt },
-        },
-      },
-      include: {
-        schedule: {
-          include: {
-            subject: { select: { name: true, code: true } },
+    const overlappingAssignment =
+      await this.prisma.examInvigilatorAssignment.findFirst({
+        where: {
+          staffId: dto.staffId,
+          schedule: {
+            id: { not: scheduleId },
+            examDate: schedule.examDate,
+            startsAt: { lt: schedule.endsAt },
+            endsAt: { gt: schedule.startsAt },
           },
         },
-        hall: { select: { name: true } },
-      },
-    });
+        include: {
+          schedule: {
+            include: {
+              subject: { select: { name: true, code: true } },
+            },
+          },
+          hall: { select: { name: true } },
+        },
+      });
 
     if (overlappingAssignment) {
       throw new BadRequestException(
@@ -1219,7 +1480,12 @@ export class ExamService {
     return exam;
   }
 
-  private async ensureNoHallOverlap(hallIds: string[], examDate: Date, startsAt: Date, endsAt: Date) {
+  private async ensureNoHallOverlap(
+    hallIds: string[],
+    examDate: Date,
+    startsAt: Date,
+    endsAt: Date,
+  ) {
     const overlaps = await this.prisma.examSchedule.findMany({
       where: {
         examDate,
@@ -1243,11 +1509,18 @@ export class ExamService {
           if (hallIds.includes(h.hallId)) hallNames.add(h.hall.name);
         });
       });
-      throw new BadRequestException(`Hall overlap detected for: ${Array.from(hallNames).join(', ')}`);
+      throw new BadRequestException(
+        `Hall overlap detected for: ${Array.from(hallNames).join(', ')}`,
+      );
     }
   }
 
-  private async ensureNoHallOverlapForPeriod(hallIds: string[], examDate: Date, periodStart: number, periodEnd: number) {
+  private async ensureNoHallOverlapForPeriod(
+    hallIds: string[],
+    examDate: Date,
+    periodStart: number,
+    periodEnd: number,
+  ) {
     const clash = await this.prisma.examSchedule.findFirst({
       where: {
         examDate,
@@ -1262,7 +1535,9 @@ export class ExamService {
         .filter((h) => hallIds.includes(h.hallId))
         .map((h) => h.hall.name)
         .join(', ');
-      throw new BadRequestException(`Hall period overlap detected for periods ${periodStart}–${periodEnd}: ${names}`);
+      throw new BadRequestException(
+        `Hall period overlap detected for periods ${periodStart}–${periodEnd}: ${names}`,
+      );
     }
   }
 
@@ -1288,7 +1563,9 @@ export class ExamService {
     });
 
     if (clash) {
-      throw new BadRequestException('Class timetable overlap detected for this standard/section/stream');
+      throw new BadRequestException(
+        'Class timetable overlap detected for this standard/section/stream',
+      );
     }
   }
 
@@ -1342,7 +1619,9 @@ export class ExamService {
         subject: { teacherId },
       },
       include: {
-        subject: { select: { name: true, code: true, standard: true, section: true } },
+        subject: {
+          select: { name: true, code: true, standard: true, section: true },
+        },
       },
     });
 
@@ -1358,8 +1637,8 @@ export class ExamService {
       where: { examId },
       include: {
         subject: { select: { teacherId: true, name: true } },
-        invigilatorAssignments: { select: { staffId: true } }
-      }
+        invigilatorAssignments: { select: { staffId: true } },
+      },
     });
 
     const assignments: any[] = [];
@@ -1417,9 +1696,15 @@ export class ExamService {
         ...(dto.code && { code: dto.code }),
         ...(dto.standard && { standard: dto.standard }),
         ...(dto.section !== undefined && { section: dto.section }),
-        ...(dto.academicStreamId !== undefined && { academicStreamId: dto.academicStreamId }),
-        ...(dto.revisionDate !== undefined && { revisionDate: dto.revisionDate ? new Date(dto.revisionDate) : null }),
-        ...(dto.examDate !== undefined && { examDate: dto.examDate ? new Date(dto.examDate) : null }),
+        ...(dto.academicStreamId !== undefined && {
+          academicStreamId: dto.academicStreamId,
+        }),
+        ...(dto.revisionDate !== undefined && {
+          revisionDate: dto.revisionDate ? new Date(dto.revisionDate) : null,
+        }),
+        ...(dto.examDate !== undefined && {
+          examDate: dto.examDate ? new Date(dto.examDate) : null,
+        }),
         ...(dto.teacherId !== undefined && { teacherId: dto.teacherId }),
       },
     });

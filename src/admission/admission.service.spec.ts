@@ -43,7 +43,6 @@ describe('AdmissionService', () => {
     service = new AdmissionService(prisma);
   });
 
-
   it('returns year comparison and milestone data for dashboard summary', async () => {
     prisma.appSetting.findUnique
       .mockResolvedValueOnce({ value: { academicYear: '2026-2027' } })
@@ -83,13 +82,24 @@ describe('AdmissionService', () => {
       }),
     );
     expect(result.upcomingMilestones).toEqual([
-      expect.objectContaining({ threshold: 100, targetCount: 100, remainingCount: 20, achieved: false }),
+      expect.objectContaining({
+        threshold: 100,
+        targetCount: 100,
+        remainingCount: 20,
+        achieved: false,
+      }),
     ]);
   });
 
   it('promotes all students to next standards for the new academic year', async () => {
-    prisma.student.findMany.mockResolvedValue([{ id: 'stu-1', name: 'A', standard: 'STD_9' }]);
-    prisma.student.update.mockResolvedValue({ id: 'stu-1', standard: 'STD_10', academicYear: '2026-2027' });
+    prisma.student.findMany.mockResolvedValue([
+      { id: 'stu-1', name: 'A', standard: 'STD_9' },
+    ]);
+    prisma.student.update.mockResolvedValue({
+      id: 'stu-1',
+      standard: 'STD_10',
+      academicYear: '2026-2027',
+    });
     prisma.feeStructure.findMany
       .mockResolvedValueOnce([
         {
@@ -119,7 +129,10 @@ describe('AdmissionService', () => {
     expect(prisma.student.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'stu-1' },
-        data: expect.objectContaining({ standard: 'STD_10', academicYear: '2026-2027' }),
+        data: expect.objectContaining({
+          standard: 'STD_10',
+          academicYear: '2026-2027',
+        }),
       }),
     );
     expect(result).toEqual(
@@ -131,16 +144,27 @@ describe('AdmissionService', () => {
   });
 
   it('demotes all students to previous standards for the new academic year', async () => {
-    prisma.student.findMany.mockResolvedValue([{ id: 'stu-9', name: 'B', standard: 'STD_10' }]);
-    prisma.student.update.mockResolvedValue({ id: 'stu-9', standard: 'STD_9', academicYear: '2025-2026' });
+    prisma.student.findMany.mockResolvedValue([
+      { id: 'stu-9', name: 'B', standard: 'STD_10' },
+    ]);
+    prisma.student.update.mockResolvedValue({
+      id: 'stu-9',
+      standard: 'STD_9',
+      academicYear: '2025-2026',
+    });
 
     const result = await service.demoteAllStudents('2026-2027', '2025-2026');
 
-    expect(prisma.student.findMany).toHaveBeenCalledWith({ where: { academicYear: '2026-2027' } });
+    expect(prisma.student.findMany).toHaveBeenCalledWith({
+      where: { academicYear: '2026-2027' },
+    });
     expect(prisma.student.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'stu-9' },
-        data: expect.objectContaining({ standard: 'STD_9', academicYear: '2025-2026' }),
+        data: expect.objectContaining({
+          standard: 'STD_9',
+          academicYear: '2025-2026',
+        }),
       }),
     );
     expect(result).toEqual(

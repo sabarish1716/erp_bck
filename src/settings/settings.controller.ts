@@ -30,8 +30,14 @@ export class SettingsController {
 
   @Put('permissions')
   @Permissions(Permission.SETTINGS_UPDATE)
-  updateRolePermissions(@Body() body: UpdateRolePermissionsDto, @Req() req: any) {
-    return this.settingsService.updateRolePermissionsConfig(body.rolePermissions, req?.user?.email);
+  updateRolePermissions(
+    @Body() body: UpdateRolePermissionsDto,
+    @Req() req: any,
+  ) {
+    return this.settingsService.updateRolePermissionsConfig(
+      body.rolePermissions,
+      req?.user?.email,
+    );
   }
 
   @Get('user-permissions')
@@ -47,7 +53,11 @@ export class SettingsController {
     @Body() body: UpdateUserPermissionsDto,
     @Req() req: any,
   ) {
-    return this.settingsService.updateUserPermissionOverrideConfig(userId, body, req?.user?.email);
+    return this.settingsService.updateUserPermissionOverrideConfig(
+      userId,
+      body,
+      req?.user?.email,
+    );
   }
 
   @Get('fee-receipt-fields')

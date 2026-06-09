@@ -13,7 +13,9 @@ export class CreateLocationDto {
   @IsNotEmpty()
   driverId: string;
 
-  @Transform(({ value }) => (value === undefined || value === null ? undefined : String(value).trim()))
+  @Transform(({ value }) =>
+    value === undefined || value === null ? undefined : String(value).trim(),
+  )
   @IsString()
   @IsOptional()
   busId?: string;

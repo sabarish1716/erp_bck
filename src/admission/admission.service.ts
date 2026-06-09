@@ -3,18 +3,31 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateAdmissionDto } from './create-admission.dto';
 import { Standard, AcademicStream } from '@prisma/client';
 
-
-
 // Calculates TOTAL row values for the qualifying examination table.
 // Uses explicit values if provided by the frontend; falls back to summing subjects.
-function calcAcademicTotals(acad: { totalMaxMarks?: number; totalObtainedMarks?: number; totalPercentage?: number; subjects?: { maxMarks: number; obtainedMarks: number }[] }) {
+function calcAcademicTotals(acad: {
+  totalMaxMarks?: number;
+  totalObtainedMarks?: number;
+  totalPercentage?: number;
+  subjects?: { maxMarks: number; obtainedMarks: number }[];
+}) {
   const subjects = acad.subjects ?? [];
-  const totalMax = acad.totalMaxMarks ?? subjects.reduce((s, x) => s + (x.maxMarks ?? 0), 0);
-  const totalObtained = acad.totalObtainedMarks ?? subjects.reduce((s, x) => s + (x.obtainedMarks ?? 0), 0);
-  const totalPct = acad.totalPercentage != null
-    ? parseFloat(acad.totalPercentage as any)
-    : totalMax > 0 ? parseFloat(((totalObtained / totalMax) * 100).toFixed(2)) : null;
-  return { totalMaxMarks: totalMax || null, totalObtainedMarks: totalObtained || null, totalPercentage: totalPct };
+  const totalMax =
+    acad.totalMaxMarks ?? subjects.reduce((s, x) => s + (x.maxMarks ?? 0), 0);
+  const totalObtained =
+    acad.totalObtainedMarks ??
+    subjects.reduce((s, x) => s + (x.obtainedMarks ?? 0), 0);
+  const totalPct =
+    acad.totalPercentage != null
+      ? parseFloat(acad.totalPercentage as any)
+      : totalMax > 0
+        ? parseFloat(((totalObtained / totalMax) * 100).toFixed(2))
+        : null;
+  return {
+    totalMaxMarks: totalMax || null,
+    totalObtainedMarks: totalObtained || null,
+    totalPercentage: totalPct,
+  };
 }
 
 // Map frontend standard values (e.g. "1", "LKG", "11") to Prisma Standard enum
@@ -26,10 +39,11 @@ function toStandardEnum(val?: string): Standard {
   const numMatch = upper.replace(/[^0-9]/g, '');
   if (numMatch) {
     const num = parseInt(numMatch, 10);
-    if (num >= 1 && num <= 12) return (`STD_${num}` as Standard);
+    if (num >= 1 && num <= 12) return `STD_${num}` as Standard;
   }
   // Already an enum value?
-  if (Object.values(Standard).includes(upper as Standard)) return upper as Standard;
+  if (Object.values(Standard).includes(upper as Standard))
+    return upper as Standard;
   return Standard.STD_1;
 }
 
@@ -42,7 +56,14 @@ function toAcademicStreamEnum(val?: string | null): string | null {
     .replace(/[-\s]+/g, '_');
 
   // We return the normalized string which matches the 'name' in the AcademicStream model
-  const standardStreams = ['BIO_MATHS', 'CS_MATHS', 'BIO_CS', 'COMMERCE', 'HUMANITIES', 'OTHERS'];
+  const standardStreams = [
+    'BIO_MATHS',
+    'CS_MATHS',
+    'BIO_CS',
+    'COMMERCE',
+    'HUMANITIES',
+    'OTHERS',
+  ];
   if (standardStreams.includes(normalized)) {
     return normalized;
   }
@@ -56,8 +77,6 @@ function toAcademicStreamEnum(val?: string | null): string | null {
 
   return aliases[normalized] ?? normalized;
 }
-
-
 
 function getAcademicYearDateRange(academicYear?: string) {
   if (!academicYear) return null;
@@ -78,7 +97,9 @@ function getAcademicYearDateRange(academicYear?: string) {
 
 function normalizeAcademicYear(academicYear?: string | null) {
   if (!academicYear) return null;
-  const match = String(academicYear).trim().match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
+  const match = String(academicYear)
+    .trim()
+    .match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
   if (!match) return null;
 
   const startYear = parseInt(match[1], 10);
@@ -113,7 +134,9 @@ function asOptionalString(value: unknown) {
 
 function parseBooleanFlag(value: unknown) {
   if (typeof value === 'boolean') return value;
-  const normalized = String(value ?? '').trim().toLowerCase();
+  const normalized = String(value ?? '')
+    .trim()
+    .toLowerCase();
   return ['true', 'yes', '1', 'y'].includes(normalized);
 }
 
@@ -133,126 +156,136 @@ function parseSubjectsJson(value: unknown) {
 
     return parsed
       .map((subject) => ({
-        subjectName: asOptionalString(subject?.subjectName ?? subject?.subject ?? subject?.name),
+        subjectName: asOptionalString(
+          subject?.subjectName ?? subject?.subject ?? subject?.name,
+        ),
         maxMarks: parseOptionalNumber(subject?.maxMarks ?? subject?.maxMark),
-        obtainedMarks: parseOptionalNumber(subject?.obtainedMarks ?? subject?.marksObtained ?? subject?.score),
+        obtainedMarks: parseOptionalNumber(
+          subject?.obtainedMarks ?? subject?.marksObtained ?? subject?.score,
+        ),
       }))
-      .filter((subject) => subject.subjectName && subject.maxMarks != null && subject.obtainedMarks != null);
+      .filter(
+        (subject) =>
+          subject.subjectName &&
+          subject.maxMarks != null &&
+          subject.obtainedMarks != null,
+      );
   } catch {
     return [];
   }
 }
 
-const BULK_UPLOAD_ALLOWED_KEYS = new Set(
-  [
-    'name',
-    'standard',
-    'gender',
-    'dob',
-    'religion',
-    'community',
-    'communityother',
-    'customcommunity',
-    'caste',
-    'mothertongue',
-    'aadharno',
-    'bloodgroup',
-    'identitymark1',
-    'identitymark2',
-    'previouslystudied',
-    'previousschool',
-    'previousschoolstandard',
-    'transportmode',
-    'vanneeded',
-    'rte',
-    'rteapplied',
-    'section',
-    'academicyear',
-    'academicstream',
-    'academicstreamcustom',
-    'preferredphone',
-    'parentsemail',
-    'email',
-    'fathername',
-    'fatherphone',
-    'fatherwhatsappno',
-    'fatherwhatsapp',
-    'fatheraadharno',
-    'fatheraadhar',
-    'fatheroccupation',
-    'mothername',
-    'motherphone',
-    'motherwhatsappno',
-    'motherwhatsapp',
-    'motheraadharno',
-    'motheraadhar',
-    'motheroccupation',
-    'familyincome',
-    'siblingscount',
-    'sibblings',
-    'hostelrequired',
-    'issingleparent',
-    'guardianname',
-    'guardianphone',
-    'guardianwhatsapp',
-    'guardianaadhar',
-    'guardianoccupation',
-    'guardianrelation',
-    'sibling1name',
-    'sibling1standard',
-    'sibling1school',
-    'sibling2name',
-    'sibling2standard',
-    'sibling2school',
-    'doorno',
-    'street',
-    'landmark',
-    'city',
-    'state',
-    'pin',
-    'line1',
-    'line2',
-    'line3',
-    'villagepoarea',
-    'nearbusstand',
-    'examname',
-    'boardexamtype',
-    'boardname',
-    'registerno',
-    'monthyear',
-    'totalmaxmarks',
-    'totalobtainedmarks',
-    'totalpercentage',
-    'subjectsjson',
-    'admissiondate',
-    'admissionfrom',
-    'admissionto',
-    'admissionno',
-    'admissionnumber',
-    'taluk',
-    'district',
-    'pincode',
-    'examinationname',
-    'overallpercentage',
-    'studentname',
-    'dateofbirth',
-    'rteappliedstudent',
-    'fathermobile',
-    'fatherwhatsapp',
-    'mothermobile',
-    'motherwhatsapp',
-    'numberofsiblings',
-    'preferredcontact',
-    'parentsemailid',
-    'singleparent',
-    'doornohoouseno',
-    'streetvillage',
-    'dateofappearance',
-  ],
-);
+const BULK_UPLOAD_ALLOWED_KEYS = new Set([
+  'name',
+  'standard',
+  'gender',
+  'dob',
+  'religion',
+  'community',
+  'communityother',
+  'customcommunity',
+  'caste',
+  'mothertongue',
+  'aadharno',
+  'bloodgroup',
+  'identitymark1',
+  'identitymark2',
+  'previouslystudied',
+  'previousschool',
+  'previousschoolstandard',
+  'transportmode',
+  'vanneeded',
+  'rte',
+  'rteapplied',
+  'section',
+  'academicyear',
+  'academicstream',
+  'academicstreamcustom',
+  'preferredphone',
+  'parentsemail',
+  'email',
+  'fathername',
+  'fatherphone',
+  'fatherwhatsappno',
+  'fatherwhatsapp',
+  'fatheraadharno',
+  'fatheraadhar',
+  'fatheroccupation',
+  'mothername',
+  'motherphone',
+  'motherwhatsappno',
+  'motherwhatsapp',
+  'motheraadharno',
+  'motheraadhar',
+  'motheroccupation',
+  'familyincome',
+  'siblingscount',
+  'sibblings',
+  'hostelrequired',
+  'issingleparent',
+  'guardianname',
+  'guardianphone',
+  'guardianwhatsapp',
+  'guardianaadhar',
+  'guardianoccupation',
+  'guardianrelation',
+  'sibling1name',
+  'sibling1standard',
+  'sibling1school',
+  'sibling2name',
+  'sibling2standard',
+  'sibling2school',
+  'doorno',
+  'street',
+  'landmark',
+  'city',
+  'state',
+  'pin',
+  'line1',
+  'line2',
+  'line3',
+  'villagepoarea',
+  'nearbusstand',
+  'examname',
+  'boardexamtype',
+  'boardname',
+  'registerno',
+  'monthyear',
+  'totalmaxmarks',
+  'totalobtainedmarks',
+  'totalpercentage',
+  'subjectsjson',
+  'admissiondate',
+  'admissionfrom',
+  'admissionto',
+  'admissionno',
+  'admissionnumber',
+  'taluk',
+  'district',
+  'pincode',
+  'examinationname',
+  'overallpercentage',
+  'studentname',
+  'dateofbirth',
+  'rteappliedstudent',
+  'fathermobile',
+  'fatherwhatsapp',
+  'mothermobile',
+  'motherwhatsapp',
+  'numberofsiblings',
+  'preferredcontact',
+  'parentsemailid',
+  'singleparent',
+  'doornohoouseno',
+  'streetvillage',
+  'dateofappearance',
+]);
 
 function normalizeBulkUploadKey(key: string): string {
-  return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+  return key
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
 const BULK_UPLOAD_TEMPLATE_HEADERS = [
@@ -330,7 +363,7 @@ const BULK_UPLOAD_TEMPLATE_HEADERS = [
  * - If school is "Other School", the customSchoolName is required and stored
  * - If school is anything else (e.g., "Same School" or predefined), customSchoolName is cleared
  * - Validates that customSchoolName is provided when "Other School" is selected
- * 
+ *
  * @param siblingNumber - "1" or "2" for the sibling identifier
  * @param schoolValue - The selected school value
  * @param customSchoolName - The custom school name (for "Other School" selection)
@@ -340,22 +373,25 @@ function processSiblingSchoolSelection(
   siblingNumber: string,
   schoolValue?: string,
   customSchoolName?: string,
-): { processedSchool: string | null; processedCustomSchoolName: string | null } {
+): {
+  processedSchool: string | null;
+  processedCustomSchoolName: string | null;
+} {
   // If no school selected, return nulls
   if (!schoolValue) {
     return { processedSchool: null, processedCustomSchoolName: null };
   }
 
   // If "Other School" is selected, custom school name is required
-  if (schoolValue === "Other School") {
-    if (!customSchoolName || customSchoolName.trim() === "") {
+  if (schoolValue === 'Other School') {
+    if (!customSchoolName || customSchoolName.trim() === '') {
       throw new BadRequestException(
-        `Sibling ${siblingNumber}: "Other School" selected but school name not provided. Please enter the school name.`
+        `Sibling ${siblingNumber}: "Other School" selected but school name not provided. Please enter the school name.`,
       );
     }
     // Store the custom school name and set school to "Other School"
     return {
-      processedSchool: "Other School",
+      processedSchool: 'Other School',
       processedCustomSchoolName: customSchoolName.trim(),
     };
   }
@@ -371,11 +407,7 @@ function processSiblingSchoolSelection(
 export class AdmissionService {
   constructor(private prisma: PrismaService) {}
 
-
-
-
-
-   // 👇 your methods here
+  // 👇 your methods here
 
   async saveFamily(data: any) {
     const familyData = {
@@ -385,25 +417,25 @@ export class AdmissionService {
       fatherAadhar: data.fatherAadhar,
       fatherOccupation: data.fatherOccupation,
       preferredPhone: data.preferredPhone,
-      parentsEmail: data.parentsEmail
+      parentsEmail: data.parentsEmail,
     };
 
     const existingFamily = await this.prisma.family.findUnique({
-      where: { studentId: data.studentId }
+      where: { studentId: data.studentId },
     });
 
     if (existingFamily) {
       return this.prisma.family.update({
         where: { studentId: data.studentId },
-        data: familyData
+        data: familyData,
       });
     }
 
     return this.prisma.family.create({
       data: {
         studentId: data.studentId,
-        ...familyData
-      }
+        ...familyData,
+      },
     });
   }
 
@@ -449,7 +481,6 @@ export class AdmissionService {
       }
     }
 
-
     return `${prefix}${String(nextSeq).padStart(4, '0')}`;
   }
 
@@ -489,24 +520,36 @@ export class AdmissionService {
   async bulkCreateFromCsv(rows: any[]) {
     this.validateBulkUploadRows(rows);
 
-    const results: { row: number; status: string; admissionNo?: string; error?: string }[] = [];
+    const results: {
+      row: number;
+      status: string;
+      admissionNo?: string;
+      error?: string;
+    }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       try {
-        const requestedAdmissionNo = asOptionalString(row.admissionNo || row.admissionNumber);
+        const requestedAdmissionNo = asOptionalString(
+          row.admissionNo || row.admissionNumber,
+        );
         const admissionNo =
           !requestedAdmissionNo || requestedAdmissionNo.toUpperCase() === 'AUTO'
             ? await this.generateAdmissionNo()
             : requestedAdmissionNo;
 
-        const rowAcademicYear = normalizeAcademicYear(asOptionalString(row.academicYear)) || undefined;
+        const rowAcademicYear =
+          normalizeAcademicYear(asOptionalString(row.academicYear)) ||
+          undefined;
         const rowSubjects = parseSubjectsJson(row.subjectsJson);
         const boardName = asOptionalString(row.boardName);
 
-        const transportRaw = asOptionalString(row.transportmode || row.transportMode);
+        const transportRaw = asOptionalString(
+          row.transportmode || row.transportMode,
+        );
         let transportMode = transportRaw;
-        if (transportRaw?.toLowerCase() === 'school van') transportMode = 'School Van';
+        if (transportRaw?.toLowerCase() === 'school van')
+          transportMode = 'School Van';
         if (transportRaw?.toLowerCase() === 'local') transportMode = 'Local';
         if (transportRaw?.toLowerCase() === 'van') transportMode = 'School Van';
 
@@ -517,22 +560,40 @@ export class AdmissionService {
           dob: asOptionalString(row.dob || row.dateOfBirth),
           religion: asOptionalString(row.religion),
           community: asOptionalString(row.community) || 'OTHERS',
-          customCommunity: asOptionalString(row.communityOther || row.customCommunity),
+          customCommunity: asOptionalString(
+            row.communityOther || row.customCommunity,
+          ),
           caste: asOptionalString(row.caste),
           motherTongue: asOptionalString(row.motherTongue),
           aadharNo: asOptionalString(row.aadharNo),
           bloodGroup: asOptionalString(row.bloodGroup),
-          identification1: asOptionalString(row.identityMark1 || row.identification1),
-          identification2: asOptionalString(row.identityMark2 || row.identification2),
-          previousSchool: asOptionalString(row.previouslyStudied || row.previousSchool),
-          transportMode: transportMode || (parseBooleanFlag(row.vanNeeded) ? 'School Van' : undefined),
-          rte: parseBooleanFlag(row.rte) || parseBooleanFlag(row.rteApplied || row.rteAppliedStudent),
+          identification1: asOptionalString(
+            row.identityMark1 || row.identification1,
+          ),
+          identification2: asOptionalString(
+            row.identityMark2 || row.identification2,
+          ),
+          previousSchool: asOptionalString(
+            row.previouslyStudied || row.previousSchool,
+          ),
+          transportMode:
+            transportMode ||
+            (parseBooleanFlag(row.vanNeeded) ? 'School Van' : undefined),
+          rte:
+            parseBooleanFlag(row.rte) ||
+            parseBooleanFlag(row.rteApplied || row.rteAppliedStudent),
           section: asOptionalString(row.section),
           academicYear: rowAcademicYear,
-          academicStream: toAcademicStreamEnum(asOptionalString(row.academicStream)),
-          preferredPhone: asOptionalString(row.preferredPhone || row.preferredContact),
-          parentsEmail: asOptionalString(row.parentsEmail || row.parentsEmailId || row.email),
-          
+          academicStream: toAcademicStreamEnum(
+            asOptionalString(row.academicStream),
+          ),
+          preferredPhone: asOptionalString(
+            row.preferredPhone || row.preferredContact,
+          ),
+          parentsEmail: asOptionalString(
+            row.parentsEmail || row.parentsEmailId || row.email,
+          ),
+
           address: {
             doorNo: asOptionalString(row.doorNo || row.doorNoHouseNo),
             street: asOptionalString(row.street || row.streetVillage),
@@ -540,8 +601,12 @@ export class AdmissionService {
             city: asOptionalString(row.district || row.city),
             state: asOptionalString(row.state),
             pin: asOptionalString(row.pin || row.pincode),
-            line1: asOptionalString(row.doorNo || row.doorNoHouseNo) || asOptionalString(row.line1),
-            line2: asOptionalString(row.street || row.streetVillage) || asOptionalString(row.line2),
+            line1:
+              asOptionalString(row.doorNo || row.doorNoHouseNo) ||
+              asOptionalString(row.line1),
+            line2:
+              asOptionalString(row.street || row.streetVillage) ||
+              asOptionalString(row.line2),
             line3: asOptionalString(row.line3 || row.villagePoArea),
           },
 
@@ -550,34 +615,56 @@ export class AdmissionService {
               examName: asOptionalString(row.examName || row.examinationName),
               boardName: boardName,
               registerNo: asOptionalString(row.registerNo),
-              monthYear: asOptionalString(row.monthYear || row.dateOfAppearance),
+              monthYear: asOptionalString(
+                row.monthYear || row.dateOfAppearance,
+              ),
               totalMaxMarks: Number(row.totalMaxMarks) || undefined,
               totalObtainedMarks: Number(row.totalObtainedMarks) || undefined,
-              totalPercentage: Number(row.totalPercentage || row.overallPercentage) || undefined,
+              totalPercentage:
+                Number(row.totalPercentage || row.overallPercentage) ||
+                undefined,
               subjects: rowSubjects,
-              stream: toAcademicStreamEnum(asOptionalString(row.academicStream)),
-            }
+              stream: toAcademicStreamEnum(
+                asOptionalString(row.academicStream),
+              ),
+            },
           ],
 
           family: {
             fatherName: asOptionalString(row.fatherName),
             fatherPhone: asOptionalString(row.fatherPhone || row.fatherMobile),
-            fatherWhatsapp: asOptionalString(row.fatherWhatsAppNo || row.fatherWhatsApp || row.fatherWhatsapp),
-            fatherAadhar: asOptionalString(row.fatherAadharNo || row.fatherAadhar),
+            fatherWhatsapp: asOptionalString(
+              row.fatherWhatsAppNo || row.fatherWhatsApp || row.fatherWhatsapp,
+            ),
+            fatherAadhar: asOptionalString(
+              row.fatherAadharNo || row.fatherAadhar,
+            ),
             fatherOccupation: asOptionalString(row.fatherOccupation),
             motherName: asOptionalString(row.motherName),
             motherPhone: asOptionalString(row.motherPhone || row.motherMobile),
-            motherWhatsapp: asOptionalString(row.motherWhatsAppNo || row.motherWhatsApp || row.motherWhatsapp),
-            motherAadhar: asOptionalString(row.motherAadharNo || row.motherAadhar),
+            motherWhatsapp: asOptionalString(
+              row.motherWhatsAppNo || row.motherWhatsApp || row.motherWhatsapp,
+            ),
+            motherAadhar: asOptionalString(
+              row.motherAadharNo || row.motherAadhar,
+            ),
             motherOccupation: asOptionalString(row.motherOccupation),
             familyIncome: asOptionalString(row.familyIncome),
-            siblings: asOptionalString(row.siblingsCount || row.numberOfSiblings || row.sibblings),
+            siblings: asOptionalString(
+              row.siblingsCount || row.numberOfSiblings || row.sibblings,
+            ),
             hostelRequired: parseBooleanFlag(row.hostelRequired),
-            isSingleParent: parseBooleanFlag(row.isSingleParent || row.singleParent),
+            isSingleParent: parseBooleanFlag(
+              row.isSingleParent || row.singleParent,
+            ),
             guardianName: asOptionalString(row.guardianName),
             guardianPhone: asOptionalString(row.guardianPhone),
-            guardianWhatsapp: asOptionalString(row.guardianWhatsapp || row.guardianWhatsApp),
-            guardianAadhar: asOptionalString(row.guardianAadhar || row.guardianAadhar),
+            guardianWhatsapp: asOptionalString(
+              row.guardianWhatsapp || row.guardianWhatsApp,
+            ),
+            guardianAadhar: asOptionalString(
+              row.guardianAadhar || row.guardianAadhar,
+            ),
             guardianOccupation: asOptionalString(row.guardianOccupation),
             guardianRelation: asOptionalString(row.guardianRelation),
             sibling1Name: asOptionalString(row.sibling1Name),
@@ -595,17 +682,23 @@ export class AdmissionService {
             admissionTo: asOptionalString(row.admissionTo),
             principalSignature: 'Pending',
           },
-          email: asOptionalString(row.email) || `student_${Date.now()}_${i}@school.local`,
+          email:
+            asOptionalString(row.email) ||
+            `student_${Date.now()}_${i}@school.local`,
         } as CreateAdmissionDto);
 
         results.push({ row: i + 1, status: 'success', admissionNo });
       } catch (error: any) {
-        results.push({ row: i + 1, status: 'error', error: error?.message || 'Upload failed' });
+        results.push({
+          row: i + 1,
+          status: 'error',
+          error: error?.message || 'Upload failed',
+        });
       }
     }
 
-    const successCount = results.filter(r => r.status === 'success').length;
-    const errorCount = results.filter(r => r.status === 'error').length;
+    const successCount = results.filter((r) => r.status === 'success').length;
+    const errorCount = results.filter((r) => r.status === 'error').length;
 
     return { total: rows.length, successCount, errorCount, results };
   }
@@ -680,13 +773,17 @@ export class AdmissionService {
       '',
     ].map((cell) => this.escapeCsvCell(cell));
 
-    return [BULK_UPLOAD_TEMPLATE_HEADERS.join(','), sampleRow.join(',')].join('\n');
+    return [BULK_UPLOAD_TEMPLATE_HEADERS.join(','), sampleRow.join(',')].join(
+      '\n',
+    );
   }
 
   private validateBulkUploadRows(rows: any[]) {
     rows.forEach((row, index) => {
       if (!row || typeof row !== 'object' || Array.isArray(row)) {
-        throw new BadRequestException(`Row ${index + 1} is invalid. Each row must be an object.`);
+        throw new BadRequestException(
+          `Row ${index + 1} is invalid. Each row must be an object.`,
+        );
       }
 
       const keys = Object.keys(row).filter((key) => key.trim() !== '');
@@ -694,7 +791,9 @@ export class AdmissionService {
         throw new BadRequestException(`Row ${index + 1} is empty.`);
       }
 
-      const unsupported = keys.filter((key) => !BULK_UPLOAD_ALLOWED_KEYS.has(normalizeBulkUploadKey(key)));
+      const unsupported = keys.filter(
+        (key) => !BULK_UPLOAD_ALLOWED_KEYS.has(normalizeBulkUploadKey(key)),
+      );
       if (unsupported.length > 0) {
         throw new BadRequestException(
           `Row ${index + 1} contains non-application columns: ${unsupported.join(', ')}. Download and use the bulk upload template.`,
@@ -703,15 +802,20 @@ export class AdmissionService {
     });
   }
 
-  private async moveStudentDocuments(docs: any, admissionNo: string, standard: string) {
+  private async moveStudentDocuments(
+    docs: any,
+    admissionNo: string,
+    standard: string,
+  ) {
     if (!docs) return docs;
     const fs = await import('fs/promises');
     const path = await import('path');
-    
+
     // Sanitize admission number to avoid creating nested folders because of slashes
     const safeAdmissionNo = admissionNo.replace(/[\/\\]/g, '_');
     const folderName = `${safeAdmissionNo}_${standard}`;
-    const baseStoragePath = process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
+    const baseStoragePath =
+      process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
     const targetDir = path.join(baseStoragePath, folderName);
 
     let dirCreated = false;
@@ -722,24 +826,32 @@ export class AdmissionService {
       }
     };
 
-    const normalizePath = (p: string | undefined | null) => typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+    const normalizePath = (p: string | undefined | null) =>
+      typeof p === 'string' ? p.replace(/\\/g, '/') : '';
 
     const moveFile = async (currentPath: string) => {
       if (!currentPath) return '';
-      
+
       const fileName = path.basename(currentPath);
-      
+
       // If already in target folder
-      if (currentPath.includes(`/${folderName}/`) || currentPath.includes(`\\${folderName}\\`)) {
+      if (
+        currentPath.includes(`/${folderName}/`) ||
+        currentPath.includes(`\\${folderName}\\`)
+      ) {
         return normalizePath(currentPath);
       }
 
       // Check if it's in the base storage paths
-      if (currentPath.startsWith('student_documents/') || currentPath.startsWith('student_documents\\') || 
-          currentPath.startsWith('uploads/') || currentPath.startsWith('uploads\\')) {
+      if (
+        currentPath.startsWith('student_documents/') ||
+        currentPath.startsWith('student_documents\\') ||
+        currentPath.startsWith('uploads/') ||
+        currentPath.startsWith('uploads\\')
+      ) {
         try {
           await ensureDir();
-          
+
           let physicalSrcPath = '';
           if (currentPath.startsWith('student_documents')) {
             physicalSrcPath = path.join(baseStoragePath, fileName);
@@ -748,15 +860,18 @@ export class AdmissionService {
           }
 
           const newPath = path.join(targetDir, fileName);
-          
+
           // Verify source exists before moving
           await fs.access(physicalSrcPath);
           await fs.rename(physicalSrcPath, newPath);
-          
+
           return `student_documents/${folderName}/${fileName}`;
         } catch (err: any) {
           if (err.code !== 'ENOENT') {
-            console.error(`Failed to move file ${currentPath} to ${targetDir}:`, err);
+            console.error(
+              `Failed to move file ${currentPath} to ${targetDir}:`,
+              err,
+            );
           }
           return normalizePath(currentPath);
         }
@@ -764,7 +879,16 @@ export class AdmissionService {
       return normalizePath(currentPath);
     };
 
-    const docKeys = ['profilePhoto', 'photo', 'birthCert', 'communityCert', 'aadharStudent', 'aadharFather', 'aadharMother', 'transferCert'];
+    const docKeys = [
+      'profilePhoto',
+      'photo',
+      'birthCert',
+      'communityCert',
+      'aadharStudent',
+      'aadharFather',
+      'aadharMother',
+      'transferCert',
+    ];
     for (const key of docKeys) {
       if (docs[key]?.path) {
         docs[key].path = await moveFile(docs[key].path);
@@ -775,274 +899,349 @@ export class AdmissionService {
   }
 
   async createAdmission(data: CreateAdmissionDto, user?: any, files?: any) {
-  // Fetch admin settings to check if approval is required
-  const settingsRow = await this.prisma.appSetting.findUnique({ where: { key: 'admin.settings' } });
-  const settings = (settingsRow?.value as Record<string, unknown>) || {};
-  const requireApproval = settings.requireApprovalForAdmission === true || settings.requireApprovalForAdmission === 'true';
+    // Fetch admin settings to check if approval is required
+    const settingsRow = await this.prisma.appSetting.findUnique({
+      where: { key: 'admin.settings' },
+    });
+    const settings = (settingsRow?.value as Record<string, unknown>) || {};
+    const requireApproval =
+      settings.requireApprovalForAdmission === true ||
+      settings.requireApprovalForAdmission === 'true';
 
-  const admissionNo = (!data.admission?.admissionNo || data.admission.admissionNo === 'AUTO')
-    ? await this.generateAdmissionNo()
-    : data.admission.admissionNo;
+    const admissionNo =
+      !data.admission?.admissionNo || data.admission.admissionNo === 'AUTO'
+        ? await this.generateAdmissionNo()
+        : data.admission.admissionNo;
 
-  if (!data.admission) data.admission = {} as any;
-  data.admission!.admissionNo = admissionNo;
+    if (!data.admission) data.admission = {} as any;
+    data.admission!.admissionNo = admissionNo;
 
-  const standardStr = data.admission!.standard || data.standard || 'UNKNOWN';
+    const standardStr = data.admission!.standard || data.standard || 'UNKNOWN';
 
-  if (data.documents) {
-    data.documents = await this.moveStudentDocuments(data.documents, admissionNo, standardStr);
-  }
-
-  const normalizePath = (p: string | undefined | null) =>
-    typeof p === 'string' ? p.replace(/\\/g, '/') : '';
-
-  // ✅ Safe fallback
-  const docs = data.documents || {};
-
-  
-  return this.prisma.student.create({
-    data: {
-  name: data.name ?? '',   // ✅ fix
-      standard: toStandardEnum(data.standard),
-      gender: data.gender || 'MALE',
-      dob: data.dob ? new Date(data.dob) : new Date(),
-      religion: data.religion,
-      community: data.community || 'OTHERS',
-      caste: data.caste,
-      customCommunity: data.customCommunity,
-      motherTongue: data.motherTongue,
-      aadharNo: data.aadharNo,
-      bloodGroup: data.bloodGroup,
-      identification1: data.identification1,
-      identification2: data.identification2,
-      previousSchool: data.previousSchool,
-      transportMode: data.transportMode,
-      rte: data.rte || false,
-      academicStream: (val => val ? { connect: { name: val } } : undefined)(toAcademicStreamEnum(data.academicStream)),
-
-
-
-
-      section: data.section || null,
-
-      academicYear: data.academicYear || `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-      staffParent: data.staffParentId ? { connect: { id: data.staffParentId } } : undefined,
-
-      siblingGroupId: data.siblingGroupId || null,
-
-      // ✅ FAMILY
-      family: data.family
-  ? {
-      create: {
-        fatherName: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherName,
-        fatherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherPhone,
-        fatherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherWhatsapp,
-        fatherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherAadhar,
-        fatherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherOccupation,
-preferredPhone: data.preferredPhone,
-parentsEmail: data.parentsEmail,
-        motherName: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherName,
-        motherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherPhone,
-        motherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherWhatsapp,
-        motherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherAadhar,
-        motherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherOccupation,
-
-        // Single parent & guardian
-        isSingleParent: data.family.isSingleParent || false,
-        guardianName: data.family.guardianName,
-        guardianPhone: data.family.guardianPhone,
-        guardianWhatsapp: data.family.guardianWhatsapp,
-        guardianAadhar: data.family.guardianAadhar,
-        guardianOccupation: data.family.guardianOccupation,
-        guardianRelation: data.family.guardianRelation,
-
-        // ✅ Sibling 1 details with school selection validation
-        sibling1Name: data.family.sibling1Name,
-        sibling1Standard: data.family.sibling1Standard,
-        ...(() => {
-          const sibling1Result = processSiblingSchoolSelection(
-            "1",
-            data.family.sibling1School,
-            data.family.sibling1OtherSchoolName,
-          );
-          return {
-            sibling1School: sibling1Result.processedSchool,
-            sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
-          };
-        })(),
-
-        // ✅ Sibling 2 details with school selection validation
-        sibling2Name: data.family.sibling2Name,
-        sibling2Standard: data.family.sibling2Standard,
-        ...(() => {
-          const sibling2Result = processSiblingSchoolSelection(
-            "2",
-            data.family.sibling2School,
-            data.family.sibling2OtherSchoolName,
-          );
-          return {
-            sibling2School: sibling2Result.processedSchool,
-            sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
-          };
-        })(),
-
-        familyIncome: data.family.familyIncome
-          ? parseFloat(data.family.familyIncome)
-          : null,
-        siblings: data.family.siblings,
-        hostelRequired: data.family.hostelRequired || false,
-      },
+    if (data.documents) {
+      data.documents = await this.moveStudentDocuments(
+        data.documents,
+        admissionNo,
+        standardStr,
+      );
     }
-        : undefined,
 
-      // ✅ ADDRESS
-      address: data.address
-        ? {
-            create: {
-               doorNo: data.address.doorNo || data.address.line1 || 'Pending',
-  street: data.address.street || data.address.line2 || '',
-  landmark: data.address.landmark || '',
-  city: data.address.city || '',
-  state: data.address.state || '',
-  line1: data.address.doorNo || data.address.line1 || 'Pending',
-  line2: data.address.street || data.address.line2 || '',
-  line3: data.address.line3 || [data.address.landmark, data.address.city, data.address.state].filter(Boolean).join(', '),
-  pin: data.address.pin || '000000',
-}
-          }
-        : undefined,
+    const normalizePath = (p: string | undefined | null) =>
+      typeof p === 'string' ? p.replace(/\\/g, '/') : '';
 
-      // ✅ DOCUMENTS (FIXED)
-      documents: data.documents
-        ? {
-            create: [
-              {
-                photo: docs.profilePhoto?.uploaded ?? docs.photo?.uploaded ?? false,
-                photoPath: normalizePath(docs.profilePhoto?.path || docs.photo?.path),
+    // ✅ Safe fallback
+    const docs = data.documents || {};
 
-                birthCert: docs.birthCert?.uploaded ?? false,
-                birthCertPath: normalizePath(docs.birthCert?.path),
-                birthCertHardCopy: docs.birthCert?.hardCopy ?? false,
+    return this.prisma.student.create({
+      data: {
+        name: data.name ?? '', // ✅ fix
+        standard: toStandardEnum(data.standard),
+        gender: data.gender || 'MALE',
+        dob: data.dob ? new Date(data.dob) : new Date(),
+        religion: data.religion,
+        community: data.community || 'OTHERS',
+        caste: data.caste,
+        customCommunity: data.customCommunity,
+        motherTongue: data.motherTongue,
+        aadharNo: data.aadharNo,
+        bloodGroup: data.bloodGroup,
+        identification1: data.identification1,
+        identification2: data.identification2,
+        previousSchool: data.previousSchool,
+        transportMode: data.transportMode,
+        rte: data.rte || false,
+        academicStream: ((val) =>
+          val ? { connect: { name: val } } : undefined)(
+          toAcademicStreamEnum(data.academicStream),
+        ),
 
-                communityCert: docs.communityCert?.uploaded ?? false,
-                communityCertPath: normalizePath(docs.communityCert?.path),
-                communityCertHardCopy: docs.communityCert?.hardCopy ?? false,
+        section: data.section || null,
 
-                aadharStudent: docs.aadharStudent?.uploaded ?? false,
-                aadharStudentPath: normalizePath(docs.aadharStudent?.path),
-                aadharStudentHardCopy: docs.aadharStudent?.hardCopy ?? false,
+        academicYear:
+          data.academicYear ||
+          `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+        staffParent: data.staffParentId
+          ? { connect: { id: data.staffParentId } }
+          : undefined,
 
-                aadharFather: docs.aadharFather?.uploaded ?? false,
-                aadharFatherPath: normalizePath(docs.aadharFather?.path),
-                aadharFatherHardCopy: docs.aadharFather?.hardCopy ?? false,
+        siblingGroupId: data.siblingGroupId || null,
 
-                aadharMother: docs.aadharMother?.uploaded ?? false,
-                aadharMotherPath: normalizePath(docs.aadharMother?.path),
-                aadharMotherHardCopy: docs.aadharMother?.hardCopy ?? false,
-
-                transferCert: docs.transferCert?.uploaded ?? false,
-                transferCertPath: normalizePath(docs.transferCert?.path),
-                transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
-
-                photosReceived: (data as any).photosReceived ?? docs.photosReceived ?? false,
-              },
-            ],
-          }
-        : undefined,
-
-      // ✅ ACADEMICS — stores the qualifying examination table (SSLC/MATRIC/CBSE)
-      academics:
-        data.academics && data.academics.length > 0
+        // ✅ FAMILY
+        family: data.family
           ? {
-              create: await Promise.all(data.academics.map(async (acad) => {
-                const totals = calcAcademicTotals({
-                  ...acad,
-                  subjects: acad.subjects?.map(s => ({
-                    maxMarks: s.maxMarks ?? 0,
-                    obtainedMarks: s.obtainedMarks ?? 0
-                  }))
-                });
-                return {
-                  examName: acad.examName,
-                  boardName: acad.boardName || 'State Board',
-                  registerNo: acad.registerNo,
-                  monthYear: acad.monthYear,
-                  totalMaxMarks: totals.totalMaxMarks,
-                  totalObtainedMarks: totals.totalObtainedMarks,
-                  totalPercentage: totals.totalPercentage,
-                  academicStream: (val => val ? { connect: { name: val } } : undefined)(toAcademicStreamEnum(acad.stream)),
+              create: {
+                fatherName:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'father'
+                    ? null
+                    : data.family.fatherName,
+                fatherPhone:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'father'
+                    ? null
+                    : data.family.fatherPhone,
+                fatherWhatsapp:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'father'
+                    ? null
+                    : data.family.fatherWhatsapp,
+                fatherAadhar:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'father'
+                    ? null
+                    : data.family.fatherAadhar,
+                fatherOccupation:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'father'
+                    ? null
+                    : data.family.fatherOccupation,
+                preferredPhone: data.preferredPhone,
+                parentsEmail: data.parentsEmail,
+                motherName:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'mother'
+                    ? null
+                    : data.family.motherName,
+                motherPhone:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'mother'
+                    ? null
+                    : data.family.motherPhone,
+                motherWhatsapp:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'mother'
+                    ? null
+                    : data.family.motherWhatsapp,
+                motherAadhar:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'mother'
+                    ? null
+                    : data.family.motherAadhar,
+                motherOccupation:
+                  data.family.isSingleParent &&
+                  data.family.guardianRelation !== 'mother'
+                    ? null
+                    : data.family.motherOccupation,
 
+                // Single parent & guardian
+                isSingleParent: data.family.isSingleParent || false,
+                guardianName: data.family.guardianName,
+                guardianPhone: data.family.guardianPhone,
+                guardianWhatsapp: data.family.guardianWhatsapp,
+                guardianAadhar: data.family.guardianAadhar,
+                guardianOccupation: data.family.guardianOccupation,
+                guardianRelation: data.family.guardianRelation,
 
+                // ✅ Sibling 1 details with school selection validation
+                sibling1Name: data.family.sibling1Name,
+                sibling1Standard: data.family.sibling1Standard,
+                ...(() => {
+                  const sibling1Result = processSiblingSchoolSelection(
+                    '1',
+                    data.family.sibling1School,
+                    data.family.sibling1OtherSchoolName,
+                  );
+                  return {
+                    sibling1School: sibling1Result.processedSchool,
+                    sibling1OtherSchoolName:
+                      sibling1Result.processedCustomSchoolName,
+                  };
+                })(),
 
-                  subjects: acad.subjects && acad.subjects.length > 0
-                    ? {
-                        create: acad.subjects.map((s) => ({
-                          subjectName: s.subjectName || 'N/A',
-                          maxMarks: s.maxMarks ?? 0,
-                          obtainedMarks: s.obtainedMarks ?? 0,
-                          percentage: s.percentage ?? (
-                            (s.maxMarks ?? 0) > 0
-                              ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
-                              : 0
-                          ),
-                        })),
-                      }
-                    : undefined,
+                // ✅ Sibling 2 details with school selection validation
+                sibling2Name: data.family.sibling2Name,
+                sibling2Standard: data.family.sibling2Standard,
+                ...(() => {
+                  const sibling2Result = processSiblingSchoolSelection(
+                    '2',
+                    data.family.sibling2School,
+                    data.family.sibling2OtherSchoolName,
+                  );
+                  return {
+                    sibling2School: sibling2Result.processedSchool,
+                    sibling2OtherSchoolName:
+                      sibling2Result.processedCustomSchoolName,
+                  };
+                })(),
 
-                };
-              })),
+                familyIncome: data.family.familyIncome
+                  ? parseFloat(data.family.familyIncome)
+                  : null,
+                siblings: data.family.siblings,
+                hostelRequired: data.family.hostelRequired || false,
+              },
             }
           : undefined,
 
+        // ✅ ADDRESS
+        address: data.address
+          ? {
+              create: {
+                doorNo: data.address.doorNo || data.address.line1 || 'Pending',
+                street: data.address.street || data.address.line2 || '',
+                landmark: data.address.landmark || '',
+                city: data.address.city || '',
+                state: data.address.state || '',
+                line1: data.address.doorNo || data.address.line1 || 'Pending',
+                line2: data.address.street || data.address.line2 || '',
+                line3:
+                  data.address.line3 ||
+                  [data.address.landmark, data.address.city, data.address.state]
+                    .filter(Boolean)
+                    .join(', '),
+                pin: data.address.pin || '000000',
+              },
+            }
+          : undefined,
 
-      // ✅ ADMISSION (auto-generate admission number if not provided or 'AUTO')
-     admission: data.admission
-  ? {
-      create: {
-        admissionNo: data.admission.admissionNo,
+        // ✅ DOCUMENTS (FIXED)
+        documents: data.documents
+          ? {
+              create: [
+                {
+                  photo:
+                    docs.profilePhoto?.uploaded ??
+                    docs.photo?.uploaded ??
+                    false,
+                  photoPath: normalizePath(
+                    docs.profilePhoto?.path || docs.photo?.path,
+                  ),
 
-        admissionDate: data.admission.admissionDate
-          ? new Date(data.admission.admissionDate)
-          : new Date(),
+                  birthCert: docs.birthCert?.uploaded ?? false,
+                  birthCertPath: normalizePath(docs.birthCert?.path),
+                  birthCertHardCopy: docs.birthCert?.hardCopy ?? false,
 
-        standard: toStandardEnum(data.admission.standard || data.standard),
+                  communityCert: docs.communityCert?.uploaded ?? false,
+                  communityCertPath: normalizePath(docs.communityCert?.path),
+                  communityCertHardCopy: docs.communityCert?.hardCopy ?? false,
 
-        // Approval logic based on settings
-        isApproved: requireApproval
-          ? (user?.permissions?.includes('admission:approve') || false)
-          : true,
-        staffSignature:
-          data.admission.staffSignaturePath ||
-          data.admission.staffSignature,
+                  aadharStudent: docs.aadharStudent?.uploaded ?? false,
+                  aadharStudentPath: normalizePath(docs.aadharStudent?.path),
+                  aadharStudentHardCopy: docs.aadharStudent?.hardCopy ?? false,
 
-        principalSignature:
-          data.admission.principalSignaturePath ||
-          data.admission.principalSignature,
-      },
-    }
-        : undefined,
+                  aadharFather: docs.aadharFather?.uploaded ?? false,
+                  aadharFatherPath: normalizePath(docs.aadharFather?.path),
+                  aadharFatherHardCopy: docs.aadharFather?.hardCopy ?? false,
+
+                  aadharMother: docs.aadharMother?.uploaded ?? false,
+                  aadharMotherPath: normalizePath(docs.aadharMother?.path),
+                  aadharMotherHardCopy: docs.aadharMother?.hardCopy ?? false,
+
+                  transferCert: docs.transferCert?.uploaded ?? false,
+                  transferCertPath: normalizePath(docs.transferCert?.path),
+                  transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
+
+                  photosReceived:
+                    (data as any).photosReceived ??
+                    docs.photosReceived ??
+                    false,
+                },
+              ],
+            }
+          : undefined,
+
+        // ✅ ACADEMICS — stores the qualifying examination table (SSLC/MATRIC/CBSE)
+        academics:
+          data.academics && data.academics.length > 0
+            ? {
+                create: await Promise.all(
+                  data.academics.map(async (acad) => {
+                    const totals = calcAcademicTotals({
+                      ...acad,
+                      subjects: acad.subjects?.map((s) => ({
+                        maxMarks: s.maxMarks ?? 0,
+                        obtainedMarks: s.obtainedMarks ?? 0,
+                      })),
+                    });
+                    return {
+                      examName: acad.examName,
+                      boardName: acad.boardName || 'State Board',
+                      registerNo: acad.registerNo,
+                      monthYear: acad.monthYear,
+                      totalMaxMarks: totals.totalMaxMarks,
+                      totalObtainedMarks: totals.totalObtainedMarks,
+                      totalPercentage: totals.totalPercentage,
+                      academicStream: ((val) =>
+                        val ? { connect: { name: val } } : undefined)(
+                        toAcademicStreamEnum(acad.stream),
+                      ),
+
+                      subjects:
+                        acad.subjects && acad.subjects.length > 0
+                          ? {
+                              create: acad.subjects.map((s) => ({
+                                subjectName: s.subjectName || 'N/A',
+                                maxMarks: s.maxMarks ?? 0,
+                                obtainedMarks: s.obtainedMarks ?? 0,
+                                percentage:
+                                  s.percentage ??
+                                  ((s.maxMarks ?? 0) > 0
+                                    ? parseFloat(
+                                        (
+                                          ((s.obtainedMarks ?? 0) /
+                                            (s.maxMarks ?? 1)) *
+                                          100
+                                        ).toFixed(2),
+                                      )
+                                    : 0),
+                              })),
+                            }
+                          : undefined,
+                    };
+                  }),
+                ),
+              }
+            : undefined,
+
+        // ✅ ADMISSION (auto-generate admission number if not provided or 'AUTO')
+        admission: data.admission
+          ? {
+              create: {
+                admissionNo: data.admission.admissionNo,
+
+                admissionDate: data.admission.admissionDate
+                  ? new Date(data.admission.admissionDate)
+                  : new Date(),
+
+                standard: toStandardEnum(
+                  data.admission.standard || data.standard,
+                ),
+
+                // Approval logic based on settings
+                isApproved: requireApproval
+                  ? user?.permissions?.includes('admission:approve') || false
+                  : true,
+                staffSignature:
+                  data.admission.staffSignaturePath ||
+                  data.admission.staffSignature,
+
+                principalSignature:
+                  data.admission.principalSignaturePath ||
+                  data.admission.principalSignature,
+              },
+            }
+          : undefined,
         users: {
           create: {
-           name: data.name ?? '',
-            email: data?.email ?? `user${data.admission?.admissionNo}@example.com`,
+            name: data.name ?? '',
+            email:
+              data?.email ?? `user${data.admission?.admissionNo}@example.com`,
             password: 'defaultpassword', // In real app, hash this and generate properly
             role: 'STUDENT',
             // isActive: true,
-           
           },
         },
-    },
-    
+      },
 
-    include: {
-      family: true,
-      address: true,
-      documents: true,
-      academics: { include: { subjects: true } },
-      admission: true,
-    },
-  });
-}
+      include: {
+        family: true,
+        address: true,
+        documents: true,
+        academics: { include: { subjects: true } },
+        admission: true,
+      },
+    });
+  }
 
   async getAllStudents() {
     const students = await this.prisma.student.findMany({
@@ -1063,10 +1262,7 @@ parentsEmail: data.parentsEmail,
           },
         },
       },
-      orderBy: [
-        { standard: 'asc' },
-        { name: 'asc' },
-      ],
+      orderBy: [{ standard: 'asc' }, { name: 'asc' }],
     });
 
     // Group siblings based on siblingGroupId
@@ -1088,7 +1284,9 @@ parentsEmail: data.parentsEmail,
     return students.map((s) => ({
       ...s,
       siblings: s.siblingGroupId
-        ? (siblingGroups.get(s.siblingGroupId) || []).filter((sib) => sib.id !== s.id)
+        ? (siblingGroups.get(s.siblingGroupId) || []).filter(
+            (sib) => sib.id !== s.id,
+          )
         : [],
     }));
   }
@@ -1184,12 +1382,12 @@ parentsEmail: data.parentsEmail,
     });
   }
 
-    async updateStudent(id: string, data: CreateAdmissionDto) {
-      const existingStudent = await this.prisma.student.findUnique({
-        where: { id },
-        include: { admission: true }
-      });
-      if (!existingStudent) throw new Error('Student not found');
+  async updateStudent(id: string, data: CreateAdmissionDto) {
+    const existingStudent = await this.prisma.student.findUnique({
+      where: { id },
+      include: { admission: true },
+    });
+    if (!existingStudent) throw new Error('Student not found');
     // Defensive: check for missing or invalid data
     if (!data || typeof data !== 'object') {
       throw new Error('Invalid update data: expected an object');
@@ -1211,16 +1409,21 @@ parentsEmail: data.parentsEmail,
       previousSchool: data.previousSchool,
       transportMode: data.transportMode,
       rte: typeof data.rte === 'boolean' ? data.rte : false,
-      academicStream: (val => val ? { connect: { name: val } } : { disconnect: true })(toAcademicStreamEnum(data.academicStream)),
-
+      academicStream: ((val) =>
+        val ? { connect: { name: val } } : { disconnect: true })(
+        toAcademicStreamEnum(data.academicStream),
+      ),
 
       section: data.section ?? undefined,
-      academicYear: data.academicYear ?? `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
-      staffParent: data.staffParentId ? { connect: { id: data.staffParentId } } : { disconnect: true },
+      academicYear:
+        data.academicYear ??
+        `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+      staffParent: data.staffParentId
+        ? { connect: { id: data.staffParentId } }
+        : { disconnect: true },
       siblingGroupId: data.siblingGroupId ?? undefined,
       kitTag: data.kitTag ?? undefined,
     };
-
 
     if (data.dob) updateData.dob = new Date(data.dob);
 
@@ -1229,18 +1432,58 @@ parentsEmail: data.parentsEmail,
       updateData.family = {
         upsert: {
           update: {
-            fatherName: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherName,
-            fatherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherPhone,
-            fatherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherWhatsapp,
-            fatherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherAadhar,
-            fatherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherOccupation,
+            fatherName:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherName,
+            fatherPhone:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherPhone,
+            fatherWhatsapp:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherWhatsapp,
+            fatherAadhar:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherAadhar,
+            fatherOccupation:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherOccupation,
             preferredPhone: familyAny.preferredPhone || data.preferredPhone,
             parentsEmail: familyAny.parentsEmail || data.parentsEmail,
-            motherName: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherName,
-            motherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherPhone,
-            motherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherWhatsapp,
-            motherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherAadhar,
-            motherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherOccupation,
+            motherName:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherName,
+            motherPhone:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherPhone,
+            motherWhatsapp:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherWhatsapp,
+            motherAadhar:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherAadhar,
+            motherOccupation:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherOccupation,
             isSingleParent: data.family.isSingleParent || false,
             guardianName: data.family.guardianName,
             guardianPhone: data.family.guardianPhone,
@@ -1253,13 +1496,14 @@ parentsEmail: data.parentsEmail,
             sibling1Standard: data.family.sibling1Standard,
             ...(() => {
               const sibling1Result = processSiblingSchoolSelection(
-                "1",
+                '1',
                 data.family.sibling1School,
                 data.family.sibling1OtherSchoolName,
               );
               return {
                 sibling1School: sibling1Result.processedSchool,
-                sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
+                sibling1OtherSchoolName:
+                  sibling1Result.processedCustomSchoolName,
               };
             })(),
             // ✅ Sibling 2 with school selection validation
@@ -1267,32 +1511,75 @@ parentsEmail: data.parentsEmail,
             sibling2Standard: data.family.sibling2Standard,
             ...(() => {
               const sibling2Result = processSiblingSchoolSelection(
-                "2",
+                '2',
                 data.family.sibling2School,
                 data.family.sibling2OtherSchoolName,
               );
               return {
                 sibling2School: sibling2Result.processedSchool,
-                sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
+                sibling2OtherSchoolName:
+                  sibling2Result.processedCustomSchoolName,
               };
             })(),
-            familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
+            familyIncome: data.family.familyIncome
+              ? parseFloat(data.family.familyIncome)
+              : null,
             siblings: data.family.siblings,
             hostelRequired: data.family.hostelRequired || false,
           },
           create: {
-            fatherName: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherName,
-            fatherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherPhone,
-            fatherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherWhatsapp,
-            fatherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherAadhar,
-            fatherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'father' ? null : data.family.fatherOccupation,
+            fatherName:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherName,
+            fatherPhone:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherPhone,
+            fatherWhatsapp:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherWhatsapp,
+            fatherAadhar:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherAadhar,
+            fatherOccupation:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'father'
+                ? null
+                : data.family.fatherOccupation,
             preferredPhone: familyAny.preferredPhone || data.preferredPhone,
             parentsEmail: familyAny.parentsEmail || data.parentsEmail,
-            motherName: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherName,
-            motherPhone: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherPhone,
-            motherWhatsapp: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherWhatsapp,
-            motherAadhar: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherAadhar,
-            motherOccupation: data.family.isSingleParent && data.family.guardianRelation !== 'mother' ? null : data.family.motherOccupation,
+            motherName:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherName,
+            motherPhone:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherPhone,
+            motherWhatsapp:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherWhatsapp,
+            motherAadhar:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherAadhar,
+            motherOccupation:
+              data.family.isSingleParent &&
+              data.family.guardianRelation !== 'mother'
+                ? null
+                : data.family.motherOccupation,
             isSingleParent: data.family.isSingleParent || false,
             guardianName: data.family.guardianName,
             guardianPhone: data.family.guardianPhone,
@@ -1305,13 +1592,14 @@ parentsEmail: data.parentsEmail,
             sibling1Standard: data.family.sibling1Standard,
             ...(() => {
               const sibling1Result = processSiblingSchoolSelection(
-                "1",
+                '1',
                 data.family.sibling1School,
                 data.family.sibling1OtherSchoolName,
               );
               return {
                 sibling1School: sibling1Result.processedSchool,
-                sibling1OtherSchoolName: sibling1Result.processedCustomSchoolName,
+                sibling1OtherSchoolName:
+                  sibling1Result.processedCustomSchoolName,
               };
             })(),
             // ✅ Sibling 2 with school selection validation
@@ -1319,16 +1607,19 @@ parentsEmail: data.parentsEmail,
             sibling2Standard: data.family.sibling2Standard,
             ...(() => {
               const sibling2Result = processSiblingSchoolSelection(
-                "2",
+                '2',
                 data.family.sibling2School,
                 data.family.sibling2OtherSchoolName,
               );
               return {
                 sibling2School: sibling2Result.processedSchool,
-                sibling2OtherSchoolName: sibling2Result.processedCustomSchoolName,
+                sibling2OtherSchoolName:
+                  sibling2Result.processedCustomSchoolName,
               };
             })(),
-            familyIncome: data.family.familyIncome ? parseFloat(data.family.familyIncome) : null,
+            familyIncome: data.family.familyIncome
+              ? parseFloat(data.family.familyIncome)
+              : null,
             siblings: data.family.siblings,
             hostelRequired: data.family.hostelRequired || false,
           },
@@ -1336,86 +1627,117 @@ parentsEmail: data.parentsEmail,
       };
     }
     if (data.address) {
-  const addressAny = data.address as any;
-  updateData.address = {
-    upsert: {
-      update: {
-        doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
-        street: addressAny.street || addressAny.village || addressAny.line2 || '',
-        landmark: addressAny.landmark || addressAny.taluk || '',
-        city: addressAny.city || addressAny.district || '',
-        state: addressAny.state || '',
-        line1: addressAny.doorNo || addressAny.line1 || 'Pending',
-        line2: addressAny.street || addressAny.village || addressAny.line2 || '',
-        line3:
-          addressAny.line3 ||
-          [addressAny.landmark || addressAny.taluk, addressAny.city || addressAny.district, addressAny.state]
-            .filter(Boolean)
-            .join(', '),
-        pin: addressAny.pin || '000000',
-      },
-      create: {
-        doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
-        street: addressAny.street || addressAny.village || addressAny.line2 || '',
-        landmark: addressAny.landmark || addressAny.taluk || '',
-        city: addressAny.city || addressAny.district || '',
-        state: addressAny.state || '',
-        line1: addressAny.doorNo || addressAny.line1 || 'Pending',
-        line2: addressAny.street || addressAny.village || addressAny.line2 || '',
-        line3:
-          addressAny.line3 ||
-          [addressAny.landmark || addressAny.taluk, addressAny.city || addressAny.district, addressAny.state]
-            .filter(Boolean)
-            .join(', '),
-        pin: addressAny.pin || '000000',
-      },
-    },
-  };
-}
+      const addressAny = data.address as any;
+      updateData.address = {
+        upsert: {
+          update: {
+            doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
+            street:
+              addressAny.street || addressAny.village || addressAny.line2 || '',
+            landmark: addressAny.landmark || addressAny.taluk || '',
+            city: addressAny.city || addressAny.district || '',
+            state: addressAny.state || '',
+            line1: addressAny.doorNo || addressAny.line1 || 'Pending',
+            line2:
+              addressAny.street || addressAny.village || addressAny.line2 || '',
+            line3:
+              addressAny.line3 ||
+              [
+                addressAny.landmark || addressAny.taluk,
+                addressAny.city || addressAny.district,
+                addressAny.state,
+              ]
+                .filter(Boolean)
+                .join(', '),
+            pin: addressAny.pin || '000000',
+          },
+          create: {
+            doorNo: addressAny.doorNo || addressAny.line1 || 'Pending',
+            street:
+              addressAny.street || addressAny.village || addressAny.line2 || '',
+            landmark: addressAny.landmark || addressAny.taluk || '',
+            city: addressAny.city || addressAny.district || '',
+            state: addressAny.state || '',
+            line1: addressAny.doorNo || addressAny.line1 || 'Pending',
+            line2:
+              addressAny.street || addressAny.village || addressAny.line2 || '',
+            line3:
+              addressAny.line3 ||
+              [
+                addressAny.landmark || addressAny.taluk,
+                addressAny.city || addressAny.district,
+                addressAny.state,
+              ]
+                .filter(Boolean)
+                .join(', '),
+            pin: addressAny.pin || '000000',
+          },
+        },
+      };
+    }
     if (data.documents) {
-        const standardStr = updateData.standard || existingStudent.standard || 'UNKNOWN';
-        const admissionNo = existingStudent.admission?.admissionNo || `UNKNOWN_${id}`;
-        
-        data.documents = await this.moveStudentDocuments(data.documents, admissionNo, standardStr);
+      const standardStr =
+        updateData.standard || existingStudent.standard || 'UNKNOWN';
+      const admissionNo =
+        existingStudent.admission?.admissionNo || `UNKNOWN_${id}`;
 
-        // Helper to normalize slashes
-        const normalizePath = (p: string | undefined | null) =>
-          typeof p === 'string' ? p.replace(/\\/g, '/') : p;
-        updateData.documents = {
-          deleteMany: {},
-          create: [
-  {
-photo: data.documents?.photo?.uploaded ?? false,
-photoPath: normalizePath(data.documents?.photo?.path) || '',
+      data.documents = await this.moveStudentDocuments(
+        data.documents,
+        admissionNo,
+        standardStr,
+      );
 
-    birthCert: data.documents?.birthCert?.uploaded ?? false,
-    birthCertPath: normalizePath(data.documents?.birthCert?.path) || '',
-    birthCertHardCopy: data.documents?.birthCert?.hardCopy ?? false,
+      // Helper to normalize slashes
+      const normalizePath = (p: string | undefined | null) =>
+        typeof p === 'string' ? p.replace(/\\/g, '/') : p;
+      updateData.documents = {
+        deleteMany: {},
+        create: [
+          {
+            photo: data.documents?.photo?.uploaded ?? false,
+            photoPath: normalizePath(data.documents?.photo?.path) || '',
 
-    communityCert: data.documents?.communityCert?.uploaded ?? false,
-    communityCertPath: normalizePath(data.documents?.communityCert?.path) || '',
-    communityCertHardCopy: data.documents?.communityCert?.hardCopy ?? false,
+            birthCert: data.documents?.birthCert?.uploaded ?? false,
+            birthCertPath: normalizePath(data.documents?.birthCert?.path) || '',
+            birthCertHardCopy: data.documents?.birthCert?.hardCopy ?? false,
 
-    aadharStudent: data.documents?.aadharStudent?.uploaded ?? false,
-    aadharStudentPath: normalizePath(data.documents?.aadharStudent?.path) || '',
-    aadharStudentHardCopy: data.documents?.aadharStudent?.hardCopy ?? false,
+            communityCert: data.documents?.communityCert?.uploaded ?? false,
+            communityCertPath:
+              normalizePath(data.documents?.communityCert?.path) || '',
+            communityCertHardCopy:
+              data.documents?.communityCert?.hardCopy ?? false,
 
-    aadharFather: data.documents?.aadharFather?.uploaded ?? false,
-    aadharFatherPath: normalizePath(data.documents?.aadharFather?.path) || '',
-    aadharFatherHardCopy: data.documents?.aadharFather?.hardCopy ?? false,
+            aadharStudent: data.documents?.aadharStudent?.uploaded ?? false,
+            aadharStudentPath:
+              normalizePath(data.documents?.aadharStudent?.path) || '',
+            aadharStudentHardCopy:
+              data.documents?.aadharStudent?.hardCopy ?? false,
 
-    aadharMother: data.documents?.aadharMother?.uploaded ?? false,
-    aadharMotherPath: normalizePath(data.documents?.aadharMother?.path) || '',
-    aadharMotherHardCopy: data.documents?.aadharMother?.hardCopy ?? false,
+            aadharFather: data.documents?.aadharFather?.uploaded ?? false,
+            aadharFatherPath:
+              normalizePath(data.documents?.aadharFather?.path) || '',
+            aadharFatherHardCopy:
+              data.documents?.aadharFather?.hardCopy ?? false,
 
-    transferCert: data.documents?.transferCert?.uploaded ?? false,
-    transferCertPath: normalizePath(data.documents?.transferCert?.path) || '',
-    transferCertHardCopy: data.documents?.transferCert?.hardCopy ?? false,
+            aadharMother: data.documents?.aadharMother?.uploaded ?? false,
+            aadharMotherPath:
+              normalizePath(data.documents?.aadharMother?.path) || '',
+            aadharMotherHardCopy:
+              data.documents?.aadharMother?.hardCopy ?? false,
 
-    photosReceived: (data as any).photosReceived ?? data.documents?.photosReceived ?? false,
-  },
-]
-        };
+            transferCert: data.documents?.transferCert?.uploaded ?? false,
+            transferCertPath:
+              normalizePath(data.documents?.transferCert?.path) || '',
+            transferCertHardCopy:
+              data.documents?.transferCert?.hardCopy ?? false,
+
+            photosReceived:
+              (data as any).photosReceived ??
+              data.documents?.photosReceived ??
+              false,
+          },
+        ],
+      };
     }
     // Academics update: delete existing and recreate with subjects
     if (data.academics && data.academics.length > 0) {
@@ -1433,73 +1755,100 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         });
       }
       updateData.academics = {
-        create: await Promise.all(data.academics.map(async (acad) => {
-          const totals = calcAcademicTotals({
-            ...acad,
-            subjects: acad.subjects?.map(s => ({
-              maxMarks: s.maxMarks ?? 0,
-              obtainedMarks: s.obtainedMarks ?? 0
-            }))
-          });
-          return {
-            examName: acad.examName,
-            boardName: acad.boardName || 'State Board',
-            registerNo: acad.registerNo,
-            monthYear: acad.monthYear,
-            totalMaxMarks: totals.totalMaxMarks,
-            totalObtainedMarks: totals.totalObtainedMarks,
-            totalPercentage: totals.totalPercentage,
-            academicStream: (val => val ? { connect: { name: val } } : undefined)(toAcademicStreamEnum(acad.stream)),
+        create: await Promise.all(
+          data.academics.map(async (acad) => {
+            const totals = calcAcademicTotals({
+              ...acad,
+              subjects: acad.subjects?.map((s) => ({
+                maxMarks: s.maxMarks ?? 0,
+                obtainedMarks: s.obtainedMarks ?? 0,
+              })),
+            });
+            return {
+              examName: acad.examName,
+              boardName: acad.boardName || 'State Board',
+              registerNo: acad.registerNo,
+              monthYear: acad.monthYear,
+              totalMaxMarks: totals.totalMaxMarks,
+              totalObtainedMarks: totals.totalObtainedMarks,
+              totalPercentage: totals.totalPercentage,
+              academicStream: ((val) =>
+                val ? { connect: { name: val } } : undefined)(
+                toAcademicStreamEnum(acad.stream),
+              ),
 
-
-
-            subjects: acad.subjects && acad.subjects.length > 0
-              ? {
-                  create: acad.subjects.map((s) => ({
-                    subjectName: s.subjectName || 'N/A',
-                    maxMarks: s.maxMarks ?? 0,
-                    obtainedMarks: s.obtainedMarks ?? 0,
-                    percentage: s.percentage ?? (
-                      (s.maxMarks ?? 0) > 0
-                        ? parseFloat((((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) * 100).toFixed(2))
-                        : 0
-                    ),
-                  })),
-
-                }
-              : undefined,
-          };
-        })),
+              subjects:
+                acad.subjects && acad.subjects.length > 0
+                  ? {
+                      create: acad.subjects.map((s) => ({
+                        subjectName: s.subjectName || 'N/A',
+                        maxMarks: s.maxMarks ?? 0,
+                        obtainedMarks: s.obtainedMarks ?? 0,
+                        percentage:
+                          s.percentage ??
+                          ((s.maxMarks ?? 0) > 0
+                            ? parseFloat(
+                                (
+                                  ((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) *
+                                  100
+                                ).toFixed(2),
+                              )
+                            : 0),
+                      })),
+                    }
+                  : undefined,
+            };
+          }),
+        ),
       };
-
     }
     if (data.admission) {
       updateData.admission = {
         upsert: {
           update: {
             admissionNo: data.admission.admissionNo || 'TBD',
-            admissionFrom: data.admission.admissionFrom ? new Date(data.admission.admissionFrom) : undefined,
-            admissionTo: data.admission.admissionTo ? new Date(data.admission.admissionTo) : undefined,
-            admissionDate: data.admission.admissionDate ? new Date(data.admission.admissionDate) : undefined,
+            admissionFrom: data.admission.admissionFrom
+              ? new Date(data.admission.admissionFrom)
+              : undefined,
+            admissionTo: data.admission.admissionTo
+              ? new Date(data.admission.admissionTo)
+              : undefined,
+            admissionDate: data.admission.admissionDate
+              ? new Date(data.admission.admissionDate)
+              : undefined,
             standard: toStandardEnum(data.admission.standard || data.standard),
-            staffSignature: data.admission.staffSignaturePath || data.admission.staffSignature,
-            principalSignature: data.admission.principalSignaturePath || data.admission.principalSignature,
+            staffSignature:
+              data.admission.staffSignaturePath ||
+              data.admission.staffSignature,
+            principalSignature:
+              data.admission.principalSignaturePath ||
+              data.admission.principalSignature,
           },
           create: {
             admissionNo: data.admission.admissionNo || 'TBD',
-            admissionDate: data.admission.admissionDate ? new Date(data.admission.admissionDate) : new Date(),
-            admissionFrom: data.admission.admissionFrom ? new Date(data.admission.admissionFrom) : undefined,
-            admissionTo: data.admission.admissionTo ? new Date(data.admission.admissionTo) : undefined,
+            admissionDate: data.admission.admissionDate
+              ? new Date(data.admission.admissionDate)
+              : new Date(),
+            admissionFrom: data.admission.admissionFrom
+              ? new Date(data.admission.admissionFrom)
+              : undefined,
+            admissionTo: data.admission.admissionTo
+              ? new Date(data.admission.admissionTo)
+              : undefined,
             standard: toStandardEnum(data.admission.standard || data.standard),
-            staffSignature: data.admission.staffSignaturePath || data.admission.staffSignature,
-            principalSignature: data.admission.principalSignaturePath || data.admission.principalSignature,
+            staffSignature:
+              data.admission.staffSignaturePath ||
+              data.admission.staffSignature,
+            principalSignature:
+              data.admission.principalSignaturePath ||
+              data.admission.principalSignature,
           },
         },
       };
     }
     return this.prisma.student.update({
       // where: { id },
-      where:{ id },
+      where: { id },
       data: updateData,
       include: {
         family: true,
@@ -1513,19 +1862,21 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
 
   async patchStudent(id: string, data: Partial<CreateAdmissionDto>) {
     const updateData: any = {};
-    
+
     if (data.name !== undefined) updateData.name = data.name;
     if (data.kitTag !== undefined) updateData.kitTag = data.kitTag;
-    if (data.standard !== undefined) updateData.standard = toStandardEnum(data.standard as any);
+    if (data.standard !== undefined)
+      updateData.standard = toStandardEnum(data.standard as any);
     if (data.section !== undefined) updateData.section = data.section;
-    if (data.academicYear !== undefined) updateData.academicYear = data.academicYear;
-    
+    if (data.academicYear !== undefined)
+      updateData.academicYear = data.academicYear;
+
     return this.prisma.student.update({
       where: { id },
       data: updateData,
       include: {
         admission: true,
-      }
+      },
     });
   }
 
@@ -1533,13 +1884,15 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     // Soft delete: mark as inactive instead of removing from database
     return this.prisma.student.update({
       where: { id },
-      data: { users:{
-        update: {
-          isActive: false,
+      data: {
+        users: {
+          update: {
+            isActive: false,
+          },
         },
-      } } },
-     );
-    }
+      },
+    });
+  }
 
   async unarchiveStudent(id: string) {
     return this.prisma.student.update({
@@ -1557,22 +1910,32 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
   async getAdmissionDashboard(academicYear?: string) {
     const settingsRow = await this.prisma.appSetting.findUnique({
       where: { key: 'admin.settings' },
-      select: { value: true }
+      select: { value: true },
     });
-    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
+    const settings =
+      (settingsRow?.value as Record<string, unknown> | undefined) || {};
     const resolvedAcademicYear =
       normalizeAcademicYear(academicYear) ||
       normalizeAcademicYear(String(settings.academicYear || '')) ||
       academicYear ||
       null;
     const previousAcademicYear = getPreviousAcademicYear(resolvedAcademicYear);
-    const dateRange = getAcademicYearDateRange(resolvedAcademicYear || undefined);
-    const previousDateRange = getAcademicYearDateRange(previousAcademicYear || undefined);
+    const dateRange = getAcademicYearDateRange(
+      resolvedAcademicYear || undefined,
+    );
+    const previousDateRange = getAcademicYearDateRange(
+      previousAcademicYear || undefined,
+    );
     const where = dateRange
       ? { admissionDate: { gte: dateRange.start, lte: dateRange.end } }
       : undefined;
     const previousWhere = previousDateRange
-      ? { admissionDate: { gte: previousDateRange.start, lte: previousDateRange.end } }
+      ? {
+          admissionDate: {
+            gte: previousDateRange.start,
+            lte: previousDateRange.end,
+          },
+        }
       : undefined;
 
     const admissionStudentIds = dateRange
@@ -1581,21 +1944,37 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           .then((rows) => rows.map((r) => r.studentId))
       : null;
 
-    const docsMissingWhere = admissionStudentIds !== null
-      ? { id: { in: admissionStudentIds } }
-      : {};
+    const docsMissingWhere =
+      admissionStudentIds !== null ? { id: { in: admissionStudentIds } } : {};
 
-    const [total, approved, pending, byStandardRaw, seatsConfigRaw, previousYearTotal, docsMissing, recentAdmissions] = await Promise.all([
+    const [
+      total,
+      approved,
+      pending,
+      byStandardRaw,
+      seatsConfigRaw,
+      previousYearTotal,
+      docsMissing,
+      recentAdmissions,
+    ] = await Promise.all([
       this.prisma.admission.count({ where }),
-      this.prisma.admission.count({ where: { ...(where || {}), isApproved: true } }),
-      this.prisma.admission.count({ where: { ...(where || {}), isApproved: false } }),
+      this.prisma.admission.count({
+        where: { ...(where || {}), isApproved: true },
+      }),
+      this.prisma.admission.count({
+        where: { ...(where || {}), isApproved: false },
+      }),
       this.prisma.admission.groupBy({
         by: ['standard'],
         where,
         _count: { _all: true },
       }),
-      this.prisma.appSetting.findUnique({ where: { key: 'admission.standardSeats' } }),
-      previousWhere ? this.prisma.admission.count({ where: previousWhere }) : Promise.resolve(0),
+      this.prisma.appSetting.findUnique({
+        where: { key: 'admission.standardSeats' },
+      }),
+      previousWhere
+        ? this.prisma.admission.count({ where: previousWhere })
+        : Promise.resolve(0),
       this.prisma.student.count({
         where: {
           ...docsMissingWhere,
@@ -1638,7 +2017,9 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     ]);
 
     // Sort byStandard by standard ascending
-    const byStandard = [...byStandardRaw].sort((a, b) => String(a.standard).localeCompare(String(b.standard)));
+    const byStandard = [...byStandardRaw].sort((a, b) =>
+      String(a.standard).localeCompare(String(b.standard)),
+    );
 
     const approvedByStandardRaw = await this.prisma.admission.groupBy({
       by: ['standard'],
@@ -1646,7 +2027,7 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       _count: { _all: true },
     });
 
-    const seatMap = ((seatsConfigRaw?.value as Record<string, number>) || {}) as Record<string, number>;
+    const seatMap = (seatsConfigRaw?.value as Record<string, number>) || {};
     const approvedCountMap = new Map<string, number>(
       approvedByStandardRaw.map((x) => [String(x.standard), x._count._all]),
     );
@@ -1670,15 +2051,23 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         };
       });
 
-    const totalSeatCapacity = Object.values(seatMap).reduce((sum, value) => sum + Number(value || 0), 0);
-    const progressBase = totalSeatCapacity > 0 ? totalSeatCapacity : Math.max(total, 1);
+    const totalSeatCapacity = Object.values(seatMap).reduce(
+      (sum, value) => sum + Number(value || 0),
+      0,
+    );
+    const progressBase =
+      totalSeatCapacity > 0 ? totalSeatCapacity : Math.max(total, 1);
     const progressValue = totalSeatCapacity > 0 ? approved : total;
-    const progressPercent = progressBase > 0
-      ? Number(((progressValue / progressBase) * 100).toFixed(2))
-      : 0;
+    const progressPercent =
+      progressBase > 0
+        ? Number(((progressValue / progressBase) * 100).toFixed(2))
+        : 0;
     const milestoneThresholds = [25, 50, 75, 100];
     const milestones = milestoneThresholds.map((threshold) => {
-      const targetCount = Math.max(1, Math.ceil((progressBase * threshold) / 100));
+      const targetCount = Math.max(
+        1,
+        Math.ceil((progressBase * threshold) / 100),
+      );
       const achieved = progressValue >= targetCount;
       return {
         label: `${threshold}% admissions milestone`,
@@ -1689,9 +2078,16 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         achieved,
       };
     });
-    const percentageChange = previousYearTotal > 0
-      ? Number((((total - previousYearTotal) / previousYearTotal) * 100).toFixed(2))
-      : total > 0 ? 100 : 0;
+    const percentageChange =
+      previousYearTotal > 0
+        ? Number(
+            (((total - previousYearTotal) / previousYearTotal) * 100).toFixed(
+              2,
+            ),
+          )
+        : total > 0
+          ? 100
+          : 0;
 
     return {
       academicYear: resolvedAcademicYear,
@@ -1699,7 +2095,10 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       approved,
       pending,
       docsMissing,
-      byStandard: byStandard.map((s) => ({ standard: s.standard, count: s._count._all })),
+      byStandard: byStandard.map((s) => ({
+        standard: s.standard,
+        count: s._count._all,
+      })),
       standardSeats: seatMap,
       seatSummary,
       yearComparison: {
@@ -1712,13 +2111,18 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         trend: percentageChange >= 0 ? 'up' : 'down',
       },
       admissionProgress: {
-        basis: totalSeatCapacity > 0 ? 'approved_vs_total_seats' : 'total_admissions',
+        basis:
+          totalSeatCapacity > 0
+            ? 'approved_vs_total_seats'
+            : 'total_admissions',
         totalTarget: progressBase,
         currentCount: progressValue,
         progressPercent,
       },
       milestones,
-      upcomingMilestones: milestones.filter((milestone) => !milestone.achieved).slice(0, 3),
+      upcomingMilestones: milestones
+        .filter((milestone) => !milestone.achieved)
+        .slice(0, 3),
       recentApplicants: recentAdmissions.map((a) => ({
         id: a.id,
         admissionNo: a.admissionNo,
@@ -1740,7 +2144,10 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     return { seats: (settings?.value as Record<string, number>) || {} };
   }
 
-  async updateStandardSeatConfig(seats: Record<string, number>, updatedByEmail?: string) {
+  async updateStandardSeatConfig(
+    seats: Record<string, number>,
+    updatedByEmail?: string,
+  ) {
     const sanitized: Record<string, number> = {};
     for (const [key, value] of Object.entries(seats || {})) {
       const n = Number(value);
@@ -1751,7 +2158,11 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     const saved = await this.prisma.appSetting.upsert({
       where: { key: 'admission.standardSeats' },
       update: { value: sanitized, updatedByEmail },
-      create: { key: 'admission.standardSeats', value: sanitized, updatedByEmail },
+      create: {
+        key: 'admission.standardSeats',
+        value: sanitized,
+        updatedByEmail,
+      },
     });
     return { seats: (saved.value as Record<string, number>) || {} };
   }
@@ -1759,7 +2170,11 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
   async exportAdmissionsCsv(academicYear?: string) {
     const dateRange = getAcademicYearDateRange(academicYear);
     const where = dateRange
-      ? { admission: { is: { admissionDate: { gte: dateRange.start, lte: dateRange.end } } } }
+      ? {
+          admission: {
+            is: { admissionDate: { gte: dateRange.start, lte: dateRange.end } },
+          },
+        }
       : undefined;
 
     const students = await this.prisma.student.findMany({
@@ -1827,130 +2242,139 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
     let updatedCount = 0;
     let autoFeeAssignedCount = 0;
 
-  const getNextStandard = (standard: string) => {
-    const map = {
-      LKG: 'UKG',
-      UKG: 'STD_1',
-      STD_1: 'STD_2',
-      STD_2: 'STD_3',
-      STD_3: 'STD_4',
-      STD_4: 'STD_5',
-      STD_5: 'STD_6',
-      STD_6: 'STD_7',
-      STD_7: 'STD_8',
-      STD_8: 'STD_9',
-      STD_9: 'STD_10',
-      STD_10: 'STD_11',
-      STD_11: 'STD_12',
-      STD_12: 'GRADUATED',
+    const getNextStandard = (standard: string) => {
+      const map = {
+        LKG: 'UKG',
+        UKG: 'STD_1',
+        STD_1: 'STD_2',
+        STD_2: 'STD_3',
+        STD_3: 'STD_4',
+        STD_4: 'STD_5',
+        STD_5: 'STD_6',
+        STD_6: 'STD_7',
+        STD_7: 'STD_8',
+        STD_8: 'STD_9',
+        STD_9: 'STD_10',
+        STD_10: 'STD_11',
+        STD_11: 'STD_12',
+        STD_12: 'GRADUATED',
+      };
+
+      return map[standard] || standard;
     };
 
-    return map[standard] || standard;
-  };
+    const isPromotableStandard = (standard: string) => standard !== 'GRADUATED';
 
-  const isPromotableStandard = (standard: string) => standard !== 'GRADUATED';
+    const getEffectivePaid = (payment: {
+      amount: number;
+      status?: string | null;
+      refundAmount?: number | null;
+    }) => {
+      const status = payment.status || 'SUCCESS';
+      if (status === 'CANCELLED') return 0;
+      if (status === 'REFUNDED') {
+        const refunded = Number(payment.refundAmount ?? payment.amount);
+        return Math.max(Number(payment.amount) - refunded, 0);
+      }
+      return Number(payment.amount);
+    };
 
-  const getEffectivePaid = (payment: { amount: number; status?: string | null; refundAmount?: number | null }) => {
-    const status = payment.status || 'SUCCESS';
-    if (status === 'CANCELLED') return 0;
-    if (status === 'REFUNDED') {
-      const refunded = Number(payment.refundAmount ?? payment.amount);
-      return Math.max(Number(payment.amount) - refunded, 0);
-    }
-    return Number(payment.amount);
-  };
+    const targetStandards = Array.from(
+      new Set(
+        students
+          .map((student) => getNextStandard(student.standard))
+          .filter((standard) => isPromotableStandard(standard)),
+      ),
+    );
 
-  const targetStandards = Array.from(new Set(
-    students
-      .map((student) => getNextStandard(student.standard))
-      .filter((standard) => isPromotableStandard(standard)),
-  ));
-
-  const structures = await this.prisma.feeStructure.findMany({
-    where: {
-      academicYear: newAcademicYear,
-      standard: { in: targetStandards as Standard[] },
-    },
-    include: {
-      customItems: true,
-      terms: { orderBy: { termNumber: 'asc' } },
-    },
-  });
-
-  const structureByStandard = new Map(structures.map((structure) => [structure.standard, structure]));
-  const missingStandards = targetStandards.filter((standard) => !structureByStandard.has(standard as Standard));
-
-  if (missingStandards.length > 0) {
-    throw new BadRequestException({
-      message: `Promotion blocked. Create fee structures for ${newAcademicYear} before promoting.`,
-      code: 'MISSING_FEE_STRUCTURES',
-      academicYear: newAcademicYear,
-      missingFeeStructures: missingStandards,
+    const structures = await this.prisma.feeStructure.findMany({
+      where: {
+        academicYear: newAcademicYear,
+        standard: { in: targetStandards as Standard[] },
+      },
+      include: {
+        customItems: true,
+        terms: { orderBy: { termNumber: 'asc' } },
+      },
     });
-  }
 
-  const currentYearFees = await this.prisma.studentFee.findMany({
-    where: {
-      academicYear,
-      studentId: { in: students.map((student) => student.id) },
-    },
-    include: {
-      payments: true,
-    },
-  });
+    const structureByStandard = new Map(
+      structures.map((structure) => [structure.standard, structure]),
+    );
+    const missingStandards = targetStandards.filter(
+      (standard) => !structureByStandard.has(standard as Standard),
+    );
 
-  // Also fetch fee structures for the OLD academic year so we can flag
-  // students whose fees were never assigned (no studentFee record exists)
-  const currentYearStandards = Array.from(new Set(students.map((s) => s.standard)));
-  const oldYearStructures = await this.prisma.feeStructure.findMany({
-    where: {
-      academicYear,
-      standard: { in: currentYearStandards as Standard[] },
-    },
-    select: { standard: true, tuitionFee: true, transportFee: true, bookFee: true, hostelFee: true, otherFee: true },
-  });
-  const oldStructureByStandard = new Map(oldYearStructures.map((s) => [s.standard, s]));
+    if (missingStandards.length > 0) {
+      throw new BadRequestException({
+        message: `Promotion blocked. Create fee structures for ${newAcademicYear} before promoting.`,
+        code: 'MISSING_FEE_STRUCTURES',
+        academicYear: newAcademicYear,
+        missingFeeStructures: missingStandards,
+      });
+    }
 
-  const feeByStudentId = new Map(currentYearFees.map((fee) => [fee.studentId, fee]));
-  const studentsWithPreviousYearPending: Array<{
-    studentId: string;
-    name: string;
-    admissionNo: string | null;
-    currentStandard: string;
-    promotedToStandard: string;
-    previousAcademicYear: string;
-    pendingAmount: number;
-    feeNotAssigned?: boolean;
-  }> = [];
+    const currentYearFees = await this.prisma.studentFee.findMany({
+      where: {
+        academicYear,
+        studentId: { in: students.map((student) => student.id) },
+      },
+      include: {
+        payments: true,
+      },
+    });
+
+    // Also fetch fee structures for the OLD academic year so we can flag
+    // students whose fees were never assigned (no studentFee record exists)
+    const currentYearStandards = Array.from(
+      new Set(students.map((s) => s.standard)),
+    );
+    const oldYearStructures = await this.prisma.feeStructure.findMany({
+      where: {
+        academicYear,
+        standard: { in: currentYearStandards },
+      },
+      select: {
+        standard: true,
+        tuitionFee: true,
+        transportFee: true,
+        bookFee: true,
+        hostelFee: true,
+        otherFee: true,
+      },
+    });
+    const oldStructureByStandard = new Map(
+      oldYearStructures.map((s) => [s.standard, s]),
+    );
+
+    const feeByStudentId = new Map(
+      currentYearFees.map((fee) => [fee.studentId, fee]),
+    );
+    const studentsWithPreviousYearPending: Array<{
+      studentId: string;
+      name: string;
+      admissionNo: string | null;
+      currentStandard: string;
+      promotedToStandard: string;
+      previousAcademicYear: string;
+      pendingAmount: number;
+      feeNotAssigned?: boolean;
+    }> = [];
 
     for (const student of students) {
       const nextStandard = getNextStandard(student.standard);
 
-    const currentYearFee = feeByStudentId.get(student.id);
-    if (currentYearFee) {
-      const totalPaid = currentYearFee.payments.reduce((sum, payment) => sum + getEffectivePaid(payment), 0);
-      const pendingAmount = Math.max(Number(currentYearFee.netFee || 0) - totalPaid, 0);
-      if (pendingAmount > 0) {
-        studentsWithPreviousYearPending.push({
-          studentId: student.id,
-          name: student.name,
-          admissionNo: student.admission?.admissionNo || null,
-          currentStandard: student.standard,
-          promotedToStandard: nextStandard,
-          previousAcademicYear: academicYear,
-          pendingAmount: Math.round(pendingAmount * 100) / 100,
-        });
-      }
-    } else {
-      // No fee record assigned — check if a fee structure existed for their standard
-      const oldStructure = oldStructureByStandard.get(student.standard as Standard);
-      if (oldStructure) {
-        const fullFee = Number(oldStructure.tuitionFee || 0)
-          + Number(oldStructure.transportFee || 0)
-          + Number(oldStructure.bookFee || 0)
-          + Number(oldStructure.hostelFee || 0)
-          + Number(oldStructure.otherFee || 0);
-        if (fullFee > 0) {
+      const currentYearFee = feeByStudentId.get(student.id);
+      if (currentYearFee) {
+        const totalPaid = currentYearFee.payments.reduce(
+          (sum, payment) => sum + getEffectivePaid(payment),
+          0,
+        );
+        const pendingAmount = Math.max(
+          Number(currentYearFee.netFee || 0) - totalPaid,
+          0,
+        );
+        if (pendingAmount > 0) {
           studentsWithPreviousYearPending.push({
             studentId: student.id,
             name: student.name,
@@ -1958,12 +2382,33 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
             currentStandard: student.standard,
             promotedToStandard: nextStandard,
             previousAcademicYear: academicYear,
-            pendingAmount: Math.round(fullFee * 100) / 100,
-            feeNotAssigned: true,
+            pendingAmount: Math.round(pendingAmount * 100) / 100,
           });
         }
+      } else {
+        // No fee record assigned — check if a fee structure existed for their standard
+        const oldStructure = oldStructureByStandard.get(student.standard);
+        if (oldStructure) {
+          const fullFee =
+            Number(oldStructure.tuitionFee || 0) +
+            Number(oldStructure.transportFee || 0) +
+            Number(oldStructure.bookFee || 0) +
+            Number(oldStructure.hostelFee || 0) +
+            Number(oldStructure.otherFee || 0);
+          if (fullFee > 0) {
+            studentsWithPreviousYearPending.push({
+              studentId: student.id,
+              name: student.name,
+              admissionNo: student.admission?.admissionNo || null,
+              currentStandard: student.standard,
+              promotedToStandard: nextStandard,
+              previousAcademicYear: academicYear,
+              pendingAmount: Math.round(fullFee * 100) / 100,
+              feeNotAssigned: true,
+            });
+          }
+        }
       }
-    }
 
       // Update student standard and academicYear
       await this.prisma.student.update({
@@ -1998,7 +2443,9 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
         if (!existingTargetYearFee) {
           const structure = structureByStandard.get(nextStandard as Standard);
           if (!structure) {
-            throw new BadRequestException(`Fee structure not found for ${nextStandard} in ${newAcademicYear}`);
+            throw new BadRequestException(
+              `Fee structure not found for ${nextStandard} in ${newAcademicYear}`,
+            );
           }
 
           const tuitionFee = Number(structure.tuitionFee || 0);
@@ -2007,8 +2454,17 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           const hostelFee = Number(structure.hostelFee || 0);
           const otherFee = Number(structure.otherFee || 0);
           const customItems = structure.customItems || [];
-          const customTotal = customItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-          const totalFee = tuitionFee + transportFee + bookFee + hostelFee + otherFee + customTotal;
+          const customTotal = customItems.reduce(
+            (sum, item) => sum + Number(item.amount || 0),
+            0,
+          );
+          const totalFee =
+            tuitionFee +
+            transportFee +
+            bookFee +
+            hostelFee +
+            otherFee +
+            customTotal;
 
           const splitEvenly = (value: number, count: number) => {
             const perTerm = Math.round((value / count) * 100) / 100;
@@ -2023,13 +2479,15 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           const tuitionSplit = splitEvenly(tuitionFee, numberOfTerms);
           const transportSplit = splitEvenly(transportFee, numberOfTerms);
 
-          const termTemplates = structure.terms?.length > 0
-            ? structure.terms
-            : Array.from({ length: numberOfTerms }, (_, index) => ({
-                termNumber: index + 1,
-                termName: numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
-                dueDate: null,
-              }));
+          const termTemplates =
+            structure.terms?.length > 0
+              ? structure.terms
+              : Array.from({ length: numberOfTerms }, (_, index) => ({
+                  termNumber: index + 1,
+                  termName:
+                    numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                  dueDate: null,
+                }));
 
           await this.prisma.studentFee.create({
             data: {
@@ -2044,20 +2502,22 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
               discount: 0,
               netFee: totalFee,
               numberOfTerms,
-              customItems: customItems.length > 0
-                ? {
-                    create: customItems.map((item) => ({
-                      name: item.name,
-                      amount: Number(item.amount || 0),
-                    })),
-                  }
-                : undefined,
+              customItems:
+                customItems.length > 0
+                  ? {
+                      create: customItems.map((item) => ({
+                        name: item.name,
+                        amount: Number(item.amount || 0),
+                      })),
+                    }
+                  : undefined,
               terms: {
                 create: termTemplates.map((template, index) => ({
                   termNumber: template.termNumber,
                   termName: template.termName,
                   dueDate: template.dueDate || null,
-                  amount: (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
+                  amount:
+                    (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
                   tuitionAmount: tuitionSplit[index] || 0,
                   transportAmount: transportSplit[index] || 0,
                   bookAmount: 0,
@@ -2075,66 +2535,69 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       updatedCount++;
     }
 
-  return {
-    updatedCount,
-    newAcademicYear,
-    autoFeeAssignedCount,
-    studentsWithPreviousYearPendingCount: studentsWithPreviousYearPending.length,
-    studentsWithPreviousYearPending,
-  };
-}
-
-  async demoteAllStudents(academicYear: string, newAcademicYear: string) {
-  const students = await this.prisma.student.findMany({
-    where: { academicYear },
-  });
-
-  let updatedCount = 0;
-
-  const getPreviousStandard = (standard: string) => {
-    const map = {
-      UKG: 'LKG',
-      STD_1: 'UKG',
-      STD_2: 'STD_1',
-      STD_3: 'STD_2',
-      STD_4: 'STD_3',
-      STD_5: 'STD_4',
-      STD_6: 'STD_5',
-      STD_7: 'STD_6',
-      STD_8: 'STD_7',
-      STD_9: 'STD_8',
-      STD_10: 'STD_9',
-      STD_11: 'STD_10',
-      STD_12: 'STD_11',
+    return {
+      updatedCount,
+      newAcademicYear,
+      autoFeeAssignedCount,
+      studentsWithPreviousYearPendingCount:
+        studentsWithPreviousYearPending.length,
+      studentsWithPreviousYearPending,
     };
-
-    return map[standard] || standard;
-  };
-
-  for (const student of students) {
-    const prevStandard = getPreviousStandard(student.standard);
-
-    await this.prisma.student.update({
-      where: { id: student.id },
-      data: {
-        standard: prevStandard,
-        academicYear: newAcademicYear,
-      },
-    });
-
-    updatedCount++;
   }
 
-  return {
-    updatedCount,
-    newAcademicYear,
-  };
-}
+  async demoteAllStudents(academicYear: string, newAcademicYear: string) {
+    const students = await this.prisma.student.findMany({
+      where: { academicYear },
+    });
+
+    let updatedCount = 0;
+
+    const getPreviousStandard = (standard: string) => {
+      const map = {
+        UKG: 'LKG',
+        STD_1: 'UKG',
+        STD_2: 'STD_1',
+        STD_3: 'STD_2',
+        STD_4: 'STD_3',
+        STD_5: 'STD_4',
+        STD_6: 'STD_5',
+        STD_7: 'STD_6',
+        STD_8: 'STD_7',
+        STD_9: 'STD_8',
+        STD_10: 'STD_9',
+        STD_11: 'STD_10',
+        STD_12: 'STD_11',
+      };
+
+      return map[standard] || standard;
+    };
+
+    for (const student of students) {
+      const prevStandard = getPreviousStandard(student.standard);
+
+      await this.prisma.student.update({
+        where: { id: student.id },
+        data: {
+          standard: prevStandard,
+          academicYear: newAcademicYear,
+        },
+      });
+
+      updatedCount++;
+    }
+
+    return {
+      updatedCount,
+      newAcademicYear,
+    };
+  }
 
   async linkSiblings(studentIds: string[], siblingGroupId?: string) {
     const uniqueIds = [...new Set((studentIds || []).filter(Boolean))];
     if (uniqueIds.length < 2) {
-      throw new BadRequestException('At least 2 students are required to create a sibling group');
+      throw new BadRequestException(
+        'At least 2 students are required to create a sibling group',
+      );
     }
 
     const selectedStudents = await this.prisma.student.findMany({
@@ -2146,8 +2609,15 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       throw new BadRequestException('One or more students not found');
     }
 
-    const existingGroupIds = [...new Set(selectedStudents.map((s) => s.siblingGroupId).filter(Boolean) as string[])];
-    const groupId = siblingGroupId || existingGroupIds[0] || `SIB-${Date.now()}`;
+    const existingGroupIds = [
+      ...new Set(
+        selectedStudents
+          .map((s) => s.siblingGroupId)
+          .filter(Boolean) as string[],
+      ),
+    ];
+    const groupId =
+      siblingGroupId || existingGroupIds[0] || `SIB-${Date.now()}`;
 
     const idsToLink = new Set(uniqueIds);
     if (existingGroupIds.length > 0) {
@@ -2176,12 +2646,24 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
 
   async demoteIndividualStudents(studentIds: string[], reason?: string) {
     const uniqueIds = [...new Set((studentIds || []).filter(Boolean))];
-    if (uniqueIds.length === 0) throw new BadRequestException('No student IDs provided');
+    if (uniqueIds.length === 0)
+      throw new BadRequestException('No student IDs provided');
 
     const standardOrder = [
-      'LKG', 'UKG',
-      'STD_1', 'STD_2', 'STD_3', 'STD_4', 'STD_5', 'STD_6',
-      'STD_7', 'STD_8', 'STD_9', 'STD_10', 'STD_11', 'STD_12',
+      'LKG',
+      'UKG',
+      'STD_1',
+      'STD_2',
+      'STD_3',
+      'STD_4',
+      'STD_5',
+      'STD_6',
+      'STD_7',
+      'STD_8',
+      'STD_9',
+      'STD_10',
+      'STD_11',
+      'STD_12',
     ];
 
     const results: any[] = [];
@@ -2192,7 +2674,11 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       });
 
       if (!student) {
-        results.push({ id: sid, status: 'error', message: 'Student not found' });
+        results.push({
+          id: sid,
+          status: 'error',
+          message: 'Student not found',
+        });
         continue;
       }
 
@@ -2200,7 +2686,12 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
       const idx = standardOrder.indexOf(currentStd);
 
       if (idx <= 0) {
-        results.push({ id: sid, name: student.name, status: 'error', message: 'Already at lowest standard' });
+        results.push({
+          id: sid,
+          name: student.name,
+          status: 'error',
+          message: 'Already at lowest standard',
+        });
         continue;
       }
 
@@ -2249,8 +2740,17 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           const hostelFee = Number(structure.hostelFee || 0);
           const otherFee = Number(structure.otherFee || 0);
           const customItems = structure.customItems || [];
-          const customTotal = customItems.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-          const totalFee = tuitionFee + transportFee + bookFee + hostelFee + otherFee + customTotal;
+          const customTotal = customItems.reduce(
+            (sum, item) => sum + Number(item.amount || 0),
+            0,
+          );
+          const totalFee =
+            tuitionFee +
+            transportFee +
+            bookFee +
+            hostelFee +
+            otherFee +
+            customTotal;
 
           const splitEvenly = (value: number, count: number) => {
             const perTerm = Math.round((value / count) * 100) / 100;
@@ -2265,13 +2765,15 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
           const tuitionSplit = splitEvenly(tuitionFee, numberOfTerms);
           const transportSplit = splitEvenly(transportFee, numberOfTerms);
 
-          const termTemplates = structure.terms?.length > 0
-            ? structure.terms
-            : Array.from({ length: numberOfTerms }, (_, index) => ({
-                termNumber: index + 1,
-                termName: numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
-                dueDate: null,
-              }));
+          const termTemplates =
+            structure.terms?.length > 0
+              ? structure.terms
+              : Array.from({ length: numberOfTerms }, (_, index) => ({
+                  termNumber: index + 1,
+                  termName:
+                    numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                  dueDate: null,
+                }));
 
           await this.prisma.studentFee.create({
             data: {
@@ -2286,20 +2788,22 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
               discount: 0,
               netFee: totalFee,
               numberOfTerms,
-              customItems: customItems.length > 0
-                ? {
-                    create: customItems.map((item) => ({
-                      name: item.name,
-                      amount: Number(item.amount || 0),
-                    })),
-                  }
-                : undefined,
+              customItems:
+                customItems.length > 0
+                  ? {
+                      create: customItems.map((item) => ({
+                        name: item.name,
+                        amount: Number(item.amount || 0),
+                      })),
+                    }
+                  : undefined,
               terms: {
                 create: termTemplates.map((template, index) => ({
                   termNumber: template.termNumber,
                   termName: template.termName,
                   dueDate: template.dueDate || null,
-                  amount: (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
+                  amount:
+                    (tuitionSplit[index] || 0) + (transportSplit[index] || 0),
                   tuitionAmount: tuitionSplit[index] || 0,
                   transportAmount: transportSplit[index] || 0,
                   bookAmount: 0,
@@ -2331,9 +2835,11 @@ photoPath: normalizePath(data.documents?.photo?.path) || '',
 
   async unlinkSibling(studentId: string) {
     if (!studentId) throw new BadRequestException('Student ID is required');
-    const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+    });
     if (!student) throw new BadRequestException('Student not found');
-    
+
     await this.prisma.student.update({
       where: { id: studentId },
       data: { siblingGroupId: null },

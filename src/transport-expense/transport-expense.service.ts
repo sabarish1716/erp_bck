@@ -17,7 +17,8 @@ type ExpenseFilters = {
 export class TransportExpenseService {
   constructor(private prisma: PrismaService) {}
 
-  private static readonly ACTING_DRIVER_DAYS_KEY = 'hr.actingDriverDayOverrides';
+  private static readonly ACTING_DRIVER_DAYS_KEY =
+    'hr.actingDriverDayOverrides';
 
   private normalizeDailyRate(dailyRate: number): number {
     const normalized = Number(dailyRate);
@@ -29,7 +30,10 @@ export class TransportExpenseService {
   }
 
   private getMonthWindow(month?: string) {
-    const parsed = month && /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
+    const parsed =
+      month && /^\d{4}-\d{2}$/.test(month)
+        ? month
+        : new Date().toISOString().slice(0, 7);
     const [year, mon] = parsed.split('-').map(Number);
     const start = new Date(year, mon - 1, 1);
     const end = new Date(year, mon, 1);
@@ -49,25 +53,35 @@ export class TransportExpenseService {
   private normalizeManualDays(days: number): number {
     const normalized = Number(days);
     if (!Number.isFinite(normalized) || normalized < 0) {
-      throw new BadRequestException('days must be a number greater than or equal to 0');
+      throw new BadRequestException(
+        'days must be a number greater than or equal to 0',
+      );
     }
     return Number(normalized.toFixed(1));
   }
 
-  private async getActingDriverDayOverridesStore(): Promise<Record<string, Record<string, number>>> {
+  private async getActingDriverDayOverridesStore(): Promise<
+    Record<string, Record<string, number>>
+  > {
     const record = await this.prisma.appSetting.findUnique({
       where: { key: TransportExpenseService.ACTING_DRIVER_DAYS_KEY },
       select: { value: true },
     });
 
-    if (!record || typeof record.value !== 'object' || Array.isArray(record.value)) {
+    if (
+      !record ||
+      typeof record.value !== 'object' ||
+      Array.isArray(record.value)
+    ) {
       return {};
     }
 
     return record.value as Record<string, Record<string, number>>;
   }
 
-  private async saveActingDriverDayOverridesStore(store: Record<string, Record<string, number>>) {
+  private async saveActingDriverDayOverridesStore(
+    store: Record<string, Record<string, number>>,
+  ) {
     await this.prisma.appSetting.upsert({
       where: { key: TransportExpenseService.ACTING_DRIVER_DAYS_KEY },
       update: { value: store as any },
@@ -136,12 +150,17 @@ export class TransportExpenseService {
 
     const rows = staffRows.map((s) => {
       const attendanceDays = Number((presentMap.get(s.id) || 0).toFixed(1));
-      const dailyRate = s.staffStatutory?.dailyRate || Number(((s.salary || 0) / 26).toFixed(2));
+      const dailyRate =
+        s.staffStatutory?.dailyRate ||
+        Number(((s.salary || 0) / 26).toFixed(2));
       const payroll = s.payrollRecords[0];
-      const isActingDriver = s.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
+      const isActingDriver =
+        s.category === StaffCategory.NON_TEACHING_ACTING_DRIVER;
       const overrideDays = Number(monthOverrides[s.id]);
       const hasOverride = Number.isFinite(overrideDays) && overrideDays >= 0;
-      const presentDays = hasOverride ? Number(overrideDays.toFixed(1)) : attendanceDays;
+      const presentDays = hasOverride
+        ? Number(overrideDays.toFixed(1))
+        : attendanceDays;
 
       const computedSalary = isActingDriver
         ? Number((presentDays * dailyRate).toFixed(2))
@@ -168,7 +187,9 @@ export class TransportExpenseService {
       };
     });
 
-    const totalSalaryExpense = Number(rows.reduce((sum, r) => sum + r.salaryExpense, 0).toFixed(2));
+    const totalSalaryExpense = Number(
+      rows.reduce((sum, r) => sum + r.salaryExpense, 0).toFixed(2),
+    );
 
     return {
       month: reportMonth,
@@ -199,7 +220,7 @@ export class TransportExpenseService {
       designation: staff.designation,
       category: staff.category,
       perDaySalary: staff.staffStatutory?.dailyRate ?? null,
-      fallbackPerDaySalary: Number((((staff.salary || 0) / 26) || 0).toFixed(2)),
+      fallbackPerDaySalary: Number(((staff.salary || 0) / 26 || 0).toFixed(2)),
     }));
   }
 
@@ -221,7 +242,9 @@ export class TransportExpenseService {
     }
 
     if (staff.category !== StaffCategory.NON_TEACHING_ACTING_DRIVER) {
-      throw new BadRequestException('Per-day salary can be updated only for acting drivers');
+      throw new BadRequestException(
+        'Per-day salary can be updated only for acting drivers',
+      );
     }
 
     const normalizedRate = this.normalizeDailyRate(dailyRate);
@@ -277,7 +300,8 @@ export class TransportExpenseService {
     for (const row of attendanceRows) {
       const previous = attendanceMap.get(row.staffId) || 0;
       const weight =
-        row.status === AttendanceStatus.PRESENT || row.status === AttendanceStatus.LATE
+        row.status === AttendanceStatus.PRESENT ||
+        row.status === AttendanceStatus.LATE
           ? 1
           : row.status === AttendanceStatus.HALF_DAY
             ? 0.5
@@ -290,12 +314,19 @@ export class TransportExpenseService {
     return {
       month: selectedMonth,
       rows: staffRows.map((staff) => {
-        const attendanceDays = Number((attendanceMap.get(staff.id) || 0).toFixed(1));
+        const attendanceDays = Number(
+          (attendanceMap.get(staff.id) || 0).toFixed(1),
+        );
         const manualDaysValue = Number(monthOverrides[staff.id]);
-        const hasManualDays = Number.isFinite(manualDaysValue) && manualDaysValue >= 0;
-        const manualDays = hasManualDays ? Number(manualDaysValue.toFixed(1)) : null;
+        const hasManualDays =
+          Number.isFinite(manualDaysValue) && manualDaysValue >= 0;
+        const manualDays = hasManualDays
+          ? Number(manualDaysValue.toFixed(1))
+          : null;
         const effectiveDays = manualDays ?? attendanceDays;
-        const dailyRate = staff.staffStatutory?.dailyRate ?? Number(((staff.salary || 0) / 26).toFixed(2));
+        const dailyRate =
+          staff.staffStatutory?.dailyRate ??
+          Number(((staff.salary || 0) / 26).toFixed(2));
 
         return {
           staffId: staff.id,
@@ -312,7 +343,11 @@ export class TransportExpenseService {
     };
   }
 
-  async updateActingDriverManualDays(staffId: string, month: string, days: number) {
+  async updateActingDriverManualDays(
+    staffId: string,
+    month: string,
+    days: number,
+  ) {
     const selectedMonth = this.normalizeMonth(month);
     const normalizedDays = this.normalizeManualDays(days);
 
@@ -331,7 +366,9 @@ export class TransportExpenseService {
       throw new BadRequestException('Staff not found');
     }
     if (staff.category !== StaffCategory.NON_TEACHING_ACTING_DRIVER) {
-      throw new BadRequestException('Manual days can be updated only for acting drivers');
+      throw new BadRequestException(
+        'Manual days can be updated only for acting drivers',
+      );
     }
 
     const store = await this.getActingDriverDayOverridesStore();
@@ -409,10 +446,22 @@ export class TransportExpenseService {
         .toFixed(2),
     );
 
-    const manualExpenseTotal = Number(manualExpenses.reduce((sum, x) => sum + Number(x.amount || 0), 0).toFixed(2));
-    const appFuelExpenseTotal = Number(appFuelLogs.reduce((sum, x) => sum + Number(x.totalCost || 0), 0).toFixed(2));
-    const combinedManualExpense = Number((manualExpenseTotal + appFuelExpenseTotal).toFixed(2));
-    const totalExpense = Number((combinedManualExpense + salary.totalSalaryExpense).toFixed(2));
+    const manualExpenseTotal = Number(
+      manualExpenses
+        .reduce((sum, x) => sum + Number(x.amount || 0), 0)
+        .toFixed(2),
+    );
+    const appFuelExpenseTotal = Number(
+      appFuelLogs
+        .reduce((sum, x) => sum + Number(x.totalCost || 0), 0)
+        .toFixed(2),
+    );
+    const combinedManualExpense = Number(
+      (manualExpenseTotal + appFuelExpenseTotal).toFixed(2),
+    );
+    const totalExpense = Number(
+      (combinedManualExpense + salary.totalSalaryExpense).toFixed(2),
+    );
     const netTransport = Number((transportIncome - totalExpense).toFixed(2));
 
     return {
@@ -458,13 +507,22 @@ export class TransportExpenseService {
     amount?: number | null;
   }) {
     const date = entry.date ? new Date(entry.date) : null;
-    const dateKey = date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : '';
+    const dateKey =
+      date && !Number.isNaN(date.getTime())
+        ? date.toISOString().slice(0, 10)
+        : '';
     const busKey = String(entry.busId || entry.plateNo || '').trim();
     const litres = Number(entry.litres ?? 0);
     const pricePerLitre = Number(entry.pricePerLitre ?? 0);
     const amount = Number(entry.amount ?? 0);
 
-    return [dateKey, busKey, litres.toFixed(2), pricePerLitre.toFixed(2), amount.toFixed(2)].join('|');
+    return [
+      dateKey,
+      busKey,
+      litres.toFixed(2),
+      pricePerLitre.toFixed(2),
+      amount.toFixed(2),
+    ].join('|');
   }
 
   private buildCreatePayload(
@@ -520,7 +578,11 @@ export class TransportExpenseService {
 
   async create(dto: CreateExpenseDto) {
     const busIds = Array.from(
-      new Set((dto.busIds?.length ? dto.busIds : dto.busId ? [dto.busId] : []).filter(Boolean)),
+      new Set(
+        (dto.busIds?.length ? dto.busIds : dto.busId ? [dto.busId] : []).filter(
+          Boolean,
+        ),
+      ),
     );
 
     if (!busIds.length) {
@@ -528,10 +590,16 @@ export class TransportExpenseService {
     }
 
     if (dto.isShared && !['PARTS', 'MAINTENANCE'].includes(dto.category)) {
-      throw new BadRequestException('Shared expenses are allowed only for PARTS or MAINTENANCE');
+      throw new BadRequestException(
+        'Shared expenses are allowed only for PARTS or MAINTENANCE',
+      );
     }
 
-    if (dto.isShared && ['PARTS', 'MAINTENANCE'].includes(dto.category) && busIds.length > 1) {
+    if (
+      dto.isShared &&
+      ['PARTS', 'MAINTENANCE'].includes(dto.category) &&
+      busIds.length > 1
+    ) {
       const splitAmounts = this.splitAmountEvenly(dto.amount, busIds.length);
       const created = await this.prisma.$transaction(
         busIds.map((busId, idx) =>
@@ -558,7 +626,10 @@ export class TransportExpenseService {
     });
   }
 
-  async findAll(filters: ExpenseFilters = {}, includeFuelLogs: boolean = false) {
+  async findAll(
+    filters: ExpenseFilters = {},
+    includeFuelLogs: boolean = false,
+  ) {
     const where: any = {};
 
     if (filters.category) {
@@ -592,8 +663,10 @@ export class TransportExpenseService {
       }
       if (filters.from || filters.to) {
         fuelWhere.timestamp = {};
-        if (filters.from) fuelWhere.timestamp.gte = this.parseDateBoundary(filters.from, false);
-        if (filters.to) fuelWhere.timestamp.lte = this.parseDateBoundary(filters.to, true);
+        if (filters.from)
+          fuelWhere.timestamp.gte = this.parseDateBoundary(filters.from, false);
+        if (filters.to)
+          fuelWhere.timestamp.lte = this.parseDateBoundary(filters.to, true);
       }
 
       const fuelLogs = await this.prisma.fuelLog.findMany({
@@ -677,7 +750,11 @@ export class TransportExpenseService {
       sheet.addRows(
         expenses.map((e) => {
           // Extract card number from mobile entries (cardNumber) or manual entries (description)
-          const cardVal = e.cardNumber ?? (e.description?.startsWith('Card:') ? e.description.replace(/^Card:\s*/i, '') : '-');
+          const cardVal =
+            e.cardNumber ??
+            (e.description?.startsWith('Card:')
+              ? e.description.replace(/^Card:\s*/i, '')
+              : '-');
           return {
             date: e.date.toISOString().slice(0, 10),
             bus: e.bus?.number ?? '-',
@@ -785,7 +862,9 @@ export class TransportExpenseService {
     paymentMode: 'CASH' | 'CARD' | null,
     cardNumber?: string | null,
   ) {
-    const record = await this.prisma.transportExpense.findUnique({ where: { id } });
+    const record = await this.prisma.transportExpense.findUnique({
+      where: { id },
+    });
     if (!record) {
       throw new BadRequestException(`Expense ${id} not found`);
     }
@@ -794,13 +873,17 @@ export class TransportExpenseService {
       paymentMode === 'CARD' && cardNumber
         ? `Card: ${cardNumber}`
         : paymentMode !== 'CARD'
-        ? (record.description?.startsWith('Card:') ? '' : undefined)
-        : undefined;
+          ? record.description?.startsWith('Card:')
+            ? ''
+            : undefined
+          : undefined;
     return this.prisma.transportExpense.update({
       where: { id },
       data: {
         paymentMode: paymentMode,
-        ...(descriptionUpdate !== undefined ? { description: descriptionUpdate } : {}),
+        ...(descriptionUpdate !== undefined
+          ? { description: descriptionUpdate }
+          : {}),
       },
     });
   }

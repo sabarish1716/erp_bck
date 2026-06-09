@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsArray, IsNumber, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsArray,
+  IsNumber,
+  IsBoolean,
+} from 'class-validator';
 
 export class GeneratePayrollDto {
   @IsNotEmpty() @IsString() month: string | undefined;

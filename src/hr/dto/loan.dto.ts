@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsDateString, IsOptional, Min, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsDateString,
+  IsOptional,
+  Min,
+  IsArray,
+} from 'class-validator';
 
 export class CreateLoanDto {
   @IsString()

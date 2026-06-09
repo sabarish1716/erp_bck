@@ -14,16 +14,19 @@ import { Role } from '@prisma/client';
 export class CreateStaffDto {
   // BASIC DETAILS
   @IsOptional() @IsString() employeeId?: string; // EMPLOYEE ID
-  @IsNotEmpty() @IsString()
+  @IsNotEmpty()
+  @IsString()
   name!: string; // FULL NAME
-  @IsOptional() @IsEmail()
+  @IsOptional()
+  @IsEmail()
   email?: string; // WORK EMAIL
   @IsOptional() @IsString() phone?: string; // CONTACT NUMBER
   @IsOptional() @IsString() alternatePhone?: string; // ALTERNATE CONTACT
   @IsOptional() @IsString() password?: string; // PASSWORD
 
   // JOB DETAILS
-  @IsNotEmpty() @IsString()
+  @IsNotEmpty()
+  @IsString()
   designation!: string; // JOB TITLE
   @IsOptional() @IsString() department?: string; // DEPARTMENT / SPECIALIZATION
   @IsOptional() @IsString() category?: string; // CATEGORY / DEPARTMENT
