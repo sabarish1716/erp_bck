@@ -15,18 +15,23 @@ export class PhonePeService {
 
   constructor() {
     // Defaults are PhonePe's public UAT test credentials
-    this.merchantId  = process.env.PHONEPE_MERCHANT_ID  || 'PGTESTPAYUAT86';
-    this.saltKey     = process.env.PHONEPE_SALT_KEY     || '96434309-7796-489d-8924-ab56988a6076';
-    this.saltIndex   = process.env.PHONEPE_SALT_INDEX   || '1';
-    this.baseUrl     = process.env.PHONEPE_BASE_URL     || 'https://api-preprod.phonepe.com/apis/pg-sandbox';
-    this.callbackUrl = process.env.PHONEPE_CALLBACK_URL || 'http://localhost:3000';
-    this.redirectUrl = process.env.PHONEPE_REDIRECT_URL || 'http://localhost:5173';
+    this.merchantId = process.env.PHONEPE_MERCHANT_ID || 'PGTESTPAYUAT86';
+    this.saltKey =
+      process.env.PHONEPE_SALT_KEY || '96434309-7796-489d-8924-ab56988a6076';
+    this.saltIndex = process.env.PHONEPE_SALT_INDEX || '1';
+    this.baseUrl =
+      process.env.PHONEPE_BASE_URL ||
+      'https://api-preprod.phonepe.com/apis/pg-sandbox';
+    this.callbackUrl =
+      process.env.PHONEPE_CALLBACK_URL || 'http://localhost:3000';
+    this.redirectUrl =
+      process.env.PHONEPE_REDIRECT_URL || 'http://localhost:5173';
   }
 
   /** Create a PhonePe Pay Page payment link. Returns the URL to send to the parent. */
   async createPaymentLink(params: {
     merchantTransactionId: string;
-    amount: number;          // rupees — will be converted to paise internally
+    amount: number; // rupees — will be converted to paise internally
     mobileNumber: string;
     studentFeeId: string;
     studentName: string;
@@ -50,7 +55,9 @@ export class PhonePeService {
       paymentInstrument: { type: 'PAY_PAGE' },
     };
 
-    const base64Payload = Buffer.from(JSON.stringify(payload)).toString('base64');
+    const base64Payload = Buffer.from(JSON.stringify(payload)).toString(
+      'base64',
+    );
     const apiPath = '/pg/v1/pay';
     const signature = crypto
       .createHash('sha256')
@@ -88,7 +95,10 @@ export class PhonePeService {
       return { paymentUrl };
     } catch (err) {
       if (err instanceof BadRequestException) throw err;
-      this.logger.error('PhonePe API call failed', err?.response?.data || err.message);
+      this.logger.error(
+        'PhonePe API call failed',
+        err?.response?.data || err.message,
+      );
       throw new BadRequestException(
         `PhonePe error: ${err?.response?.data?.message || err.message}`,
       );
@@ -132,7 +142,10 @@ export class PhonePeService {
       });
       return response.data;
     } catch (err) {
-      this.logger.error('PhonePe status check failed', err?.response?.data || err.message);
+      this.logger.error(
+        'PhonePe status check failed',
+        err?.response?.data || err.message,
+      );
       throw new BadRequestException(
         `Status check failed: ${err?.response?.data?.message || err.message}`,
       );

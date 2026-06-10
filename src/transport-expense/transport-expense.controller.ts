@@ -86,7 +86,10 @@ export class TransportExpenseController {
     });
 
     res.setHeader('Content-Type', file.contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${file.filename}"`);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${file.filename}"`,
+    );
     return new StreamableFile(file.content);
   }
 
@@ -113,22 +116,36 @@ export class TransportExpenseController {
     @Param('staffId') staffId: string,
     @Body() dto: UpdateActingDriverDaysDto,
   ) {
-    return this.service.updateActingDriverManualDays(staffId, dto.month, dto.days);
+    return this.service.updateActingDriverManualDays(
+      staffId,
+      dto.month,
+      dto.days,
+    );
   }
 
   @Put('expenses/:id/payment-mode')
   updateExpensePaymentMode(
     @Param('id') id: string,
-    @Body() body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
+    @Body()
+    body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
   ) {
-    return this.service.updateExpensePaymentMode(id, body.paymentMode, body.cardNumber);
+    return this.service.updateExpensePaymentMode(
+      id,
+      body.paymentMode,
+      body.cardNumber,
+    );
   }
 
   @Put('fuel-logs/:id/payment-mode')
   updateFuelLogPaymentMode(
     @Param('id') id: string,
-    @Body() body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
+    @Body()
+    body: { paymentMode: 'CASH' | 'CARD' | null; cardNumber?: string | null },
   ) {
-    return this.service.updateFuelLogPaymentMode(id, body.paymentMode, body.cardNumber);
+    return this.service.updateFuelLogPaymentMode(
+      id,
+      body.paymentMode,
+      body.cardNumber,
+    );
   }
 }

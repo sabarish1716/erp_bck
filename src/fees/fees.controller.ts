@@ -74,7 +74,15 @@ export class FeesController {
   @Post('assign-class')
   @Permissions(Permission.FEES_ASSIGN)
   assignFeeToClass(
-    @Body() dto: { standard: string; section?: string; academicYear: string; autoTeacherDiscount?: boolean; autoSiblingDiscount?: boolean; autoRteDiscount?: boolean },
+    @Body()
+    dto: {
+      standard: string;
+      section?: string;
+      academicYear: string;
+      autoTeacherDiscount?: boolean;
+      autoSiblingDiscount?: boolean;
+      autoRteDiscount?: boolean;
+    },
   ) {
     return this.feesService.assignFeeToClass(dto);
   }
@@ -82,7 +90,9 @@ export class FeesController {
   @Get('pending-total/:studentId')
   @Permissions(Permission.FEES_READ)
   getStudentPendingTotal(@Param('studentId') studentId: string) {
-    return this.feesService.getStudentPendingTotal(studentId).then((pending) => ({ studentId, pending }));
+    return this.feesService
+      .getStudentPendingTotal(studentId)
+      .then((pending) => ({ studentId, pending }));
   }
 
   @Get('discount-eligibility/:studentId')
@@ -190,7 +200,11 @@ export class FeesController {
     @Query('academicYear') academicYear: string,
     @Body('overrideFee') overrideFee?: number,
   ) {
-    return this.feesService.recalcTransportFee(studentId, academicYear, overrideFee);
+    return this.feesService.recalcTransportFee(
+      studentId,
+      academicYear,
+      overrideFee,
+    );
   }
 
   @Get('transport-breakdown/:studentId')
@@ -267,7 +281,10 @@ export class FeesController {
   upsertElgaNotebookMappings(
     @Body() body: { level: number; storeItemIds: string[] },
   ) {
-    return this.feesService.upsertElgaNotebookMappings(body.level, body.storeItemIds);
+    return this.feesService.upsertElgaNotebookMappings(
+      body.level,
+      body.storeItemIds,
+    );
   }
 
   // ─── ALL FEES BY STUDENT ───────────────────────

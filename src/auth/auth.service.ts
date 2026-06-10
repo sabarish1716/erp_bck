@@ -1,4 +1,9 @@
-import { Injectable, Post, UnauthorizedException, UseGuards } from '@nestjs/common';
+import {
+  Injectable,
+  Post,
+  UnauthorizedException,
+  UseGuards,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -31,17 +36,16 @@ export class AuthService {
   }
 
   @UseGuards(AuthGuard('jwt'))
-@Post('bulk')
-async loginDriver(driver: Driver) {
-  const payload = { sub: driver.id };
-  return {
-    access_token: this.jwtService.sign(payload),
-  };
-}
+  @Post('bulk')
+  async loginDriver(driver: Driver) {
+    const payload = { sub: driver.id };
+    return {
+      access_token: this.jwtService.sign(payload),
+    };
+  }
   async login(data: any) {
     const user = await this.prisma.user.findUnique({
       where: { email: data.email },
-     
     });
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
@@ -61,10 +65,11 @@ async loginDriver(driver: Driver) {
       staffId: user.staffId,
     };
 
-    const permissions = await this.rolePermissionsService.getEffectivePermissionsForUser({
-      id: user.id,
-      role: user.role as Role,
-    });
+    const permissions =
+      await this.rolePermissionsService.getEffectivePermissionsForUser({
+        id: user.id,
+        role: user.role,
+      });
 
     return {
       access_token: this.jwtService.sign(payload),
@@ -73,7 +78,7 @@ async loginDriver(driver: Driver) {
         name: user.name,
         email: user.email,
         role: user.role,
-        staffId:user.staffId,
+        staffId: user.staffId,
         permissions,
       },
     };

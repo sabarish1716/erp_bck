@@ -33,7 +33,9 @@ describe('StaffService', () => {
       { employeeId: 'EMP0003' },
     ]);
 
-    await expect(service.getNextEmployeeId()).resolves.toEqual({ employeeId: 'EMP0008' });
+    await expect(service.getNextEmployeeId()).resolves.toEqual({
+      employeeId: 'EMP0008',
+    });
   });
 
   it('auto-generates employee ID when creating staff without one', async () => {
@@ -42,14 +44,20 @@ describe('StaffService', () => {
     const tx = {
       staff: {
         findMany: jest.fn().mockResolvedValue([{ employeeId: 'EMP0001' }]),
-        create: jest.fn().mockResolvedValue({ id: 'staff-1', employeeId: 'EMP0002', name: 'Staff Name' }),
+        create: jest.fn().mockResolvedValue({
+          id: 'staff-1',
+          employeeId: 'EMP0002',
+          name: 'Staff Name',
+        }),
       },
       user: {
         create: jest.fn().mockResolvedValue({ id: 1 }),
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx));
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => unknown) => callback(tx),
+    );
 
     await service.create({
       name: 'Staff Name',
@@ -79,14 +87,20 @@ describe('StaffService', () => {
     const tx = {
       staff: {
         findMany: jest.fn().mockResolvedValue([{ employeeId: 'EMP0009' }]),
-        create: jest.fn().mockResolvedValue({ id: 'staff-transport', employeeId: 'EMP0010', name: 'Transport Lead' }),
+        create: jest.fn().mockResolvedValue({
+          id: 'staff-transport',
+          employeeId: 'EMP0010',
+          name: 'Transport Lead',
+        }),
       },
       user: {
         create: jest.fn().mockResolvedValue({ id: 2 }),
       },
     };
 
-    prisma.$transaction.mockImplementation(async (callback: (client: typeof tx) => unknown) => callback(tx));
+    prisma.$transaction.mockImplementation(
+      async (callback: (client: typeof tx) => unknown) => callback(tx),
+    );
 
     await service.create({
       name: 'Transport Lead',

@@ -96,7 +96,10 @@ export class StaffController {
       limits: { fileSize: 8 * 1024 * 1024 },
       fileFilter: (req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png|pdf)$/)) {
-          return cb(new BadRequestException('Only JPG, PNG, or PDF files are allowed'), false);
+          return cb(
+            new BadRequestException('Only JPG, PNG, or PDF files are allowed'),
+            false,
+          );
         }
         cb(null, true);
       },

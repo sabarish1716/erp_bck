@@ -1,5 +1,11 @@
 import { Transform } from 'class-transformer';
-import { IsString, IsNotEmpty, IsOptional, IsDateString, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsDateString,
+  IsNumber,
+} from 'class-validator';
 
 export class ApplyPermissionDto {
   @IsNotEmpty() @IsString() staffId: string;
@@ -16,7 +22,9 @@ export class ApprovePermissionDto {
 
 export class RejectPermissionDto {
   @IsNotEmpty()
-  @Transform(({ value }) => (value === null || value === undefined ? value : String(value)))
+  @Transform(({ value }) =>
+    value === null || value === undefined ? value : String(value),
+  )
   @IsString()
   rejectedBy: string;
 

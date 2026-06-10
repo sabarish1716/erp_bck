@@ -1,8 +1,13 @@
 import {
-  IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, IsInt, IsEnum, Min,
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsNumber,
+  IsBoolean,
+  IsInt,
+  IsEnum,
+  Min,
 } from 'class-validator';
-
-
 
 export class CreateStoreItemDto {
   @IsNotEmpty() @IsString() name: string;

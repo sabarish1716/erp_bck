@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   CreateDocRequestDto,
@@ -92,10 +96,14 @@ export class DocRequestService {
   /** Create a new document request (ticket) */
   async create(dto: CreateDocRequestDto, requestedById: number) {
     if (dto.studentId) {
-      const student = await this.prisma.student.findUnique({ where: { id: dto.studentId } });
+      const student = await this.prisma.student.findUnique({
+        where: { id: dto.studentId },
+      });
       if (!student) throw new NotFoundException('Student not found');
     } else if (dto.staffId) {
-      const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+      const staff = await this.prisma.staff.findUnique({
+        where: { id: dto.staffId },
+      });
       if (!staff) throw new NotFoundException('Staff not found');
     } else {
       throw new BadRequestException('Either studentId or staffId is required');
@@ -104,7 +112,9 @@ export class DocRequestService {
     const ticketNo = await this.nextTicketNo();
 
     if (dto.type === 'BONAFIDE_CERTIFICATE' && !dto.bonafideScenario) {
-      throw new BadRequestException('Bonafide scenario is required for bonafide certificate requests');
+      throw new BadRequestException(
+        'Bonafide scenario is required for bonafide certificate requests',
+      );
     }
 
     const createData: any = {
@@ -113,10 +123,16 @@ export class DocRequestService {
       staffId: dto.staffId,
       type: dto.type,
       reason: dto.reason,
-      bonafideScenario: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideScenario : undefined,
-      bonafidePurpose: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafidePurpose : undefined,
-      bonafideAuthority: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideAuthority : undefined,
-      bonafideTemplateText: dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideTemplateText : undefined,
+      bonafideScenario:
+        dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideScenario : undefined,
+      bonafidePurpose:
+        dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafidePurpose : undefined,
+      bonafideAuthority:
+        dto.type === 'BONAFIDE_CERTIFICATE' ? dto.bonafideAuthority : undefined,
+      bonafideTemplateText:
+        dto.type === 'BONAFIDE_CERTIFICATE'
+          ? dto.bonafideTemplateText
+          : undefined,
       templateText: dto.templateText,
       customFields: dto.customFields,
       requestedById,
@@ -129,7 +145,12 @@ export class DocRequestService {
   }
 
   /** Get all requests (optionally filtered) */
-  async findAll(filters?: { status?: string; type?: string; studentId?: string; staffId?: string }) {
+  async findAll(filters?: {
+    status?: string;
+    type?: string;
+    studentId?: string;
+    staffId?: string;
+  }) {
     const where: any = {};
     if (filters?.status) where.status = filters.status;
     if (filters?.type) where.type = filters.type;
@@ -202,7 +223,8 @@ export class DocRequestService {
       for (const fee of studentFees) {
         const effectivePaid = fee.payments.reduce((sum, p) => {
           if (p.status === 'CANCELLED') return sum;
-          if (p.status === 'REFUNDED') return sum + p.amount - (p.refundAmount || 0);
+          if (p.status === 'REFUNDED')
+            return sum + p.amount - (p.refundAmount || 0);
           return sum + p.amount;
         }, 0);
         totalPending += fee.netFee - effectivePaid;
@@ -225,10 +247,16 @@ export class DocRequestService {
       data.tcNo = dto.tcNo || existing.tcNo;
       data.tcDate = dto.tcDate ? new Date(dto.tcDate) : new Date();
       data.leavingReason = dto.leavingReason || existing.leavingReason;
-      data.conductRemark = dto.conductRemark || existing.conductRemark || 'Good';
-      data.qualifiedForPromotion = dto.qualifiedForPromotion ?? existing.qualifiedForPromotion ?? true;
-      data.dateOfLeaving = dto.dateOfLeaving ? new Date(dto.dateOfLeaving) : undefined;
-      data.lastAttendedDate = dto.lastAttendedDate ? new Date(dto.lastAttendedDate) : undefined;
+      data.conductRemark =
+        dto.conductRemark || existing.conductRemark || 'Good';
+      data.qualifiedForPromotion =
+        dto.qualifiedForPromotion ?? existing.qualifiedForPromotion ?? true;
+      data.dateOfLeaving = dto.dateOfLeaving
+        ? new Date(dto.dateOfLeaving)
+        : undefined;
+      data.lastAttendedDate = dto.lastAttendedDate
+        ? new Date(dto.lastAttendedDate)
+        : undefined;
     }
 
     if (existing.type === 'BONAFIDE_CERTIFICATE') {
@@ -245,9 +273,12 @@ export class DocRequestService {
         data.bonafideTemplateText = dto.bonafideTemplateText;
       }
 
-      const finalScenario = (data.bonafideScenario || existing.bonafideScenario) as BonafideScenarioType | undefined;
+      const finalScenario = (data.bonafideScenario ||
+        existing.bonafideScenario) as BonafideScenarioType | undefined;
       if (!finalScenario) {
-        throw new BadRequestException('Bonafide scenario is required before issuing bonafide certificate');
+        throw new BadRequestException(
+          'Bonafide scenario is required before issuing bonafide certificate',
+        );
       }
     }
 
@@ -288,14 +319,15 @@ export class DocRequestService {
 
   /** Dashboard statistics */
   async getStats() {
-    const [total, requested, inReview, approved, issued, rejected] = await Promise.all([
-      this.prisma.docRequest.count(),
-      this.prisma.docRequest.count({ where: { status: 'REQUESTED' } }),
-      this.prisma.docRequest.count({ where: { status: 'IN_REVIEW' } }),
-      this.prisma.docRequest.count({ where: { status: 'APPROVED' } }),
-      this.prisma.docRequest.count({ where: { status: 'ISSUED' } }),
-      this.prisma.docRequest.count({ where: { status: 'REJECTED' } }),
-    ]);
+    const [total, requested, inReview, approved, issued, rejected] =
+      await Promise.all([
+        this.prisma.docRequest.count(),
+        this.prisma.docRequest.count({ where: { status: 'REQUESTED' } }),
+        this.prisma.docRequest.count({ where: { status: 'IN_REVIEW' } }),
+        this.prisma.docRequest.count({ where: { status: 'APPROVED' } }),
+        this.prisma.docRequest.count({ where: { status: 'ISSUED' } }),
+        this.prisma.docRequest.count({ where: { status: 'REJECTED' } }),
+      ]);
     return { total, requested, inReview, approved, issued, rejected };
   }
 

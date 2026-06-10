@@ -1,7 +1,16 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsEnum, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
 import { ExamSession, PeriodType, Standard } from '@prisma/client';
-
 
 export class CreateExamDto {
   @IsString()
@@ -106,8 +115,6 @@ export class CreateExamScheduleDto {
   @IsString()
   academicStreamId?: string;
 
-
-
   @IsDateString()
   examDate!: string;
 
@@ -119,8 +126,6 @@ export class CreateExamScheduleDto {
 
   @IsEnum(ExamSession)
   session!: ExamSession;
-
-
 
   /** Starting period number (1–8) */
   @IsOptional()
@@ -156,8 +161,6 @@ export class GenerateRollNumbersDto {
   @IsString()
   academicStreamId?: string;
 
-
-
   @IsOptional()
   @IsString()
   academicYear?: string;
@@ -190,8 +193,6 @@ export class AutoGeneratePeriodsDto {
   @IsString()
   academicStreamId?: string;
 
-
-
   @IsDateString()
   examDate!: string;
 
@@ -210,8 +211,6 @@ export class AutoGeneratePeriodsDto {
   @IsOptional()
   @IsDateString()
   revisionDate?: string;
-
-
 
   @IsEnum(ExamSession)
   session!: ExamSession;
@@ -232,8 +231,6 @@ export class AutoGenerateFullTimetableDto {
 
   @IsDateString()
   startDate!: string;
-
-
 }
 
 export class UpdateExamScheduleCellDto {

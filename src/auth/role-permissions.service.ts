@@ -37,17 +37,22 @@ export class RolePermissionsService {
         ? this.normalizePermissionList(rawList)
         : DEFAULT_ROLE_PERMISSIONS[role];
 
-      result[role] = role === Role.ADMIN ? [...Object.values(Permission)] : values;
+      result[role] =
+        role === Role.ADMIN ? [...Object.values(Permission)] : values;
     }
 
     return result;
   }
 
-  private normalizeUserPermissionOverrides(input: unknown): UserPermissionOverridesMap {
+  private normalizeUserPermissionOverrides(
+    input: unknown,
+  ): UserPermissionOverridesMap {
     const result: UserPermissionOverridesMap = {};
     if (!input || typeof input !== 'object') return result;
 
-    for (const [userId, override] of Object.entries(input as Record<string, unknown>)) {
+    for (const [userId, override] of Object.entries(
+      input as Record<string, unknown>,
+    )) {
       if (!override || typeof override !== 'object') continue;
 
       const parsed = override as Record<string, unknown>;
@@ -85,7 +90,9 @@ export class RolePermissionsService {
     return this.normalizeUserPermissionOverrides(row.value);
   }
 
-  async getUserPermissionOverride(userId: string): Promise<UserPermissionOverride> {
+  async getUserPermissionOverride(
+    userId: string,
+  ): Promise<UserPermissionOverride> {
     const all = await this.getUserPermissionOverridesMap();
     return all[userId] ?? { grants: [], revokes: [] };
   }
@@ -119,7 +126,10 @@ export class RolePermissionsService {
     return normalized;
   }
 
-  async getEffectivePermissionsForUser(user: { id: string | number; role: Role }): Promise<Permission[]> {
+  async getEffectivePermissionsForUser(user: {
+    id: string | number;
+    role: Role;
+  }): Promise<Permission[]> {
     const base = await this.getPermissionsForRole(user.role);
     if (user.role === Role.ADMIN) return base;
 

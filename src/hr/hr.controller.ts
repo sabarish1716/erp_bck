@@ -1,12 +1,50 @@
-import { Controller, Get, Post, Put, Delete, Param, Body, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { HrService } from './hr.service';
-import { MarkAttendanceDto, BulkMarkAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
-import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } from './dto/leave.dto';
-import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from './dto/permission.dto';
-import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
-import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
-import { GeneratePayrollDto, ApprovePayrollDto, UpdatePayrollDto } from './dto/payroll.dto';
-import { CreateAdvanceRequestDto, ApproveAdvanceDto, RejectAdvanceDto } from './dto/advance.dto';
+import {
+  MarkAttendanceDto,
+  BulkMarkAttendanceDto,
+  UpdateAttendanceDto,
+} from './dto/attendance.dto';
+import {
+  CreateLeaveTypeDto,
+  ApplyLeaveDto,
+  ApproveLeaveDto,
+  RejectLeaveDto,
+} from './dto/leave.dto';
+import {
+  ApplyPermissionDto,
+  ApprovePermissionDto,
+  RejectPermissionDto,
+} from './dto/permission.dto';
+import {
+  UpdateStatutorySettingsDto,
+  UpdateStaffStatutoryDto,
+} from './dto/statutory.dto';
+import {
+  CreateDeviceDto,
+  UpdateDeviceDto,
+  MapStaffDeviceDto,
+} from './dto/essl.dto';
+import {
+  GeneratePayrollDto,
+  ApprovePayrollDto,
+  UpdatePayrollDto,
+} from './dto/payroll.dto';
+import {
+  CreateAdvanceRequestDto,
+  ApproveAdvanceDto,
+  RejectAdvanceDto,
+} from './dto/advance.dto';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 
@@ -77,7 +115,10 @@ export class HrController {
 
   @Get('leave/policy')
   @Permissions(Permission.HR_LEAVE_READ)
-  getLeavePermissionPolicy(@Req() req: any, @Query('staffId') staffId?: string) {
+  getLeavePermissionPolicy(
+    @Req() req: any,
+    @Query('staffId') staffId?: string,
+  ) {
     return this.hrService.getLeavePermissionPolicy(staffId, req.user);
   }
 
@@ -89,7 +130,10 @@ export class HrController {
     @Query('staffId') staffId?: string,
     @Query('month') month?: string,
   ) {
-    return this.hrService.getLeaveApplications({ status, staffId, month }, req.user);
+    return this.hrService.getLeaveApplications(
+      { status, staffId, month },
+      req.user,
+    );
   }
 
   @Post('leave/apply')
@@ -158,7 +202,10 @@ export class HrController {
 
   @Put('permission/:id/approve')
   @Permissions(Permission.HR_PERMISSION_APPROVE)
-  approvePermission(@Param('id') id: string, @Body() dto: ApprovePermissionDto) {
+  approvePermission(
+    @Param('id') id: string,
+    @Body() dto: ApprovePermissionDto,
+  ) {
     return this.hrService.approvePermission(id, dto);
   }
 
@@ -189,7 +236,10 @@ export class HrController {
 
   @Put('statutory/staff/:staffId')
   @Permissions(Permission.HR_STATUTORY_MANAGE)
-  updateStaffStatutory(@Param('staffId') staffId: string, @Body() dto: UpdateStaffStatutoryDto) {
+  updateStaffStatutory(
+    @Param('staffId') staffId: string,
+    @Body() dto: UpdateStaffStatutoryDto,
+  ) {
     return this.hrService.updateStaffStatutory(staffId, dto);
   }
 
@@ -299,7 +349,6 @@ export class HrController {
     return this.hrService.getPayroll(id, req.user);
   }
 
-
   @Put('payroll/approve')
   @Permissions(Permission.HR_PAYROLL_APPROVE)
   approvePayrolls(@Body() dto: ApprovePayrollDto) {
@@ -352,7 +401,10 @@ export class HrController {
     @Query('status') status?: string,
     @Query('type') type?: string,
   ) {
-    return this.hrService.getAdvanceRequests({ staffId, status, type }, req.user);
+    return this.hrService.getAdvanceRequests(
+      { staffId, status, type },
+      req.user,
+    );
   }
 
   @Get('advance/:id')
@@ -391,7 +443,10 @@ export class HrController {
 
   @Get('increment/history/:staffId')
   @Permissions(Permission.HR_PAYROLL_READ)
-  getIncrementHistory(@Param('staffId') staffId: string, @Query('status') status?: string) {
+  getIncrementHistory(
+    @Param('staffId') staffId: string,
+    @Query('status') status?: string,
+  ) {
     return this.hrService.getIncrementHistory(staffId, status);
   }
 
@@ -425,7 +480,10 @@ export class HrController {
 
   @Get('loan/staff/:staffId')
   @Permissions(Permission.HR_PAYROLL_READ)
-  getLoans(@Param('staffId') staffId: string, @Query('status') status?: string) {
+  getLoans(
+    @Param('staffId') staffId: string,
+    @Query('status') status?: string,
+  ) {
     return this.hrService.getLoans(staffId, status);
   }
 

@@ -10,7 +10,7 @@ export class BulkAssignItemDto {
 
 export class BulkAssignTransportDto {
   @IsNotEmpty() @IsString() academicYear: string;
-  
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => BulkAssignItemDto)

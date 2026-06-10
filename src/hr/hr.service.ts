@@ -1,15 +1,58 @@
-
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { AttendanceStatus, PunchMethod, StaffCategory, Role } from '@prisma/client';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  AttendanceStatus,
+  PunchMethod,
+  StaffCategory,
+  Role,
+} from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { MarkAttendanceDto, BulkMarkAttendanceDto, UpdateAttendanceDto } from './dto/attendance.dto';
-import { CreateLeaveTypeDto, ApplyLeaveDto, ApproveLeaveDto, RejectLeaveDto } from './dto/leave.dto';
-import { ApplyPermissionDto, ApprovePermissionDto, RejectPermissionDto } from './dto/permission.dto';
-import { UpdateStatutorySettingsDto, UpdateStaffStatutoryDto } from './dto/statutory.dto';
-import { CreateDeviceDto, UpdateDeviceDto, MapStaffDeviceDto } from './dto/essl.dto';
-import { GeneratePayrollDto, ApprovePayrollDto, UpdatePayrollDto } from './dto/payroll.dto';
-import { CreateIncrementDto, ApproveIncrementDto, RejectIncrementDto } from './dto/increment.dto';
-import { CreateLoanDto, ApproveLoanDto, RejectLoanDto, SkipLoanEMIDto, ResumeLoanEMIDto, PreCloseLoanDto } from './dto/loan.dto';
+import {
+  MarkAttendanceDto,
+  BulkMarkAttendanceDto,
+  UpdateAttendanceDto,
+} from './dto/attendance.dto';
+import {
+  CreateLeaveTypeDto,
+  ApplyLeaveDto,
+  ApproveLeaveDto,
+  RejectLeaveDto,
+} from './dto/leave.dto';
+import {
+  ApplyPermissionDto,
+  ApprovePermissionDto,
+  RejectPermissionDto,
+} from './dto/permission.dto';
+import {
+  UpdateStatutorySettingsDto,
+  UpdateStaffStatutoryDto,
+} from './dto/statutory.dto';
+import {
+  CreateDeviceDto,
+  UpdateDeviceDto,
+  MapStaffDeviceDto,
+} from './dto/essl.dto';
+import {
+  GeneratePayrollDto,
+  ApprovePayrollDto,
+  UpdatePayrollDto,
+} from './dto/payroll.dto';
+import {
+  CreateIncrementDto,
+  ApproveIncrementDto,
+  RejectIncrementDto,
+} from './dto/increment.dto';
+import {
+  CreateLoanDto,
+  ApproveLoanDto,
+  RejectLoanDto,
+  SkipLoanEMIDto,
+  ResumeLoanEMIDto,
+  PreCloseLoanDto,
+} from './dto/loan.dto';
 
 type LeavePermissionPolicy = {
   permissionHoursLimit: number;
@@ -49,7 +92,7 @@ const NON_TEACHING_POLICY: LeavePermissionPolicy = {
 
 @Injectable()
 export class HrService {
-  constructor(private prisma: PrismaService) { }
+  constructor(private prisma: PrismaService) {}
 
   async getStaffList() {
     return this.prisma.staff.findMany({
@@ -71,10 +114,15 @@ export class HrService {
     return role === Role.STAFF || role === Role.TEACHER;
   }
 
-  private ensureOwnStaffId(staffId: string | undefined, requester?: RequestUser) {
+  private ensureOwnStaffId(
+    staffId: string | undefined,
+    requester?: RequestUser,
+  ) {
     if (!requester || !this.isSelfServiceRole(requester.role)) return staffId;
     if (!requester.staffId) {
-      throw new BadRequestException('Staff account is not linked to a staff profile');
+      throw new BadRequestException(
+        'Staff account is not linked to a staff profile',
+      );
     }
     if (staffId && staffId !== requester.staffId) {
       throw new BadRequestException('You can only access your own HR records');
@@ -82,7 +130,9 @@ export class HrService {
     return requester.staffId;
   }
 
-  private getPolicyForCategory(category?: StaffCategory | null): LeavePermissionPolicy {
+  private getPolicyForCategory(
+    category?: StaffCategory | null,
+  ): LeavePermissionPolicy {
     if (category && String(category).startsWith('NON_TEACHING')) {
       return NON_TEACHING_POLICY;
     }
@@ -98,7 +148,9 @@ export class HrService {
     return policy.leaveEntitlements[leaveCode] ?? fallback;
   }
 
-  private getPermissionLimitForCategory(category: StaffCategory | null | undefined) {
+  private getPermissionLimitForCategory(
+    category: StaffCategory | null | undefined,
+  ) {
     return this.getPolicyForCategory(category).permissionHoursLimit;
   }
 
@@ -132,7 +184,10 @@ export class HrService {
   }
 
   private normalizeEnumKey(value: string) {
-    return value.trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return value
+      .trim()
+      .toUpperCase()
+      .replace(/[\s-]+/g, '_');
   }
 
   private toAttendanceStatus(status: string): AttendanceStatus {
@@ -160,7 +215,10 @@ export class HrService {
   // ─── ATTENDANCE ────────────────────────────────
   // ═══════════════════════════════════════════════
 
-  async getAttendance(query: { date?: string; month?: string; staffId?: string }, requester?: RequestUser) {
+  async getAttendance(
+    query: { date?: string; month?: string; staffId?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
@@ -175,7 +233,11 @@ export class HrService {
     }
     return this.prisma.attendance.findMany({
       where,
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: {
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
+      },
       orderBy: [{ date: 'desc' }, { staff: { name: 'asc' } }],
     });
   }
@@ -240,8 +302,14 @@ export class HrService {
   async updateAttendance(id: string, dto: UpdateAttendanceDto) {
     const existing = await this.prisma.attendance.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Attendance record not found');
-    const status = dto.status !== undefined ? this.toAttendanceStatus(dto.status) : undefined;
-    const punchMethod = dto.punchMethod !== undefined ? this.toPunchMethod(dto.punchMethod) : undefined;
+    const status =
+      dto.status !== undefined
+        ? this.toAttendanceStatus(dto.status)
+        : undefined;
+    const punchMethod =
+      dto.punchMethod !== undefined
+        ? this.toPunchMethod(dto.punchMethod)
+        : undefined;
     return this.prisma.attendance.update({
       where: { id },
       data: {
@@ -249,7 +317,9 @@ export class HrService {
         ...(dto.checkIn !== undefined && { checkIn: dto.checkIn }),
         ...(dto.checkOut !== undefined && { checkOut: dto.checkOut }),
         ...(punchMethod !== undefined && { punchMethod }),
-        ...(dto.workingHours !== undefined && { workingHours: dto.workingHours }),
+        ...(dto.workingHours !== undefined && {
+          workingHours: dto.workingHours,
+        }),
         ...(dto.remarks !== undefined && { remarks: dto.remarks }),
       },
     });
@@ -265,7 +335,6 @@ export class HrService {
     return { settings, staff };
   }
 
-
   async getMonthlyReport(month: string, requester?: RequestUser) {
     const [y, m] = month.split('-').map(Number);
     const startDate = new Date(y, m - 1, 1);
@@ -274,7 +343,10 @@ export class HrService {
     const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
 
     const staff = await this.prisma.staff.findMany({
-      where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) },
+      where: {
+        isActive: true,
+        ...(effectiveStaffId ? { id: effectiveStaffId } : {}),
+      },
       select: { id: true, name: true, employeeId: true, department: true },
     });
 
@@ -290,11 +362,20 @@ export class HrService {
 
     return staff.map((s) => {
       const records = attendanceMap[s.id] || [];
-      const present = records.filter((r) => r.status === 'PRESENT' || r.status === 'LATE').length;
+      const present = records.filter(
+        (r) => r.status === 'PRESENT' || r.status === 'LATE',
+      ).length;
       const absent = records.filter((r) => r.status === 'ABSENT').length;
       const halfDay = records.filter((r) => r.status === 'HALF_DAY').length;
       const onLeave = records.filter((r) => r.status === 'ON_LEAVE').length;
-      return { ...s, present, absent, halfDay, onLeave, totalDays: records.length };
+      return {
+        ...s,
+        present,
+        absent,
+        halfDay,
+        onLeave,
+        totalDays: records.length,
+      };
     });
   }
 
@@ -303,23 +384,39 @@ export class HrService {
   // ═══════════════════════════════════════════════
 
   async getLeaveTypes() {
-    return this.prisma.leaveType.findMany({ where: { isActive: true }, orderBy: { name: 'asc' } });
+    return this.prisma.leaveType.findMany({
+      where: { isActive: true },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async createLeaveType(dto: CreateLeaveTypeDto) {
     return this.prisma.leaveType.create({
-      data: { name: dto.name, code: dto.code, maxPerYear: dto.maxPerYear ?? 12, carryForward: dto.carryForward ?? false },
+      data: {
+        name: dto.name,
+        code: dto.code,
+        maxPerYear: dto.maxPerYear ?? 12,
+        carryForward: dto.carryForward ?? false,
+      },
     });
   }
 
-  async getLeaveApplications(query: { status?: string; staffId?: string; month?: string }, requester?: RequestUser) {
+  async getLeaveApplications(
+    query: { status?: string; staffId?: string; month?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     if (query.status) where.status = query.status;
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
     if (query.month) {
       const [year, month] = query.month.split('-').map(Number);
-      if (!Number.isNaN(year) && !Number.isNaN(month) && month >= 1 && month <= 12) {
+      if (
+        !Number.isNaN(year) &&
+        !Number.isNaN(month) &&
+        month >= 1 &&
+        month <= 12
+      ) {
         const start = new Date(year, month - 1, 1);
         const end = new Date(year, month, 1);
         where.fromDate = { gte: start, lt: end };
@@ -328,7 +425,16 @@ export class HrService {
     return this.prisma.leaveApplication.findMany({
       where,
       include: {
-        staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true } },
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            category: true,
+          },
+        },
         leaveType: { select: { id: true, name: true, code: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -404,8 +510,12 @@ export class HrService {
       where: { id },
       include: { leaveType: true },
     });
-    if (!application) throw new NotFoundException('Leave application not found');
-    if (application.status !== 'PENDING') throw new BadRequestException('Only pending applications can be approved');
+    if (!application)
+      throw new NotFoundException('Leave application not found');
+    if (application.status !== 'PENDING')
+      throw new BadRequestException(
+        'Only pending applications can be approved',
+      );
 
     const staffCategory = await this.getStaffCategory(application.staffId);
 
@@ -418,8 +528,17 @@ export class HrService {
       // Deduct from balance
       const year = this.getAcademicYear(application.fromDate);
       await tx.leaveBalance.upsert({
-        where: { staffId_leaveTypeId_year: { staffId: application.staffId, leaveTypeId: application.leaveTypeId, year } },
-        update: { used: { increment: application.days }, remaining: { decrement: application.days } },
+        where: {
+          staffId_leaveTypeId_year: {
+            staffId: application.staffId,
+            leaveTypeId: application.leaveTypeId,
+            year,
+          },
+        },
+        update: {
+          used: { increment: application.days },
+          remaining: { decrement: application.days },
+        },
         create: {
           staffId: application.staffId,
           leaveTypeId: application.leaveTypeId,
@@ -444,12 +563,22 @@ export class HrService {
   }
 
   async rejectLeave(id: string, dto: RejectLeaveDto) {
-    const application = await this.prisma.leaveApplication.findUnique({ where: { id } });
-    if (!application) throw new NotFoundException('Leave application not found');
-    if (application.status !== 'PENDING') throw new BadRequestException('Only pending applications can be rejected');
+    const application = await this.prisma.leaveApplication.findUnique({
+      where: { id },
+    });
+    if (!application)
+      throw new NotFoundException('Leave application not found');
+    if (application.status !== 'PENDING')
+      throw new BadRequestException(
+        'Only pending applications can be rejected',
+      );
     return this.prisma.leaveApplication.update({
       where: { id },
-      data: { status: 'REJECTED', rejectedBy: dto.rejectedBy, rejectionNote: dto.rejectionNote },
+      data: {
+        status: 'REJECTED',
+        rejectedBy: dto.rejectedBy,
+        rejectionNote: dto.rejectionNote,
+      },
     });
   }
 
@@ -458,7 +587,8 @@ export class HrService {
       where: { id },
       include: { leaveType: true },
     });
-    if (!application) throw new NotFoundException('Leave application not found');
+    if (!application)
+      throw new NotFoundException('Leave application not found');
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.leaveApplication.update({
@@ -470,8 +600,15 @@ export class HrService {
       if (application.status === 'APPROVED') {
         const year = this.getAcademicYear(application.fromDate);
         await tx.leaveBalance.updateMany({
-          where: { staffId: application.staffId, leaveTypeId: application.leaveTypeId, year },
-          data: { used: { decrement: application.days }, remaining: { increment: application.days } },
+          where: {
+            staffId: application.staffId,
+            leaveTypeId: application.leaveTypeId,
+            year,
+          },
+          data: {
+            used: { decrement: application.days },
+            remaining: { increment: application.days },
+          },
         });
       }
 
@@ -479,7 +616,10 @@ export class HrService {
     });
   }
 
-  async getLeaveBalances(query: { staffId?: string; year?: string }, requester?: RequestUser) {
+  async getLeaveBalances(
+    query: { staffId?: string; year?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
@@ -503,7 +643,9 @@ export class HrService {
         lt.maxPerYear,
       );
       const bal = await this.prisma.leaveBalance.upsert({
-        where: { staffId_leaveTypeId_year: { staffId, leaveTypeId: lt.id, year } },
+        where: {
+          staffId_leaveTypeId_year: { staffId, leaveTypeId: lt.id, year },
+        },
         update: {},
         create: {
           staffId,
@@ -523,7 +665,10 @@ export class HrService {
   // ─── PERMISSION (SHORT LEAVE) ─────────────────
   // ═══════════════════════════════════════════════
 
-  async getPermissions(query: { staffId?: string; month?: string; status?: string }, requester?: RequestUser) {
+  async getPermissions(
+    query: { staffId?: string; month?: string; status?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
@@ -534,7 +679,11 @@ export class HrService {
     }
     return this.prisma.permissionRequest.findMany({
       where,
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: {
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -559,7 +708,10 @@ export class HrService {
       select: { hours: true },
     });
 
-    const usedHours = approvedPermissions.reduce((sum, row) => sum + Number(row.hours || 0), 0);
+    const usedHours = approvedPermissions.reduce(
+      (sum, row) => sum + Number(row.hours || 0),
+      0,
+    );
     const projected = usedHours + normalizedDto.hours;
     if (projected > permissionLimit) {
       throw new BadRequestException(
@@ -580,9 +732,12 @@ export class HrService {
   }
 
   async approvePermission(id: string, dto: ApprovePermissionDto) {
-    const req = await this.prisma.permissionRequest.findUnique({ where: { id } });
+    const req = await this.prisma.permissionRequest.findUnique({
+      where: { id },
+    });
     if (!req) throw new NotFoundException('Permission request not found');
-    if (req.status !== 'PENDING') throw new BadRequestException('Only pending requests can be approved');
+    if (req.status !== 'PENDING')
+      throw new BadRequestException('Only pending requests can be approved');
     return this.prisma.permissionRequest.update({
       where: { id },
       data: { status: 'APPROVED', approvedBy: dto.approvedBy },
@@ -590,9 +745,12 @@ export class HrService {
   }
 
   async rejectPermission(id: string, dto: RejectPermissionDto) {
-    const req = await this.prisma.permissionRequest.findUnique({ where: { id } });
+    const req = await this.prisma.permissionRequest.findUnique({
+      where: { id },
+    });
     if (!req) throw new NotFoundException('Permission request not found');
-    if (req.status !== 'PENDING') throw new BadRequestException('Only pending requests can be rejected');
+    if (req.status !== 'PENDING')
+      throw new BadRequestException('Only pending requests can be rejected');
     return this.prisma.permissionRequest.update({
       where: { id },
       data: {
@@ -611,8 +769,17 @@ export class HrService {
     const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
 
     const staff = await this.prisma.staff.findMany({
-      where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) },
-      select: { id: true, name: true, employeeId: true, department: true, category: true },
+      where: {
+        isActive: true,
+        ...(effectiveStaffId ? { id: effectiveStaffId } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        employeeId: true,
+        department: true,
+        category: true,
+      },
     });
 
     const approved = await this.prisma.permissionRequest.findMany({
@@ -628,7 +795,7 @@ export class HrService {
       const used = usageMap[s.id] || 0;
       const limit = this.getPermissionLimitForCategory(s.category);
       const excess = Math.max(0, used - limit);
-      const lopDays = excess > 0 ? Math.ceil(excess / 8 * 2) / 2 : 0; // half-day increments
+      const lopDays = excess > 0 ? Math.ceil((excess / 8) * 2) / 2 : 0; // half-day increments
       return { ...s, usedHours: used, limit, excessHours: excess, lopDays };
     });
   }
@@ -648,14 +815,29 @@ export class HrService {
   async updateStatutorySettings(dto: UpdateStatutorySettingsDto) {
     const existing = await this.prisma.statutorySettings.findFirst();
     if (existing) {
-      return this.prisma.statutorySettings.update({ where: { id: existing.id }, data: dto });
+      return this.prisma.statutorySettings.update({
+        where: { id: existing.id },
+        data: dto,
+      });
     }
     return this.prisma.statutorySettings.create({ data: dto as any });
   }
 
   async getStaffStatutoryList() {
     return this.prisma.staffStatutory.findMany({
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, salary: true, pfJoiningDate: true, joiningDate: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            salary: true,
+            pfJoiningDate: true,
+            joiningDate: true,
+          },
+        },
+      },
     });
   }
 
@@ -679,7 +861,11 @@ export class HrService {
   async getMonthlyStatutoryReport(month: string) {
     const payrolls = await this.prisma.payroll.findMany({
       where: { month },
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: {
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
+      },
     });
     return payrolls.map((p) => ({
       staff: p.staff,
@@ -714,7 +900,11 @@ export class HrService {
     return this.prisma.eSSLDevice.delete({ where: { id } });
   }
 
-  async getPunchLogs(query: { deviceId?: string; date?: string; staffId?: string }) {
+  async getPunchLogs(query: {
+    deviceId?: string;
+    date?: string;
+    staffId?: string;
+  }) {
     const where: any = {};
     if (query.deviceId) where.deviceId = query.deviceId;
     if (query.staffId) where.staffId = query.staffId;
@@ -754,7 +944,9 @@ export class HrService {
   async syncDevice(deviceId: string) {
     // In a real implementation, this would connect to the ESSL device via SDK/API
     // For now, record a sync attempt
-    const device = await this.prisma.eSSLDevice.findUnique({ where: { id: deviceId } });
+    const device = await this.prisma.eSSLDevice.findUnique({
+      where: { id: deviceId },
+    });
     if (!device) throw new NotFoundException('Device not found');
 
     try {
@@ -775,7 +967,9 @@ export class HrService {
       await this.prisma.eSSLSyncHistory.create({
         data: { deviceId, status: 'failed', error: error?.message },
       });
-      throw new BadRequestException('Sync failed: ' + (error?.message || 'Unknown error'));
+      throw new BadRequestException(
+        'Sync failed: ' + (error?.message || 'Unknown error'),
+      );
     }
   }
 
@@ -787,7 +981,12 @@ export class HrService {
         const result = await this.syncDevice(device.id);
         results.push({ deviceId: device.id, name: device.name, ...result });
       } catch (e) {
-        results.push({ deviceId: device.id, name: device.name, success: false, error: e?.message || 'Unknown error' });
+        results.push({
+          deviceId: device.id,
+          name: device.name,
+          success: false,
+          error: e?.message || 'Unknown error',
+        });
       }
     }
     return results;
@@ -814,15 +1013,19 @@ export class HrService {
     const startDate = new Date(y, m - 1, 1);
     const endDate = new Date(y, m, 1);
 
-    const actingDriverDayOverridesRecord = await this.prisma.appSetting.findUnique({
-      where: { key: 'hr.actingDriverDayOverrides' },
-      select: { value: true },
-    });
+    const actingDriverDayOverridesRecord =
+      await this.prisma.appSetting.findUnique({
+        where: { key: 'hr.actingDriverDayOverrides' },
+        select: { value: true },
+      });
     const actingDriverDayOverridesStore =
       actingDriverDayOverridesRecord &&
-        typeof actingDriverDayOverridesRecord.value === 'object' &&
-        !Array.isArray(actingDriverDayOverridesRecord.value)
-        ? (actingDriverDayOverridesRecord.value as Record<string, Record<string, number>>)
+      typeof actingDriverDayOverridesRecord.value === 'object' &&
+      !Array.isArray(actingDriverDayOverridesRecord.value)
+        ? (actingDriverDayOverridesRecord.value as Record<
+            string,
+            Record<string, number>
+          >)
         : {};
     const monthDayOverrides = actingDriverDayOverridesStore[month] || {};
 
@@ -832,13 +1035,11 @@ export class HrService {
     const hraRate = (settings as any).hraRate ?? 30;
     const travelAllowanceRate = (settings as any).travelAllowanceRate ?? 0;
     const otherAllowanceRate = (settings as any).otherAllowanceRate ?? 0;
-    const esiDailyWageThreshold = (settings as any).esiDailyWageThreshold ?? 176;
+    const esiDailyWageThreshold =
+      (settings as any).esiDailyWageThreshold ?? 176;
 
     const staffFilter: any = {
-      OR: [
-        { isActive: true },
-        { relievingDate: { gte: startDate } }
-      ]
+      OR: [{ isActive: true }, { relievingDate: { gte: startDate } }],
     };
     if (dto.staffIds?.length) staffFilter.id = { in: dto.staffIds };
     const staffList = await this.prisma.staff.findMany({
@@ -858,7 +1059,9 @@ export class HrService {
         isActingDriver;
       const actingDriverOverrideDaysRaw = Number(monthDayOverrides[staff.id]);
       const actingDriverOverrideDays =
-        isActingDriver && Number.isFinite(actingDriverOverrideDaysRaw) && actingDriverOverrideDaysRaw >= 0
+        isActingDriver &&
+        Number.isFinite(actingDriverOverrideDaysRaw) &&
+        actingDriverOverrideDaysRaw >= 0
           ? Number(actingDriverOverrideDaysRaw.toFixed(1))
           : undefined;
       const isPartTime = staff.category === StaffCategory.TEACHING_PART_TIME;
@@ -893,16 +1096,16 @@ export class HrService {
         const effectiveDays = actingDriverOverrideDays ?? presentDaysCount;
 
         grossSalary = Math.round(effectiveDays * dailyRate);
-        basicSalary = Math.round(grossSalary * basicRate / 100);
-        hra = Math.round(grossSalary * hraRate / 100);
-        travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
+        basicSalary = Math.round((grossSalary * basicRate) / 100);
+        hra = Math.round((grossSalary * hraRate) / 100);
+        travelAllowance = Math.round((grossSalary * travelAllowanceRate) / 100);
         otherAllowances = grossSalary - basicSalary - hra - travelAllowance;
       } else {
         // Salaried staff: gross is stored; break it down by structure
         grossSalary = statutory?.grossSalary ?? staff.salary ?? 0;
-        basicSalary = Math.round(grossSalary * basicRate / 100);
-        hra = Math.round(grossSalary * hraRate / 100);
-        travelAllowance = Math.round(grossSalary * travelAllowanceRate / 100);
+        basicSalary = Math.round((grossSalary * basicRate) / 100);
+        hra = Math.round((grossSalary * hraRate) / 100);
+        travelAllowance = Math.round((grossSalary * travelAllowanceRate) / 100);
         otherAllowances = grossSalary - basicSalary - hra - travelAllowance;
       }
 
@@ -910,13 +1113,13 @@ export class HrService {
       const attendances = isDailyRate
         ? [] // already fetched above, but re-use the block below for deductions
         : await this.prisma.attendance.findMany({
-          where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
-        });
+            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+          });
 
       const allAttendances = isDailyRate
         ? await this.prisma.attendance.findMany({
-          where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
-        })
+            where: { staffId: staff.id, date: { gte: startDate, lt: endDate } },
+          })
         : attendances;
 
       const totalWorkingDays = 30; // Standardized to 30 days as requested
@@ -938,7 +1141,11 @@ export class HrService {
             },
             include: { leaveType: true },
           });
-          if (leaveApp?.leaveType?.code === 'LOP' && !isPartTime && !isDailyRate) {
+          if (
+            leaveApp?.leaveType?.code === 'LOP' &&
+            !isPartTime &&
+            !isDailyRate
+          ) {
             lopDays++;
           } else {
             presentDays++;
@@ -954,18 +1161,31 @@ export class HrService {
       let permissionHoursUsed = 0;
       let permissionLopDays = 0;
       if (!isPartTime && !isDailyRate) {
-        const approvedPermissions = await this.prisma.permissionRequest.findMany({
-          where: { staffId: staff.id, status: 'APPROVED', date: { gte: startDate, lt: endDate } },
-        });
-        permissionHoursUsed = approvedPermissions.reduce((sum, p) => sum + p.hours, 0);
-        const permissionLimit = this.getPermissionLimitForCategory(staff.category);
+        const approvedPermissions =
+          await this.prisma.permissionRequest.findMany({
+            where: {
+              staffId: staff.id,
+              status: 'APPROVED',
+              date: { gte: startDate, lt: endDate },
+            },
+          });
+        permissionHoursUsed = approvedPermissions.reduce(
+          (sum, p) => sum + p.hours,
+          0,
+        );
+        const permissionLimit = this.getPermissionLimitForCategory(
+          staff.category,
+        );
         const excessHours = Math.max(0, permissionHoursUsed - permissionLimit);
-        permissionLopDays = excessHours > 0 ? Math.ceil(excessHours / 8 * 2) / 2 : 0;
+        permissionLopDays =
+          excessHours > 0 ? Math.ceil((excessHours / 8) * 2) / 2 : 0;
       }
 
       const perDaySalary = isDailyRate ? 0 : grossSalary / totalWorkingDays;
       const lopDeduction = isDailyRate ? 0 : Math.round(lopDays * perDaySalary);
-      const permissionLopDeduction = isDailyRate ? 0 : Math.round(permissionLopDays * perDaySalary);
+      const permissionLopDeduction = isDailyRate
+        ? 0
+        : Math.round(permissionLopDays * perDaySalary);
 
       // ── PF calculation ──────────────────────────────────────────────────
       // PF is on Basic = 50% of gross (pfBase), not on full gross
@@ -976,11 +1196,15 @@ export class HrService {
       const pfEligible =
         !isActingDriver &&
         !isStipend &&
-        (statutory ? statutory.pfEnabled !== false : Boolean(staff.pfJoiningDate));
+        (statutory
+          ? statutory.pfEnabled !== false
+          : Boolean(staff.pfJoiningDate));
       if (settings.pfEnabled && pfEligible) {
         const pfWage = Math.min(pfBase, settings.pfWageLimit);
-        pfDeduction = Math.round(pfWage * settings.pfEmployeeRate / 100);
-        employerPfContribution = Math.round(pfWage * settings.pfEmployerRate / 100);
+        pfDeduction = Math.round((pfWage * settings.pfEmployeeRate) / 100);
+        employerPfContribution = Math.round(
+          (pfWage * settings.pfEmployerRate) / 100,
+        );
       }
 
       // ── ESI calculation ─────────────────────────────────────────────────
@@ -990,27 +1214,42 @@ export class HrService {
       let esiDeduction = 0;
       let employerEsiContribution = 0;
       const dailyEsiWage = esiBase / 30;
-      const esiEligible = !isActingDriver && dailyEsiWage >= esiDailyWageThreshold;
-      if (settings.esiEnabled && (statutory?.esiEnabled !== false) && esiEligible) {
+      const esiEligible =
+        !isActingDriver && dailyEsiWage >= esiDailyWageThreshold;
+      if (
+        settings.esiEnabled &&
+        statutory?.esiEnabled !== false &&
+        esiEligible
+      ) {
         if (esiBase <= settings.esiWageLimit) {
-          esiDeduction = Math.round(esiBase * settings.esiEmployeeRate / 100);
-          employerEsiContribution = Math.round(esiBase * settings.esiEmployerRate / 100);
+          esiDeduction = Math.round((esiBase * settings.esiEmployeeRate) / 100);
+          employerEsiContribution = Math.round(
+            (esiBase * settings.esiEmployerRate) / 100,
+          );
         }
       }
 
       // ── Prof Tax ────────────────────────────────────────────────────────
-      const ptDeduction = isActingDriver ? 0 : (settings.ptEnabled ? settings.ptAmount : 0);
+      const ptDeduction = isActingDriver
+        ? 0
+        : settings.ptEnabled
+          ? settings.ptAmount
+          : 0;
 
       // ── PSF (Professional Services Fund) ────────────────────────────────
       let psfDeduction = 0;
-      const psfEligible = !isActingDriver && (statutory?.psfEnabled !== false);
+      const psfEligible = !isActingDriver && statutory?.psfEnabled !== false;
       if ((settings as any).psfEnabled && psfEligible) {
         const psfBase = basicSalary; // PSF typically on basic salary like PF
         const psfWageLimit = (settings as any).psfWageLimit ?? 0;
         if (psfWageLimit > 0 && psfBase <= psfWageLimit) {
-          psfDeduction = Math.round(psfBase * ((settings as any).psfEmployeeRate ?? 0) / 100);
+          psfDeduction = Math.round(
+            (psfBase * ((settings as any).psfEmployeeRate ?? 0)) / 100,
+          );
         } else if (psfWageLimit === 0) {
-          psfDeduction = Math.round(psfBase * ((settings as any).psfEmployeeRate ?? 0) / 100);
+          psfDeduction = Math.round(
+            (psfBase * ((settings as any).psfEmployeeRate ?? 0)) / 100,
+          );
         }
       }
 
@@ -1019,9 +1258,9 @@ export class HrService {
       const staffLoans = isActingDriver
         ? []
         : await this.prisma.staffLoan.findMany({
-          where: { staffId: staff.id, status: 'ACTIVE' },
-          include: { emiTransactions: true },
-        });
+            where: { staffId: staff.id, status: 'ACTIVE' },
+            include: { emiTransactions: true },
+          });
 
       for (const loan of staffLoans) {
         // Check if current month is in skipMonths
@@ -1029,7 +1268,9 @@ export class HrService {
         const currentMonth = `${y}-${String(m).padStart(2, '0')}`;
         if (!skipMonths.includes(currentMonth)) {
           // Find or create EMI transaction for this month
-          let emiTxn = loan.emiTransactions.find((t) => t.month === currentMonth);
+          let emiTxn = loan.emiTransactions.find(
+            (t) => t.month === currentMonth,
+          );
           if (!emiTxn) {
             // Create new EMI transaction if not found
             emiTxn = await this.prisma.loanEMITransaction.create({
@@ -1055,14 +1296,22 @@ export class HrService {
       const activeAdvances = isActingDriver
         ? []
         : await this.prisma.staffAdvance.findMany({
-          where: { staffId: staff.id, status: { in: ['DISBURSED', 'REPAYING'] }, balanceRemaining: { gt: 0 } },
-        });
+            where: {
+              staffId: staff.id,
+              status: { in: ['DISBURSED', 'REPAYING'] },
+              balanceRemaining: { gt: 0 },
+            },
+          });
 
       if (!isActingDriver) {
         for (const adv of activeAdvances) {
-          const deduction = Math.min(adv.monthlyDeduction, adv.balanceRemaining);
+          const deduction = Math.min(
+            adv.monthlyDeduction,
+            adv.balanceRemaining,
+          );
           if (adv.type === 'FIXED_ADVANCE') fixedAdvanceDeduction += deduction;
-          else if (adv.type === 'SALARY_ADVANCE') salaryAdvanceDeduction += deduction;
+          else if (adv.type === 'SALARY_ADVANCE')
+            salaryAdvanceDeduction += deduction;
           else otherAdvanceDeduction += deduction;
         }
       }
@@ -1072,11 +1321,17 @@ export class HrService {
       const totalDeductions = isActingDriver
         ? 0
         : Math.round(
-          lopDeduction + permissionLopDeduction +
-          pfDeduction + esiDeduction + psfDeduction + ptDeduction +
-          loanEMIDeduction +
-          fixedAdvanceDeduction + salaryAdvanceDeduction + otherAdvanceDeduction,
-        );
+            lopDeduction +
+              permissionLopDeduction +
+              pfDeduction +
+              esiDeduction +
+              psfDeduction +
+              ptDeduction +
+              loanEMIDeduction +
+              fixedAdvanceDeduction +
+              salaryAdvanceDeduction +
+              otherAdvanceDeduction,
+          );
       // Fetch existing record to preserve manual edits like extraAllowance and bonusIncentive
       const existingPayroll = await this.prisma.payroll.findUnique({
         where: { staffId_month: { staffId: staff.id, month: month || '' } },
@@ -1087,7 +1342,10 @@ export class HrService {
 
       // Check for DriverRotation extra pay allowance for this month
       let rotationExtraAllowance = 0;
-      if (staff.designation?.toLowerCase() === 'driver' || staff.category?.toString().toLowerCase().includes('driver')) {
+      if (
+        staff.designation?.toLowerCase() === 'driver' ||
+        staff.category?.toString().toLowerCase().includes('driver')
+      ) {
         const driverRecord = await this.prisma.driver.findFirst({
           where: {
             OR: [
@@ -1105,7 +1363,11 @@ export class HrService {
           const calcAcademicYear = `${startYear}-${startYear + 1}`;
 
           const rotation = await this.prisma.driverRotation.findFirst({
-            where: { driverId: driverRecord.id, month: month || '', academicYear: calcAcademicYear },
+            where: {
+              driverId: driverRecord.id,
+              month: month || '',
+              academicYear: calcAcademicYear,
+            },
           });
           if (rotation) {
             rotationExtraAllowance = rotation.extraPayRate;
@@ -1113,45 +1375,92 @@ export class HrService {
         }
       }
 
-      const finalExtraAllowance = preservedExtraAllowance || rotationExtraAllowance;
+      const finalExtraAllowance =
+        preservedExtraAllowance || rotationExtraAllowance;
 
       const netSalary = isActingDriver
         ? Math.round(grossSalary)
-        : Math.round(grossSalary - totalDeductions + finalExtraAllowance + preservedBonusIncentive);
+        : Math.round(
+            grossSalary -
+              totalDeductions +
+              finalExtraAllowance +
+              preservedBonusIncentive,
+          );
 
       // CTC = Gross + Employer PF + Employer ESI
       const ctc = isActingDriver
         ? Math.round(grossSalary)
-        : Math.round(grossSalary + employerPfContribution + employerEsiContribution);
+        : Math.round(
+            grossSalary + employerPfContribution + employerEsiContribution,
+          );
 
       const payroll = await this.prisma.payroll.upsert({
         where: { staffId_month: { staffId: staff.id, month: month || '' } },
         update: {
-          basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
-          totalWorkingDays, presentDays, lopDays, lopDeduction,
-          permissionHoursUsed, permissionLopDays, permissionLopDeduction,
-          pfBase, esiBase,
-          pfDeduction, esiDeduction, psfDeduction, ptDeduction,
-          employerPfContribution, employerEsiContribution, ctc,
+          basicSalary,
+          hra,
+          travelAllowance,
+          da: 0,
+          otherAllowances,
+          grossSalary,
+          totalWorkingDays,
+          presentDays,
+          lopDays,
+          lopDeduction,
+          permissionHoursUsed,
+          permissionLopDays,
+          permissionLopDeduction,
+          pfBase,
+          esiBase,
+          pfDeduction,
+          esiDeduction,
+          psfDeduction,
+          ptDeduction,
+          employerPfContribution,
+          employerEsiContribution,
+          ctc,
           loanEMIDeduction,
-          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
+          fixedAdvanceDeduction,
+          salaryAdvanceDeduction,
+          otherAdvanceDeduction,
           extraAllowance: finalExtraAllowance,
           bonusIncentive: preservedBonusIncentive,
-          totalDeductions, netSalary,
+          totalDeductions,
+          netSalary,
           status: 'generated',
         },
         create: {
-          staffId: staff.id, month: month || '',
-          basicSalary, hra, travelAllowance, da: 0, otherAllowances, grossSalary,
-          totalWorkingDays, presentDays, lopDays, lopDeduction,
-          permissionHoursUsed, permissionLopDays, permissionLopDeduction,
-          pfBase, esiBase,
-          pfDeduction, esiDeduction, psfDeduction, ptDeduction,
-          employerPfContribution, employerEsiContribution, ctc,
+          staffId: staff.id,
+          month: month || '',
+          basicSalary,
+          hra,
+          travelAllowance,
+          da: 0,
+          otherAllowances,
+          grossSalary,
+          totalWorkingDays,
+          presentDays,
+          lopDays,
+          lopDeduction,
+          permissionHoursUsed,
+          permissionLopDays,
+          permissionLopDeduction,
+          pfBase,
+          esiBase,
+          pfDeduction,
+          esiDeduction,
+          psfDeduction,
+          ptDeduction,
+          employerPfContribution,
+          employerEsiContribution,
+          ctc,
           loanEMIDeduction,
-          fixedAdvanceDeduction, salaryAdvanceDeduction, otherAdvanceDeduction,
+          fixedAdvanceDeduction,
+          salaryAdvanceDeduction,
+          otherAdvanceDeduction,
           extraAllowance: finalExtraAllowance,
-          totalDeductions, netSalary,
+          totalDeductions,
+          netSalary,
         },
       });
 
@@ -1193,27 +1502,43 @@ export class HrService {
       updates.permissionLopDeduction = 0;
       const newTotalDeductions = Math.max(
         0,
-        payroll.totalDeductions - payroll.lopDeduction - payroll.permissionLopDeduction,
+        payroll.totalDeductions -
+          payroll.lopDeduction -
+          payroll.permissionLopDeduction,
       );
       updates.totalDeductions = newTotalDeductions;
       updates.netSalary = Math.round(payroll.grossSalary - newTotalDeductions);
     }
 
     if (dto.bonusIncentive !== undefined || dto.extraAllowance !== undefined) {
-      const bonus = dto.bonusIncentive !== undefined ? dto.bonusIncentive : (updates.bonusIncentive ?? payroll.bonusIncentive);
-      const extra = dto.extraAllowance !== undefined ? dto.extraAllowance : (updates.extraAllowance ?? payroll.extraAllowance);
+      const bonus =
+        dto.bonusIncentive !== undefined
+          ? dto.bonusIncentive
+          : (updates.bonusIncentive ?? payroll.bonusIncentive);
+      const extra =
+        dto.extraAllowance !== undefined
+          ? dto.extraAllowance
+          : (updates.extraAllowance ?? payroll.extraAllowance);
 
       updates.bonusIncentive = bonus;
       updates.extraAllowance = extra;
 
-      const currentDeductions = updates.totalDeductions !== undefined ? updates.totalDeductions : payroll.totalDeductions;
-      updates.netSalary = Math.round(payroll.grossSalary - currentDeductions + bonus + extra);
+      const currentDeductions =
+        updates.totalDeductions !== undefined
+          ? updates.totalDeductions
+          : payroll.totalDeductions;
+      updates.netSalary = Math.round(
+        payroll.grossSalary - currentDeductions + bonus + extra,
+      );
     }
 
     return this.prisma.payroll.update({ where: { id }, data: updates });
   }
 
-  async getPayrolls(query: { month?: string; staffId?: string; status?: string }, requester?: RequestUser) {
+  async getPayrolls(
+    query: { month?: string; staffId?: string; status?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     if (query.month) where.month = query.month;
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
@@ -1221,7 +1546,19 @@ export class HrService {
     if (query.status) where.status = query.status;
     return this.prisma.payroll.findMany({
       where,
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true, paymentMode: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            category: true,
+            paymentMode: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -1229,12 +1566,26 @@ export class HrService {
   async getPayroll(id: string, requester?: RequestUser) {
     const payroll = await this.prisma.payroll.findUnique({
       where: { id },
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, designation: true, category: true, paymentMode: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            designation: true,
+            category: true,
+            paymentMode: true,
+          },
+        },
+      },
     });
     if (!payroll) throw new NotFoundException('Payroll record not found');
     const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
     if (effectiveStaffId && payroll.staffId !== effectiveStaffId) {
-      throw new BadRequestException('You can only access your own payroll record');
+      throw new BadRequestException(
+        'You can only access your own payroll record',
+      );
     }
     return payroll;
   }
@@ -1249,7 +1600,11 @@ export class HrService {
   async getLOPReport(month: string) {
     const payrolls = await this.prisma.payroll.findMany({
       where: { month },
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: {
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
+      },
     });
     return payrolls
       .filter((p) => p.lopDays > 0 || p.permissionLopDays > 0)
@@ -1284,25 +1639,50 @@ export class HrService {
       monthEnd.setMonth(monthEnd.getMonth() + 1);
     }
 
-    const [
-      totalStaff,
-      todayAttendance,
-      pendingLeaves,
-      pendingPermissions,
-    ] = await Promise.all([
-      this.prisma.staff.count({ where: { isActive: true, ...(effectiveStaffId ? { id: effectiveStaffId } : {}) } }),
-      this.prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow }, ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-      this.prisma.leaveApplication.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-      this.prisma.permissionRequest.count({ where: { status: 'PENDING', ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}) } }),
-    ]);
+    const [totalStaff, todayAttendance, pendingLeaves, pendingPermissions] =
+      await Promise.all([
+        this.prisma.staff.count({
+          where: {
+            isActive: true,
+            ...(effectiveStaffId ? { id: effectiveStaffId } : {}),
+          },
+        }),
+        this.prisma.attendance.findMany({
+          where: {
+            date: { gte: today, lt: tomorrow },
+            ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}),
+          },
+        }),
+        this.prisma.leaveApplication.count({
+          where: {
+            status: 'PENDING',
+            ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}),
+          },
+        }),
+        this.prisma.permissionRequest.count({
+          where: {
+            status: 'PENDING',
+            ...(effectiveStaffId ? { staffId: effectiveStaffId } : {}),
+          },
+        }),
+      ]);
 
-    const present = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
+    const present = todayAttendance.filter(
+      (a) => a.status === 'PRESENT' || a.status === 'LATE',
+    ).length;
     const absent = todayAttendance.filter((a) => a.status === 'ABSENT').length;
-    const onLeave = todayAttendance.filter((a) => a.status === 'ON_LEAVE').length;
+    const onLeave = todayAttendance.filter(
+      (a) => a.status === 'ON_LEAVE',
+    ).length;
 
     return {
       totalStaff,
-      todayAttendance: { present, absent, onLeave, total: todayAttendance.length },
+      todayAttendance: {
+        present,
+        absent,
+        onLeave,
+        total: todayAttendance.length,
+      },
       pendingLeaves,
       pendingPermissions,
     };
@@ -1318,13 +1698,27 @@ export class HrService {
       where: { ticketNo: { startsWith: `ADV-${year}` } },
       orderBy: { ticketNo: 'desc' },
     });
-    const seq = lastTicket ? parseInt(lastTicket.ticketNo.split('-')[2]) + 1 : 1;
+    const seq = lastTicket
+      ? parseInt(lastTicket.ticketNo.split('-')[2]) + 1
+      : 1;
     return `ADV-${year}-${String(seq).padStart(5, '0')}`;
   }
 
-  async createAdvanceRequest(data: { staffId: string; type: string; amount: number; reason?: string; monthlyDeduction?: number }, requester?: RequestUser) {
-    const staffId = this.ensureOwnStaffId(data.staffId, requester) || data.staffId;
-    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+  async createAdvanceRequest(
+    data: {
+      staffId: string;
+      type: string;
+      amount: number;
+      reason?: string;
+      monthlyDeduction?: number;
+    },
+    requester?: RequestUser,
+  ) {
+    const staffId =
+      this.ensureOwnStaffId(data.staffId, requester) || data.staffId;
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+    });
     if (!staff) throw new NotFoundException('Staff not found');
     const ticketNo = await this.getNextAdvanceTicketNo();
     const monthly = data.monthlyDeduction || data.amount; // default: full repay in one month
@@ -1342,7 +1736,10 @@ export class HrService {
     });
   }
 
-  async getAdvanceRequests(query: { staffId?: string; status?: string; type?: string }, requester?: RequestUser) {
+  async getAdvanceRequests(
+    query: { staffId?: string; status?: string; type?: string },
+    requester?: RequestUser,
+  ) {
     const where: any = {};
     const effectiveStaffId = this.ensureOwnStaffId(query.staffId, requester);
     if (effectiveStaffId) where.staffId = effectiveStaffId;
@@ -1350,7 +1747,17 @@ export class HrService {
     if (query.type) where.type = query.type;
     return this.prisma.staffAdvance.findMany({
       where,
-      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, category: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            category: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -1358,12 +1765,24 @@ export class HrService {
   async getAdvanceRequest(id: string, requester?: RequestUser) {
     const adv = await this.prisma.staffAdvance.findUnique({
       where: { id },
-      include: { staff: { select: { id: true, name: true, employeeId: true, designation: true, category: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            designation: true,
+            category: true,
+          },
+        },
+      },
     });
     if (!adv) throw new NotFoundException('Advance request not found');
     const effectiveStaffId = this.ensureOwnStaffId(undefined, requester);
     if (effectiveStaffId && adv.staffId !== effectiveStaffId) {
-      throw new BadRequestException('You can only access your own advance request');
+      throw new BadRequestException(
+        'You can only access your own advance request',
+      );
     }
     return adv;
   }
@@ -1371,27 +1790,39 @@ export class HrService {
   async approveAdvance(id: string, email: string) {
     const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
     if (!adv) throw new NotFoundException('Advance request not found');
-    if (adv.status !== 'REQUESTED') throw new BadRequestException('Can only approve REQUESTED advances');
+    if (adv.status !== 'REQUESTED')
+      throw new BadRequestException('Can only approve REQUESTED advances');
     return this.prisma.staffAdvance.update({
       where: { id },
-      data: { status: 'APPROVED', approvedAt: new Date(), approvedByEmail: email },
+      data: {
+        status: 'APPROVED',
+        approvedAt: new Date(),
+        approvedByEmail: email,
+      },
     });
   }
 
   async rejectAdvance(id: string, email: string, reason?: string) {
     const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
     if (!adv) throw new NotFoundException('Advance request not found');
-    if (adv.status !== 'REQUESTED') throw new BadRequestException('Can only reject REQUESTED advances');
+    if (adv.status !== 'REQUESTED')
+      throw new BadRequestException('Can only reject REQUESTED advances');
     return this.prisma.staffAdvance.update({
       where: { id },
-      data: { status: 'REJECTED', rejectedAt: new Date(), rejectedByEmail: email, rejectionReason: reason },
+      data: {
+        status: 'REJECTED',
+        rejectedAt: new Date(),
+        rejectedByEmail: email,
+        rejectionReason: reason,
+      },
     });
   }
 
   async disburseAdvance(id: string) {
     const adv = await this.prisma.staffAdvance.findUnique({ where: { id } });
     if (!adv) throw new NotFoundException('Advance request not found');
-    if (adv.status !== 'APPROVED') throw new BadRequestException('Can only disburse APPROVED advances');
+    if (adv.status !== 'APPROVED')
+      throw new BadRequestException('Can only disburse APPROVED advances');
     return this.prisma.staffAdvance.update({
       where: { id },
       data: { status: 'DISBURSED', disbursedAt: new Date() },
@@ -1405,24 +1836,56 @@ export class HrService {
   async getSalaryAbstract(month: string) {
     const payrolls = await this.prisma.payroll.findMany({
       where: { month },
-      include: { staff: { include: { staffStatutory: { select: { pfNumber: true, esiNumber: true, pfEnabled: true, esiEnabled: true } } } } },
+      include: {
+        staff: {
+          include: {
+            staffStatutory: {
+              select: {
+                pfNumber: true,
+                esiNumber: true,
+                pfEnabled: true,
+                esiEnabled: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    const categories = ['TEACHING_REGULAR', 'TEACHING_TRAINEE', 'NON_TEACHING_REGULAR', 'NON_TEACHING_TRAINEE'];
+    const categories = [
+      'TEACHING_REGULAR',
+      'TEACHING_TRAINEE',
+      'NON_TEACHING_REGULAR',
+      'NON_TEACHING_TRAINEE',
+    ];
     const rows = categories.map((cat) => {
-      const catPayrolls = payrolls.filter((p) => (p.staff as any).category === cat);
+      const catPayrolls = payrolls.filter(
+        (p) => (p.staff as any).category === cat,
+      );
       return {
         category: cat,
         staffCount: catPayrolls.length,
         grossSalary: catPayrolls.reduce((s, p) => s + p.grossSalary, 0),
         extraAllowance: catPayrolls.reduce((s, p) => s + p.extraAllowance, 0),
-        totalGross: catPayrolls.reduce((s, p) => s + p.grossSalary + p.extraAllowance, 0),
+        totalGross: catPayrolls.reduce(
+          (s, p) => s + p.grossSalary + p.extraAllowance,
+          0,
+        ),
         basicSalary: catPayrolls.reduce((s, p) => s + p.basicSalary, 0),
         pfDeduction: catPayrolls.reduce((s, p) => s + p.pfDeduction, 0),
         esiDeduction: catPayrolls.reduce((s, p) => s + p.esiDeduction, 0),
-        fixedAdvance: catPayrolls.reduce((s, p) => s + p.fixedAdvanceDeduction, 0),
-        salaryAdvance: catPayrolls.reduce((s, p) => s + p.salaryAdvanceDeduction, 0),
-        otherAdvance: catPayrolls.reduce((s, p) => s + p.otherAdvanceDeduction, 0),
+        fixedAdvance: catPayrolls.reduce(
+          (s, p) => s + p.fixedAdvanceDeduction,
+          0,
+        ),
+        salaryAdvance: catPayrolls.reduce(
+          (s, p) => s + p.salaryAdvanceDeduction,
+          0,
+        ),
+        otherAdvance: catPayrolls.reduce(
+          (s, p) => s + p.otherAdvanceDeduction,
+          0,
+        ),
         totalDeductions: catPayrolls.reduce((s, p) => s + p.totalDeductions, 0),
         netSalary: catPayrolls.reduce((s, p) => s + p.netSalary, 0),
       };
@@ -1452,7 +1915,9 @@ export class HrService {
   // ═══════════════════════════════════════════════
 
   async createIncrement(dto: any) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: dto.staffId },
+    });
     if (!staff) throw new NotFoundException('Staff not found');
     const toSalary = parseFloat(dto.toSalary);
 
@@ -1461,24 +1926,31 @@ export class HrService {
         staffId: dto.staffId,
         fromSalary: parseFloat(dto.fromSalary),
         toSalary: toSalary,
-        // convert this to float 
+        // convert this to float
         incrementAmount: toSalary - parseFloat(dto.fromSalary),
         incrementDate: new Date(dto.incrementDate),
         effectiveDate: new Date(dto.effectiveDate),
         reason: dto.reason,
         status: 'PENDING',
       },
-      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true } },
+      },
     });
   }
 
   async approveIncrement(id: string, dto: any) {
-    const increment = await this.prisma.salaryIncrement.findUnique({ where: { id } });
+    const increment = await this.prisma.salaryIncrement.findUnique({
+      where: { id },
+    });
     if (!increment) throw new NotFoundException('Increment not found');
-    if (increment.status !== 'PENDING') throw new BadRequestException('Only pending increments can be approved');
+    if (increment.status !== 'PENDING')
+      throw new BadRequestException('Only pending increments can be approved');
 
     // Update staff salary to new salary
-    const staff = await this.prisma.staff.findUnique({ where: { id: increment.staffId } });
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: increment.staffId },
+    });
     if (staff) {
       await this.prisma.staff.update({
         where: { id: increment.staffId },
@@ -1493,14 +1965,19 @@ export class HrService {
         approvedBy: dto.approvedBy,
         approvedAt: new Date(),
       },
-      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true } },
+      },
     });
   }
 
   async rejectIncrement(id: string, dto: any) {
-    const increment = await this.prisma.salaryIncrement.findUnique({ where: { id } });
+    const increment = await this.prisma.salaryIncrement.findUnique({
+      where: { id },
+    });
     if (!increment) throw new NotFoundException('Increment not found');
-    if (increment.status !== 'PENDING') throw new BadRequestException('Only pending increments can be rejected');
+    if (increment.status !== 'PENDING')
+      throw new BadRequestException('Only pending increments can be rejected');
 
     return this.prisma.salaryIncrement.update({
       where: { id },
@@ -1518,7 +1995,11 @@ export class HrService {
         staffId,
         ...(status ? { status } : {}),
       },
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true } } },
+      include: {
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
+      },
       orderBy: { incrementDate: 'desc' },
     });
   }
@@ -1526,7 +2007,17 @@ export class HrService {
   async getAllIncrements(status?: string) {
     return this.prisma.salaryIncrement.findMany({
       where: status ? { status } : {},
-      include: { staff: { select: { id: true, name: true, employeeId: true, department: true, salary: true } } },
+      include: {
+        staff: {
+          select: {
+            id: true,
+            name: true,
+            employeeId: true,
+            department: true,
+            salary: true,
+          },
+        },
+      },
       orderBy: { incrementDate: 'desc' },
     });
   }
@@ -1536,7 +2027,9 @@ export class HrService {
   // ═══════════════════════════════════════════════
 
   async createLoan(dto: any) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: dto.staffId } });
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: dto.staffId },
+    });
     if (!staff) throw new NotFoundException('Staff not found');
 
     // Calculate number of EMIs
@@ -1566,7 +2059,9 @@ export class HrService {
         status: 'ACTIVE',
         reason: dto.reason,
       },
-      include: { staff: { select: { id: true, name: true, employeeId: true } } },
+      include: {
+        staff: { select: { id: true, name: true, employeeId: true } },
+      },
     });
 
     // Create EMI transaction records for each month
@@ -1594,7 +2089,8 @@ export class HrService {
   async approveLoan(id: string, dto: any) {
     const loan = await this.prisma.staffLoan.findUnique({ where: { id } });
     if (!loan) throw new NotFoundException('Loan not found');
-    if (loan.status !== 'ACTIVE') throw new BadRequestException('Only active loans can be approved');
+    if (loan.status !== 'ACTIVE')
+      throw new BadRequestException('Only active loans can be approved');
 
     return this.prisma.staffLoan.update({
       where: { id },
@@ -1626,7 +2122,9 @@ export class HrService {
         ...(status ? { status } : {}),
       },
       include: {
-        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
         emiTransactions: { orderBy: { month: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
@@ -1637,7 +2135,9 @@ export class HrService {
     const loan = await this.prisma.staffLoan.findUnique({
       where: { id },
       include: {
-        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
         emiTransactions: { orderBy: { month: 'asc' } },
       },
     });
@@ -1646,7 +2146,9 @@ export class HrService {
   }
 
   async skipLoanEMI(loanId: string, dto: any) {
-    const loan = await this.prisma.staffLoan.findUnique({ where: { id: loanId } });
+    const loan = await this.prisma.staffLoan.findUnique({
+      where: { id: loanId },
+    });
     if (!loan) throw new NotFoundException('Loan not found');
 
     // Parse skipMonths from JSON
@@ -1672,7 +2174,9 @@ export class HrService {
   }
 
   async resumeLoanEMI(loanId: string, dto: any) {
-    const loan = await this.prisma.staffLoan.findUnique({ where: { id: loanId } });
+    const loan = await this.prisma.staffLoan.findUnique({
+      where: { id: loanId },
+    });
     if (!loan) throw new NotFoundException('Loan not found');
 
     // Parse skipMonths from JSON
@@ -1708,7 +2212,9 @@ export class HrService {
     const preClosureAmount = dto.partialAmount || balanceRemaining;
 
     if (preClosureAmount > balanceRemaining) {
-      throw new BadRequestException('Pre-closure amount cannot exceed remaining balance');
+      throw new BadRequestException(
+        'Pre-closure amount cannot exceed remaining balance',
+      );
     }
 
     const newBalance = balanceRemaining - preClosureAmount;
@@ -1730,7 +2236,9 @@ export class HrService {
     return this.prisma.staffLoan.findMany({
       where: { status },
       include: {
-        staff: { select: { id: true, name: true, employeeId: true, department: true } },
+        staff: {
+          select: { id: true, name: true, employeeId: true, department: true },
+        },
         emiTransactions: { orderBy: { month: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
@@ -1836,7 +2344,10 @@ export class HrService {
   async approvePayroll(id: string) {
     const payroll = await this.prisma.payroll.findUnique({ where: { id } });
     if (!payroll) throw new NotFoundException('Payroll record not found');
-    return this.prisma.payroll.update({ where: { id }, data: { status: 'approved' } });
+    return this.prisma.payroll.update({
+      where: { id },
+      data: { status: 'approved' },
+    });
   }
   private getWorkingDaysInMonth(year: number, month: number): number {
     let count = 0;

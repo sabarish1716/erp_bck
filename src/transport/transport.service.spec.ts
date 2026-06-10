@@ -56,18 +56,28 @@ describe('TransportService', () => {
       },
     };
 
-    service = new TransportService(prisma, { syncLocation: jest.fn(), syncMileage: jest.fn(), enqueueDriverStatusSync: jest.fn(), getClient: jest.fn() } as any);
+    service = new TransportService(prisma, {
+      syncLocation: jest.fn(),
+      syncMileage: jest.fn(),
+      enqueueDriverStatusSync: jest.fn(),
+      getClient: jest.fn(),
+    } as any);
   });
 
   it('returns pending transport students with formatted standard labels', async () => {
-    prisma.appSetting.findUnique.mockResolvedValue({ value: { academicYear: '2026-2027' } });
+    prisma.appSetting.findUnique.mockResolvedValue({
+      value: { academicYear: '2026-2027' },
+    });
     prisma.student.findMany.mockResolvedValue([
       {
         id: 'stu-1',
         name: 'Arun',
         standard: 'STD_10',
         transportMode: 'VAN',
-        admission: { admissionNo: 'ADM-1', admissionDate: new Date('2026-04-10T00:00:00.000Z') },
+        admission: {
+          admissionNo: 'ADM-1',
+          admissionDate: new Date('2026-04-10T00:00:00.000Z'),
+        },
         studentTransport: null,
       },
       {
@@ -75,7 +85,10 @@ describe('TransportService', () => {
         name: 'Bala',
         standard: 'STD_9',
         transportMode: 'LOCAL',
-        admission: { admissionNo: 'ADM-2', admissionDate: new Date('2026-04-11T00:00:00.000Z') },
+        admission: {
+          admissionNo: 'ADM-2',
+          admissionDate: new Date('2026-04-11T00:00:00.000Z'),
+        },
         studentTransport: null,
       },
       {
@@ -83,8 +96,15 @@ describe('TransportService', () => {
         name: 'Chitra',
         standard: 'STD_8',
         transportMode: 'VAN',
-        admission: { admissionNo: 'ADM-3', admissionDate: new Date('2026-04-12T00:00:00.000Z') },
-        studentTransport: { academicYear: '2026-2027', routeId: 'r1', stopId: 's1' },
+        admission: {
+          admissionNo: 'ADM-3',
+          admissionDate: new Date('2026-04-12T00:00:00.000Z'),
+        },
+        studentTransport: {
+          academicYear: '2026-2027',
+          routeId: 'r1',
+          stopId: 's1',
+        },
       },
     ]);
 
@@ -102,7 +122,11 @@ describe('TransportService', () => {
   });
 
   it('blocks exact duplicate transport assignments with a readable message', async () => {
-    prisma.student.findUnique.mockResolvedValue({ id: 'stu-1', name: 'Arun', standard: 'STD_10' });
+    prisma.student.findUnique.mockResolvedValue({
+      id: 'stu-1',
+      name: 'Arun',
+      standard: 'STD_10',
+    });
     prisma.transportRoute.findUnique.mockResolvedValue({
       id: 'route-1',
       stops: [{ id: 'stop-1', stopName: 'Main Road', stopOrder: 1 }],
@@ -126,28 +150,38 @@ describe('TransportService', () => {
         academicYear: '2026-2027',
         isSplClass: false,
       }),
-    ).rejects.toThrow(new ConflictException('Transport is already assigned to this student for the selected academic year'));
+    ).rejects.toThrow(
+      new ConflictException(
+        'Transport is already assigned to this student for the selected academic year',
+      ),
+    );
   });
 
   it('returns a transport dashboard summary for the active academic year', async () => {
-    prisma.appSetting.findUnique.mockResolvedValue({ value: { academicYear: '2026-2027' } });
+    prisma.appSetting.findUnique.mockResolvedValue({
+      value: { academicYear: '2026-2027' },
+    });
     prisma.student.findMany.mockResolvedValue([
       {
         id: 'stu-1',
         name: 'Arun',
         standard: 'STD_10',
         transportMode: 'VAN',
-        admission: { admissionNo: 'ADM-1', admissionDate: new Date('2026-04-10T00:00:00.000Z') },
+        admission: {
+          admissionNo: 'ADM-1',
+          admissionDate: new Date('2026-04-10T00:00:00.000Z'),
+        },
         studentTransport: null,
       },
     ]);
     prisma.transportRoute.count.mockResolvedValue(4);
     prisma.bus.count.mockResolvedValue(7);
-    prisma.driver.count
-      .mockResolvedValueOnce(6)
-      .mockResolvedValueOnce(5);
+    prisma.driver.count.mockResolvedValueOnce(6).mockResolvedValueOnce(5);
     prisma.studentTransport.count.mockResolvedValue(120);
-    prisma.location.findMany.mockResolvedValue([{ busId: 'bus-1' }, { busId: 'bus-2' }]);
+    prisma.location.findMany.mockResolvedValue([
+      { busId: 'bus-1' },
+      { busId: 'bus-2' },
+    ]);
     prisma.fuelLog.aggregate.mockResolvedValue({
       _count: { _all: 3 },
       _sum: { litres: 98, totalCost: 8450 },
@@ -253,7 +287,9 @@ describe('TransportService', () => {
       routeName: 'Route A',
       capacity: 50,
       route: { id: 'route-1', routeName: 'Route A' },
-      drivers: [{ id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' }],
+      drivers: [
+        { id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' },
+      ],
     });
     prisma.fuelLog.findMany.mockResolvedValue([
       {
@@ -278,7 +314,11 @@ describe('TransportService', () => {
       },
     ]);
 
-    const result = await service.getBusFuelReport('bus-1', '2026-04-10', '2026-04-10');
+    const result = await service.getBusFuelReport(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
 
     expect(result.summary).toEqual({
       fuelEntries: 2,
@@ -304,7 +344,9 @@ describe('TransportService', () => {
       routeName: 'Route A',
       capacity: 50,
       route: { id: 'route-1', routeName: 'Route A' },
-      drivers: [{ id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' }],
+      drivers: [
+        { id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' },
+      ],
     });
     prisma.fuelLog.findMany.mockResolvedValue([
       {
@@ -339,7 +381,11 @@ describe('TransportService', () => {
       },
     ]);
 
-    const result = await service.getBusMileageReport('bus-1', '2026-04-10', '2026-04-10');
+    const result = await service.getBusMileageReport(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
 
     expect(result.summary).toEqual({
       fuelEntries: 3,
@@ -351,7 +397,12 @@ describe('TransportService', () => {
       endOdometer: 1150,
     });
     expect(result.dailyBreakdown).toEqual([
-      { date: '2026-04-10', distanceKm: 150, litres: 15, averageKmPerLitre: 10 },
+      {
+        date: '2026-04-10',
+        distanceKm: 150,
+        litres: 15,
+        averageKmPerLitre: 10,
+      },
     ]);
     expect(result.entries).toHaveLength(3);
   });
@@ -363,7 +414,9 @@ describe('TransportService', () => {
       routeName: 'Route A',
       capacity: 50,
       route: { id: 'route-1', routeName: 'Route A' },
-      drivers: [{ id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' }],
+      drivers: [
+        { id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' },
+      ],
     });
     prisma.fuelLog.findMany.mockResolvedValue([
       {
@@ -390,8 +443,16 @@ describe('TransportService', () => {
       },
     ]);
 
-    const excel = await service.exportBusFuelReportExcel('bus-1', '2026-04-10', '2026-04-10');
-    const pdf = await service.exportBusFuelReportPdf('bus-1', '2026-04-10', '2026-04-10');
+    const excel = await service.exportBusFuelReportExcel(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
+    const pdf = await service.exportBusFuelReportPdf(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
 
     expect(excel.filename).toBe('tn-01-1234-fuel-report.xlsx');
     expect(excel.contentType).toBe(
@@ -413,7 +474,9 @@ describe('TransportService', () => {
       routeName: 'Route A',
       capacity: 50,
       route: { id: 'route-1', routeName: 'Route A' },
-      drivers: [{ id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' }],
+      drivers: [
+        { id: 'driver-1', name: 'Mani', phone: '9999999999', status: 'ACTIVE' },
+      ],
     });
     prisma.fuelLog.findMany.mockResolvedValue([
       {
@@ -448,8 +511,16 @@ describe('TransportService', () => {
       },
     ]);
 
-    const excel = await service.exportBusMileageReportExcel('bus-1', '2026-04-10', '2026-04-10');
-    const pdf = await service.exportBusMileageReportPdf('bus-1', '2026-04-10', '2026-04-10');
+    const excel = await service.exportBusMileageReportExcel(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
+    const pdf = await service.exportBusMileageReportPdf(
+      'bus-1',
+      '2026-04-10',
+      '2026-04-10',
+    );
 
     expect(excel.filename).toBe('tn-01-1234-mileage-report.xlsx');
     expect(excel.contentType).toBe(

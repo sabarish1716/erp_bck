@@ -48,7 +48,10 @@ describe('ExamService', () => {
 
   it('rejects timetable creation when hall overlap exists', async () => {
     prisma.exam.findUnique.mockResolvedValue({ id: 'exam-1' });
-    prisma.examSubject.findUnique.mockResolvedValue({ id: 'sub-1', examId: 'exam-1' });
+    prisma.examSubject.findUnique.mockResolvedValue({
+      id: 'sub-1',
+      examId: 'exam-1',
+    });
     prisma.examSchedule.findMany.mockResolvedValue([
       {
         id: 'sch-1',
@@ -68,11 +71,17 @@ describe('ExamService', () => {
         session: ExamSession.FN,
         hallIds: ['hall-1'],
       }),
-    ).rejects.toThrow(new BadRequestException('Hall overlap detected for: Hall A'));
+    ).rejects.toThrow(
+      new BadRequestException('Hall overlap detected for: Hall A'),
+    );
   });
 
   it('generates roll numbers for filtered students', async () => {
-    prisma.exam.findUnique.mockResolvedValue({ id: 'exam-1', code: 'ANNUAL-26-27', academicYear: '2026-2027' });
+    prisma.exam.findUnique.mockResolvedValue({
+      id: 'exam-1',
+      code: 'ANNUAL-26-27',
+      academicYear: '2026-2027',
+    });
     prisma.student.findMany.mockResolvedValue([
       { id: 'stu-1', name: 'Arun', admission: { admissionNo: 'ADM-001' } },
       { id: 'stu-2', name: 'Bala', admission: { admissionNo: 'ADM-002' } },
@@ -143,9 +152,27 @@ describe('ExamService', () => {
 
     expect(prisma.examSeatAllocation.createMany).toHaveBeenCalledWith({
       data: [
-        { scheduleId: 'sch-1', hallId: 'hall-1', studentId: 'stu-1', rollNumberId: 'roll-1', seatNumber: 1 },
-        { scheduleId: 'sch-1', hallId: 'hall-1', studentId: 'stu-2', rollNumberId: 'roll-2', seatNumber: 2 },
-        { scheduleId: 'sch-1', hallId: 'hall-2', studentId: 'stu-3', rollNumberId: 'roll-3', seatNumber: 1 },
+        {
+          scheduleId: 'sch-1',
+          hallId: 'hall-1',
+          studentId: 'stu-1',
+          rollNumberId: 'roll-1',
+          seatNumber: 1,
+        },
+        {
+          scheduleId: 'sch-1',
+          hallId: 'hall-1',
+          studentId: 'stu-2',
+          rollNumberId: 'roll-2',
+          seatNumber: 2,
+        },
+        {
+          scheduleId: 'sch-1',
+          hallId: 'hall-2',
+          studentId: 'stu-3',
+          rollNumberId: 'roll-3',
+          seatNumber: 1,
+        },
       ],
     });
     expect(result).toEqual(
@@ -160,6 +187,8 @@ describe('ExamService', () => {
 
   it('throws not found when exam does not exist', async () => {
     prisma.exam.findUnique.mockResolvedValue(null);
-    await expect(service.getTimetable('missing-exam')).rejects.toThrow(new NotFoundException('Exam not found'));
+    await expect(service.getTimetable('missing-exam')).rejects.toThrow(
+      new NotFoundException('Exam not found'),
+    );
   });
 });

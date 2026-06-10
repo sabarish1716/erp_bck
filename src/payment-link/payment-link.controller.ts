@@ -63,7 +63,10 @@ export class PaymentLinkController {
     @Headers('x-verify') xVerify: string,
   ) {
     const base64Response = body?.response || '';
-    await this.paymentLinkService.handlePhonePeWebhook(base64Response, xVerify || '');
+    await this.paymentLinkService.handlePhonePeWebhook(
+      base64Response,
+      xVerify || '',
+    );
     return { success: true };
   }
 }

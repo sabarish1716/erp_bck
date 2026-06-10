@@ -46,10 +46,11 @@ export class AuthController {
 
     if (!dbUser) return { error: 'User not found' };
 
-    const permissions = await this.rolePermissionsService.getEffectivePermissionsForUser({
-      id: dbUser.id,
-      role: dbUser.role as Role,
-    });
+    const permissions =
+      await this.rolePermissionsService.getEffectivePermissionsForUser({
+        id: dbUser.id,
+        role: dbUser.role,
+      });
 
     return {
       id: dbUser.id,

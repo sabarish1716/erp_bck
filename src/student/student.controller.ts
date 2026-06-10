@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Body, Param, Put, Delete, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Put,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { StudentService } from './student.service';
 import { CreateStudentDto } from './create-student.dto';
 import { Permissions } from '../auth/permissions.decorator';
@@ -22,7 +31,10 @@ export class StudentController {
 
   @Get('sections/:standard')
   @Permissions(Permission.STUDENT_READ)
-  getSectionsByStandard(@Param('standard') standard: string, @Query('academicYear') academicYear?: string) {
+  getSectionsByStandard(
+    @Param('standard') standard: string,
+    @Query('academicYear') academicYear?: string,
+  ) {
     return this.studentService.getSectionsByStandard(standard, academicYear);
   }
 
@@ -33,7 +45,11 @@ export class StudentController {
     @Query('section') section?: string,
     @Query('academicYear') academicYear?: string,
   ) {
-    return this.studentService.getStudentsByStandardAndSection(standard, section, academicYear);
+    return this.studentService.getStudentsByStandardAndSection(
+      standard,
+      section,
+      academicYear,
+    );
   }
 
   @Get(':id')
@@ -63,7 +79,10 @@ export class StudentController {
 
   @Post(':id/link-siblings')
   @Permissions(Permission.STUDENT_UPDATE)
-  linkMultipleSiblings(@Param('id') id: string, @Body() body: { siblingIds: string[] }) {
+  linkMultipleSiblings(
+    @Param('id') id: string,
+    @Body() body: { siblingIds: string[] },
+  ) {
     return this.studentService.linkMultipleSiblings(id, body?.siblingIds || []);
   }
 }

@@ -5,6 +5,6 @@ import { PrismaService } from 'src/prisma/prisma.service';
 
 @Module({
   controllers: [LocationController],
-  providers: [LocationService,PrismaService]
+  providers: [LocationService, PrismaService],
 })
 export class LocationModule {}

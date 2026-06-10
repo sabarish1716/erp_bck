@@ -1,4 +1,11 @@
-import { IsString, IsNotEmpty, IsOptional, IsInt, IsDateString, Min } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsOptional,
+  IsInt,
+  IsDateString,
+  Min,
+} from 'class-validator';
 
 export class GiveTeacherFreeItemDto {
   @IsNotEmpty() @IsString() staffId: string;

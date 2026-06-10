@@ -149,7 +149,6 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     Permission.EXAM_TIMETABLE_MANAGE,
     Permission.EXAM_ROLL_GENERATE,
     Permission.EXAM_SEAT_ALLOCATE,
-  
   ],
 
   [Role.STUDENT]: [
@@ -168,4 +167,5 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   ],
 };
 
-export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> = ROLE_PERMISSIONS;
+export const DEFAULT_ROLE_PERMISSIONS: Record<Role, Permission[]> =
+  ROLE_PERMISSIONS;

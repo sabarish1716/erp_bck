@@ -9,7 +9,7 @@ export class SetAdmissionApprovalDto {
   @MaxLength(250)
   reason?: string;
 
-   @IsOptional()
+  @IsOptional()
   @IsBoolean()
   admissionNoAutoGenerate?: boolean;
 }

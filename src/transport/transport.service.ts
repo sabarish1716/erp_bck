@@ -1,4 +1,11 @@
-import { BadRequestException, ConflictException, forwardRef, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  forwardRef,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SupabaseService } from '../supabase/supabase.service';
@@ -26,7 +33,9 @@ type ExportFile = {
 
 function normalizeAcademicYear(academicYear?: string | null) {
   if (!academicYear) return null;
-  const match = String(academicYear).trim().match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
+  const match = String(academicYear)
+    .trim()
+    .match(/(\d{4})\s*[-/]\s*(\d{2,4})/);
   if (!match) return null;
 
   const startYear = parseInt(match[1], 10);
@@ -42,7 +51,9 @@ function getAcademicYearDateRange(academicYear?: string | null) {
   const normalized = normalizeAcademicYear(academicYear);
   if (!normalized) return null;
 
-  const [startYear, endYear] = normalized.split('-').map((value) => parseInt(value, 10));
+  const [startYear, endYear] = normalized
+    .split('-')
+    .map((value) => parseInt(value, 10));
   return {
     start: new Date(Date.UTC(startYear, 3, 1, 0, 0, 0)),
     end: new Date(Date.UTC(endYear, 2, 31, 23, 59, 59)),
@@ -133,14 +144,16 @@ export class TransportService {
     private prisma: PrismaService,
     private supabase: SupabaseService,
     @Inject(forwardRef(() => FeesService)) private feesService: FeesService,
-  ) { }
+  ) {}
 
   private async buildWorkbookBuffer(workbook: ExcelJS.Workbook) {
     const buffer = await workbook.xlsx.writeBuffer();
     return Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   }
 
-  private async buildPdfBuffer(render: (doc: PDFKit.PDFDocument) => void): Promise<Buffer> {
+  private async buildPdfBuffer(
+    render: (doc: PDFKit.PDFDocument) => void,
+  ): Promise<Buffer> {
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({ margin: 40, size: 'A4' });
       const chunks: Buffer[] = [];
@@ -197,7 +210,9 @@ export class TransportService {
       where: { id: busId },
       include: {
         route: true,
-        drivers: { select: { id: true, name: true, phone: true, status: true } },
+        drivers: {
+          select: { id: true, name: true, phone: true, status: true },
+        },
       },
     });
 
@@ -213,19 +228,33 @@ export class TransportService {
       where: { key: 'admin.settings' },
       select: { value: true },
     });
-    const settings = (settingsRow?.value as Record<string, unknown> | undefined) || {};
-    return normalizeAcademicYear(String(settings.academicYear || '')) || DEFAULT_ACADEMIC_YEAR;
+    const settings =
+      (settingsRow?.value as Record<string, unknown> | undefined) || {};
+    return (
+      normalizeAcademicYear(String(settings.academicYear || '')) ||
+      DEFAULT_ACADEMIC_YEAR
+    );
   }
 
   private async resolveStudentSpecialClassTransportConfig(
     studentId: string,
     academicYear?: string,
     studentStandard?: string | null,
-  ): Promise<{ monthlyFee: number; months: number; sourceAcademicYear: string | null }> {
+  ): Promise<{
+    monthlyFee: number;
+    months: number;
+    sourceAcademicYear: string | null;
+  }> {
     const normalizedYear = normalizeAcademicYear(academicYear);
-    const standard = studentStandard
-      ?? (await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } }))?.standard
-      ?? null;
+    const standard =
+      studentStandard ??
+      (
+        await this.prisma.student.findUnique({
+          where: { id: studentId },
+          select: { standard: true },
+        })
+      )?.standard ??
+      null;
 
     if (!standard) {
       return { monthlyFee: 0, months: 0, sourceAcademicYear: null };
@@ -233,16 +262,31 @@ export class TransportService {
 
     const exactFeeStructure = normalizedYear
       ? await this.prisma.feeStructure.findUnique({
-        where: { standard_academicYear: { standard: standard as any, academicYear: normalizedYear } },
-        select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
-      })
+          where: {
+            standard_academicYear: {
+              standard: standard as any,
+              academicYear: normalizedYear,
+            },
+          },
+          select: {
+            academicYear: true,
+            specialClassTransportFee: true,
+            specialClassTransportMonths: true,
+          },
+        })
       : null;
 
     const exactStudentFee = normalizedYear
       ? await this.prisma.studentFee.findUnique({
-        where: { studentId_academicYear: { studentId, academicYear: normalizedYear } },
-        select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
-      })
+          where: {
+            studentId_academicYear: { studentId, academicYear: normalizedYear },
+          },
+          select: {
+            academicYear: true,
+            specialClassTransportFee: true,
+            specialClassTransportMonths: true,
+          },
+        })
       : null;
 
     const latestStudentFee = await this.prisma.studentFee.findFirst({
@@ -253,7 +297,11 @@ export class TransportService {
           { specialClassTransportMonths: { gt: 0 } },
         ],
       },
-      select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      select: {
+        academicYear: true,
+        specialClassTransportFee: true,
+        specialClassTransportMonths: true,
+      },
       orderBy: { academicYear: 'desc' },
     });
 
@@ -265,12 +313,25 @@ export class TransportService {
           { specialClassTransportMonths: { gt: 0 } },
         ],
       },
-      select: { academicYear: true, specialClassTransportFee: true, specialClassTransportMonths: true },
+      select: {
+        academicYear: true,
+        specialClassTransportFee: true,
+        specialClassTransportMonths: true,
+      },
       orderBy: { academicYear: 'desc' },
     });
 
-    const candidates = [exactFeeStructure, exactStudentFee, latestStudentFee, latestFeeStructure].filter(Boolean);
-    const chosen = candidates.find((item) => (item!.specialClassTransportFee ?? 0) > 0 || (item!.specialClassTransportMonths ?? 0) > 0);
+    const candidates = [
+      exactFeeStructure,
+      exactStudentFee,
+      latestStudentFee,
+      latestFeeStructure,
+    ].filter(Boolean);
+    const chosen = candidates.find(
+      (item) =>
+        (item!.specialClassTransportFee ?? 0) > 0 ||
+        (item!.specialClassTransportMonths ?? 0) > 0,
+    );
 
     return {
       monthlyFee: chosen?.specialClassTransportFee ?? 0,
@@ -279,7 +340,9 @@ export class TransportService {
     };
   }
 
-  private buildFuelMileageEntries(logs: FuelLogWithRelations[]): FuelMileageEntry[] {
+  private buildFuelMileageEntries(
+    logs: FuelLogWithRelations[],
+  ): FuelMileageEntry[] {
     return logs.map((log, index) => {
       const previousLog = index > 0 ? logs[index - 1] : null;
       const distanceSincePreviousFill =
@@ -301,15 +364,21 @@ export class TransportService {
   }
 
   private buildFuelMileageSummary(entries: FuelMileageEntry[]) {
-    const totalDistanceKm = Math.round(
-      entries.reduce((sum, entry) => sum + (entry.distanceSincePreviousFill || 0), 0) * 100,
-    ) / 100;
-    const totalFuelConsumedLitres = Math.round(
-      entries.reduce(
-        (sum, entry) => sum + (entry.distanceSincePreviousFill != null ? entry.litres : 0),
-        0,
-      ) * 100,
-    ) / 100;
+    const totalDistanceKm =
+      Math.round(
+        entries.reduce(
+          (sum, entry) => sum + (entry.distanceSincePreviousFill || 0),
+          0,
+        ) * 100,
+      ) / 100;
+    const totalFuelConsumedLitres =
+      Math.round(
+        entries.reduce(
+          (sum, entry) =>
+            sum + (entry.distanceSincePreviousFill != null ? entry.litres : 0),
+          0,
+        ) * 100,
+      ) / 100;
     const averageKmPerLitre =
       totalDistanceKm > 0 && totalFuelConsumedLitres > 0
         ? Math.round((totalDistanceKm / totalFuelConsumedLitres) * 100) / 100
@@ -319,26 +388,33 @@ export class TransportService {
       totalDistanceKm,
       totalFuelConsumedLitres,
       averageKmPerLitre,
-      mileageSegments: entries.filter((entry) => entry.distanceSincePreviousFill != null).length,
+      mileageSegments: entries.filter(
+        (entry) => entry.distanceSincePreviousFill != null,
+      ).length,
       startOdometer: entries[0]?.odometer ?? null,
       endOdometer: entries[entries.length - 1]?.odometer ?? null,
     };
   }
 
-  private resolveStudentSummary<T extends { standard?: unknown } & Record<string, any>>(student: T) {
+  private resolveStudentSummary<
+    T extends { standard?: unknown } & Record<string, any>,
+  >(student: T) {
     return {
       ...student,
-      standardLabel: formatStandardLabel(student.standard == null ? null : String(student.standard)),
+      standardLabel: formatStandardLabel(
+        student.standard == null ? null : String(student.standard),
+      ),
     };
   }
 
-  private resolveAssignmentResponse<T extends { student?: Record<string, any> | null } & Record<string, any>>(
-    assignment: T,
-    message?: string,
-  ) {
+  private resolveAssignmentResponse<
+    T extends { student?: Record<string, any> | null } & Record<string, any>,
+  >(assignment: T, message?: string) {
     return {
       ...assignment,
-      ...(assignment.student ? { student: this.resolveStudentSummary(assignment.student) } : {}),
+      ...(assignment.student
+        ? { student: this.resolveStudentSummary(assignment.student) }
+        : {}),
       ...(message ? { message } : {}),
     };
   }
@@ -364,16 +440,22 @@ export class TransportService {
       }
 
       if (!Number.isInteger(stop.stopOrder) || stop.stopOrder <= 0) {
-        throw new BadRequestException('Stop order must be a positive whole number');
+        throw new BadRequestException(
+          'Stop order must be a positive whole number',
+        );
       }
 
       const normalizedName = stop.stopName.trim().toLowerCase();
       if (nameSet.has(normalizedName)) {
-        throw new ConflictException(`Stop ${stop.stopName} already exists in this route`);
+        throw new ConflictException(
+          `Stop ${stop.stopName} already exists in this route`,
+        );
       }
 
       if (orderSet.has(stop.stopOrder)) {
-        throw new ConflictException(`Stop order ${stop.stopOrder} already exists in this route`);
+        throw new ConflictException(
+          `Stop order ${stop.stopOrder} already exists in this route`,
+        );
       }
 
       nameSet.add(normalizedName);
@@ -382,20 +464,29 @@ export class TransportService {
   }
 
   private handleTransportWriteError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       const target = Array.isArray(error.meta?.target)
         ? error.meta?.target.join(', ')
         : String(error.meta?.target || 'transport record');
 
       if (target.includes('routeNo')) {
-        throw new ConflictException('A transport route with this route number already exists');
+        throw new ConflictException(
+          'A transport route with this route number already exists',
+        );
       }
 
       if (target.includes('studentId')) {
-        throw new ConflictException('Transport is already assigned to this student');
+        throw new ConflictException(
+          'Transport is already assigned to this student',
+        );
       }
 
-      throw new ConflictException('A duplicate transport record already exists');
+      throw new ConflictException(
+        'A duplicate transport record already exists',
+      );
     }
 
     throw error;
@@ -421,13 +512,30 @@ export class TransportService {
 
   async getDashboard(academicYear?: string) {
     const resolvedAcademicYear =
-      normalizeAcademicYear(academicYear) || (await this.getConfiguredAcademicYear());
+      normalizeAcademicYear(academicYear) ||
+      (await this.getConfiguredAcademicYear());
     const now = new Date();
     const startOfDay = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0),
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0,
+      ),
     );
     const endOfDay = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999),
+      Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        23,
+        59,
+        59,
+        999,
+      ),
     );
     const onlineWindowStart = new Date(now.getTime() - 15 * 60 * 1000);
 
@@ -533,7 +641,8 @@ export class TransportService {
           conductorName: data.conductorName,
           conductorPhone: data.conductorPhone,
           numberOfTerms: data.numberOfTerms || 1,
-          stops: sanitizedStops.length > 0 ? { create: sanitizedStops } : undefined,
+          stops:
+            sanitizedStops.length > 0 ? { create: sanitizedStops } : undefined,
         },
         include: { stops: { orderBy: { stopOrder: 'asc' } } },
       });
@@ -598,7 +707,9 @@ export class TransportService {
     if (!route) throw new NotFoundException('Route not found');
     return {
       ...route,
-      students: route.students.map((assignment) => this.resolveAssignmentResponse(assignment)),
+      students: route.students.map((assignment) =>
+        this.resolveAssignmentResponse(assignment),
+      ),
     };
   }
 
@@ -611,7 +722,9 @@ export class TransportService {
   // ═══════════════════════════════════════════════
 
   async assignStudent(data: AssignStudentTransportDto) {
-    const academicYear = normalizeAcademicYear(data.academicYear) || await this.getConfiguredAcademicYear();
+    const academicYear =
+      normalizeAcademicYear(data.academicYear) ||
+      (await this.getConfiguredAcademicYear());
 
     const student = await this.prisma.student.findUnique({
       where: { id: data.studentId },
@@ -620,9 +733,15 @@ export class TransportService {
     if (!student) throw new NotFoundException('Student not found');
 
     if (data.isSplClass) {
-      const isEligible = student.standard === 'STD_9' || student.standard === 'STD_10' || student.standard === 'STD_11' || student.standard === 'STD_12';
+      const isEligible =
+        student.standard === 'STD_9' ||
+        student.standard === 'STD_10' ||
+        student.standard === 'STD_11' ||
+        student.standard === 'STD_12';
       if (!isEligible) {
-        throw new BadRequestException('Special Class transport is only applicable for standards 9, 10, 11, and 12');
+        throw new BadRequestException(
+          'Special Class transport is only applicable for standards 9, 10, 11, and 12',
+        );
       }
     }
 
@@ -635,7 +754,9 @@ export class TransportService {
     if (data.stopId) {
       const stop = route.stops.find((item) => item.id === data.stopId);
       if (!stop) {
-        throw new BadRequestException('Selected stop does not belong to the selected route');
+        throw new BadRequestException(
+          'Selected stop does not belong to the selected route',
+        );
       }
     }
 
@@ -656,66 +777,79 @@ export class TransportService {
       Boolean(existingAssignment.isSplClass) === Boolean(data.isSplClass) &&
       (existingAssignment.busno || null) === (data.busno || null)
     ) {
-      return this.resolveAssignmentResponse(existingAssignment, 'No changes made to transport assignment');
+      return this.resolveAssignmentResponse(
+        existingAssignment,
+        'No changes made to transport assignment',
+      );
     }
 
     try {
       const assignment = existingAssignment
         ? await this.prisma.studentTransport.update({
-          where: { studentId: data.studentId },
-          data: {
-            routeId: data.routeId,
-            stopId: data.stopId || null,
-            academicYear,
-            busno: data.busno || null,
-            isSplClass: data.isSplClass || false,
-            splClassStartDate: data.isSplClass ? new Date() : null,
-            splClassEndDate: null,
-            splClassDaysUsed: null,
-            totalWorkingDays: null,
-          },
-          include: {
-            route: true,
-            stop: true,
-            student: { select: { id: true, name: true, standard: true } },
-          },
-        })
+            where: { studentId: data.studentId },
+            data: {
+              routeId: data.routeId,
+              stopId: data.stopId || null,
+              academicYear,
+              busno: data.busno || null,
+              isSplClass: data.isSplClass || false,
+              splClassStartDate: data.isSplClass ? new Date() : null,
+              splClassEndDate: null,
+              splClassDaysUsed: null,
+              totalWorkingDays: null,
+            },
+            include: {
+              route: true,
+              stop: true,
+              student: { select: { id: true, name: true, standard: true } },
+            },
+          })
         : await this.prisma.studentTransport.create({
-          data: {
-            studentId: data.studentId,
-            routeId: data.routeId,
-            stopId: data.stopId || null,
-            academicYear,
-            busno: data.busno || null,
-            isSplClass: data.isSplClass || false,
-            splClassStartDate: data.isSplClass ? new Date() : null,
-          },
-          include: {
-            route: true,
-            stop: true,
-            student: { select: { id: true, name: true, standard: true } },
-          },
-        });
+            data: {
+              studentId: data.studentId,
+              routeId: data.routeId,
+              stopId: data.stopId || null,
+              academicYear,
+              busno: data.busno || null,
+              isSplClass: data.isSplClass || false,
+              splClassStartDate: data.isSplClass ? new Date() : null,
+            },
+            include: {
+              route: true,
+              stop: true,
+              student: { select: { id: true, name: true, standard: true } },
+            },
+          });
 
       // Automatically recalculate and sync the student fee if it exists for the current academic year.
       try {
         const studentFee = await this.prisma.studentFee.findUnique({
-          where: { studentId_academicYear: { studentId: data.studentId, academicYear } }
+          where: {
+            studentId_academicYear: { studentId: data.studentId, academicYear },
+          },
         });
         if (studentFee) {
           const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-          const splSurcharge = assignment.isSplClass ? assignment.route.splClassFee : 0;
+          const splSurcharge = assignment.isSplClass
+            ? assignment.route.splClassFee
+            : 0;
           const totalNewTransportFee = baseFee + splSurcharge;
 
-          await this.feesService.recalcTransportFee(data.studentId, academicYear, totalNewTransportFee);
+          await this.feesService.recalcTransportFee(
+            data.studentId,
+            academicYear,
+            totalNewTransportFee,
+          );
         }
       } catch (err) {
-        console.error("Failed to sync transport fee with student fee", err);
+        console.error('Failed to sync transport fee with student fee', err);
       }
 
       return this.resolveAssignmentResponse(
         assignment,
-        existingAssignment ? 'Transport assignment updated successfully' : 'Transport assignment created successfully',
+        existingAssignment
+          ? 'Transport assignment updated successfully'
+          : 'Transport assignment created successfully',
       );
     } catch (error) {
       this.handleTransportWriteError(error);
@@ -723,7 +857,9 @@ export class TransportService {
   }
 
   async bulkAssignTransport(dto: BulkAssignTransportDto) {
-    const academicYear = normalizeAcademicYear(dto.academicYear) || await this.getConfiguredAcademicYear();
+    const academicYear =
+      normalizeAcademicYear(dto.academicYear) ||
+      (await this.getConfiguredAcademicYear());
     const results = {
       success: 0,
       failed: 0,
@@ -744,11 +880,13 @@ export class TransportService {
         });
 
         if (!admission?.studentId) {
-          throw new Error(`Student with admission number ${item.admissionNo} not found`);
+          throw new Error(
+            `Student with admission number ${item.admissionNo} not found`,
+          );
         }
 
         // 2. Find Route by Route No
-        const route = allRoutes.find(r => r.routeNo === item.routeNo);
+        const route = allRoutes.find((r) => r.routeNo === item.routeNo);
         if (!route) {
           throw new Error(`Route number ${item.routeNo} not found`);
         }
@@ -756,7 +894,9 @@ export class TransportService {
         // 3. Find Stop by Name (Optional)
         let stopId: string | undefined = undefined;
         if (item.stopName) {
-          const stop = route.stops.find(s => s.stopName.toLowerCase() === item.stopName?.toLowerCase());
+          const stop = route.stops.find(
+            (s) => s.stopName.toLowerCase() === item.stopName?.toLowerCase(),
+          );
           if (stop) {
             stopId = stop.id;
           }
@@ -780,22 +920,33 @@ export class TransportService {
             isSplClass: false,
             splClassStartDate: null,
           },
-          include: { route: true, stop: true }
+          include: { route: true, stop: true },
         });
 
         // 5. Sync with StudentFee if it exists
         try {
           const studentFee = await this.prisma.studentFee.findUnique({
-            where: { studentId_academicYear: { studentId: admission.studentId, academicYear } }
+            where: {
+              studentId_academicYear: {
+                studentId: admission.studentId,
+                academicYear,
+              },
+            },
           });
           if (studentFee) {
             const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-            const splSurcharge = assignment.isSplClass ? assignment.route.splClassFee : 0;
+            const splSurcharge = assignment.isSplClass
+              ? assignment.route.splClassFee
+              : 0;
             const totalNewTransportFee = baseFee + splSurcharge;
-            await this.feesService.recalcTransportFee(admission.studentId, academicYear, totalNewTransportFee);
+            await this.feesService.recalcTransportFee(
+              admission.studentId,
+              academicYear,
+              totalNewTransportFee,
+            );
           }
         } catch (err) {
-          console.error("Failed to sync transport fee in bulk", err);
+          console.error('Failed to sync transport fee in bulk', err);
         }
 
         results.success++;
@@ -812,12 +963,15 @@ export class TransportService {
     const assignment = await this.prisma.studentTransport.findUnique({
       where: { studentId },
       include: {
-        route: { include: { stops: { orderBy: { stopOrder: 'asc' } }, buses: true } },
+        route: {
+          include: { stops: { orderBy: { stopOrder: 'asc' } }, buses: true },
+        },
         stop: true,
         student: { select: { id: true, name: true, standard: true } },
       },
     });
-    if (!assignment) throw new NotFoundException('No transport assignment found');
+    if (!assignment)
+      throw new NotFoundException('No transport assignment found');
     return this.resolveAssignmentResponse(assignment);
   }
 
@@ -826,7 +980,9 @@ export class TransportService {
   }
 
   async getPendingTransportStudents(academicYear?: string) {
-    const resolvedAcademicYear = normalizeAcademicYear(academicYear) || await this.getConfiguredAcademicYear();
+    const resolvedAcademicYear =
+      normalizeAcademicYear(academicYear) ||
+      (await this.getConfiguredAcademicYear());
     const dateRange = getAcademicYearDateRange(resolvedAcademicYear);
     const students = await this.prisma.student.findMany({
       where: {
@@ -863,9 +1019,14 @@ export class TransportService {
 
     const pendingStudents = students
       .filter((student) => {
-        const transportMode = String(student.transportMode || '').trim().toUpperCase();
-        const needsTransport = Boolean(transportMode) && !['LOCAL', 'SELF', 'WALKING'].includes(transportMode);
-        const isMappedForYear = student.studentTransport?.academicYear === resolvedAcademicYear;
+        const transportMode = String(student.transportMode || '')
+          .trim()
+          .toUpperCase();
+        const needsTransport =
+          Boolean(transportMode) &&
+          !['LOCAL', 'SELF', 'WALKING'].includes(transportMode);
+        const isMappedForYear =
+          student.studentTransport?.academicYear === resolvedAcademicYear;
         return needsTransport && !isMappedForYear;
       })
       .map((student) => ({
@@ -883,7 +1044,9 @@ export class TransportService {
   }
 
   async getAllAssignments(academicYear?: string) {
-    const resolvedAcademicYear = normalizeAcademicYear(academicYear) || await this.getConfiguredAcademicYear();
+    const resolvedAcademicYear =
+      normalizeAcademicYear(academicYear) ||
+      (await this.getConfiguredAcademicYear());
     const [assignments, timelines] = await Promise.all([
       this.prisma.studentTransport.findMany({
         where: { academicYear: resolvedAcademicYear },
@@ -891,12 +1054,33 @@ export class TransportService {
           route: {
             include: {
               buses: {
-                include: { route: true }
-              }, stops: { orderBy: { stopOrder: 'asc' } }
+                include: { route: true },
+              },
+              stops: { orderBy: { stopOrder: 'asc' } },
             },
           },
           stop: true,
-          student: { select: { id: true, name: true, standard: true, section: true, siblingGroupId: true, address: { select: { line1: true, line2: true, line3: true, pin: true } }, family: { select: { fatherName: true, motherName: true, guardianName: true, guardianRelation: true, isSingleParent: true } } } },
+          student: {
+            select: {
+              id: true,
+              name: true,
+              standard: true,
+              section: true,
+              siblingGroupId: true,
+              address: {
+                select: { line1: true, line2: true, line3: true, pin: true },
+              },
+              family: {
+                select: {
+                  fatherName: true,
+                  motherName: true,
+                  guardianName: true,
+                  guardianRelation: true,
+                  isSingleParent: true,
+                },
+              },
+            },
+          },
         },
         orderBy: { student: { name: 'asc' } },
       }),
@@ -906,7 +1090,9 @@ export class TransportService {
     ]);
 
     return assignments.map((assignment) => {
-      const studentTimelines = timelines.filter((t) => t.studentId === assignment.studentId);
+      const studentTimelines = timelines.filter(
+        (t) => t.studentId === assignment.studentId,
+      );
       return {
         ...this.resolveAssignmentResponse(assignment),
         timelines: studentTimelines,
@@ -923,13 +1109,16 @@ export class TransportService {
     if (!assignment) return 0;
 
     const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-    const splSurcharge = assignment.isSplClass ? assignment.route.splClassFee : 0;
+    const splSurcharge = assignment.isSplClass
+      ? assignment.route.splClassFee
+      : 0;
     return baseFee + splSurcharge;
   }
 
   async getTransportFeeBreakdown(studentId: string, academicYear?: string) {
     // Resolve academic year — use provided, else fall back to configured default
-    const resolvedYear = academicYear || await this.getConfiguredAcademicYear();
+    const resolvedYear =
+      academicYear || (await this.getConfiguredAcademicYear());
 
     // Filter timelines by academic year to avoid cross-year mixing
     const timelines = await this.prisma.studentTransportTimeline.findMany({
@@ -939,8 +1128,15 @@ export class TransportService {
     });
 
     if (timelines.length > 0) {
-      const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
-      const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, resolvedYear, student?.standard == null ? null : String(student.standard));
+      const student = await this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { standard: true },
+      });
+      const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+        studentId,
+        resolvedYear,
+        student?.standard == null ? null : String(student.standard),
+      );
       const splFeeRate = sctConfig.monthlyFee;
       const configuredSplTransportMonths = sctConfig.months;
 
@@ -953,12 +1149,22 @@ export class TransportService {
           // Stop-wise base fee: use stop fee when assigned, else fall back to route baseFee
           const yearlyBase = t.stop?.fee ?? t.route.baseFee;
           const monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
-          const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+          const multiplier =
+            t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY'
+              ? 0.5
+              : 1.0;
 
           if (t.isSplClass) {
-            const splMultiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+            const splMultiplier =
+              t.commuteMode === 'MORNING_ONLY' ||
+              t.commuteMode === 'EVENING_ONLY'
+                ? 0.5
+                : 1.0;
             splClassMonths += splMultiplier;
-            splClassFeeTotal += splFeeRate > 0 ? Math.round((splFeeRate * splMultiplier) * 100) / 100 : Number(t.feeCharged || 0);
+            splClassFeeTotal +=
+              splFeeRate > 0
+                ? Math.round(splFeeRate * splMultiplier * 100) / 100
+                : Number(t.feeCharged || 0);
           } else {
             baseFee += monthlyBase * multiplier;
           }
@@ -966,7 +1172,10 @@ export class TransportService {
       }
 
       baseFee = Math.round(baseFee * 100) / 100;
-      const billableSplClassMonths = configuredSplTransportMonths > 0 ? configuredSplTransportMonths : splClassMonths;
+      const billableSplClassMonths =
+        configuredSplTransportMonths > 0
+          ? configuredSplTransportMonths
+          : splClassMonths;
       splClassFeeTotal = Math.round(splClassFeeTotal * 100) / 100;
       const totalFee = Math.round((baseFee + splClassFeeTotal) * 100) / 100;
 
@@ -992,17 +1201,35 @@ export class TransportService {
       where: { studentId },
       include: { route: true, stop: true },
     });
-    if (!assignment) return { baseFee: 0, splClassFee: 0, totalFee: 0, proRataSplClassFee: 0 };
+    if (!assignment)
+      return { baseFee: 0, splClassFee: 0, totalFee: 0, proRataSplClassFee: 0 };
 
     // Stop-wise fee respected in fallback path too
     const baseFee = assignment.stop?.fee ?? assignment.route.baseFee;
-    const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
-    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, resolvedYear, student?.standard == null ? null : String(student.standard));
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { standard: true },
+    });
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+      studentId,
+      resolvedYear,
+      student?.standard == null ? null : String(student.standard),
+    );
     const fullSplClassFee = assignment.isSplClass ? sctConfig.monthlyFee : 0;
 
     let proRataSplClassFee = fullSplClassFee;
-    if (assignment.isSplClass && assignment.splClassDaysUsed != null && assignment.totalWorkingDays != null && assignment.totalWorkingDays > 0) {
-      proRataSplClassFee = Math.round((fullSplClassFee * assignment.splClassDaysUsed / assignment.totalWorkingDays) * 100) / 100;
+    if (
+      assignment.isSplClass &&
+      assignment.splClassDaysUsed != null &&
+      assignment.totalWorkingDays != null &&
+      assignment.totalWorkingDays > 0
+    ) {
+      proRataSplClassFee =
+        Math.round(
+          ((fullSplClassFee * assignment.splClassDaysUsed) /
+            assignment.totalWorkingDays) *
+            100,
+        ) / 100;
     }
 
     return {
@@ -1022,8 +1249,14 @@ export class TransportService {
   // Get regular (base) transport fee for a student, excluding special class transport.
   // SCT is tracked separately via specialClassTransportFee × specialClassTransportMonths
   // on the StudentFee record to avoid double-counting.
-  async getTransportFeeForStudentProRata(studentId: string, academicYear?: string): Promise<number> {
-    const breakdown = await this.getTransportFeeBreakdown(studentId, academicYear);
+  async getTransportFeeForStudentProRata(
+    studentId: string,
+    academicYear?: string,
+  ): Promise<number> {
+    const breakdown = await this.getTransportFeeBreakdown(
+      studentId,
+      academicYear,
+    );
     // Return only the base transport fee — SCT is stored separately in
     // specialClassTransportFee / specialClassTransportMonths on StudentFee.
     return breakdown.baseFee;
@@ -1034,28 +1267,47 @@ export class TransportService {
     const assignment = await this.prisma.studentTransport.findUnique({
       where: { studentId: data.studentId },
     });
-    if (!assignment) throw new NotFoundException('No transport assignment found for this student');
+    if (!assignment)
+      throw new NotFoundException(
+        'No transport assignment found for this student',
+      );
 
     const updateData: any = {};
-    if (data.splClassStartDate !== undefined) updateData.splClassStartDate = new Date(data.splClassStartDate);
-    if (data.splClassEndDate !== undefined) updateData.splClassEndDate = new Date(data.splClassEndDate);
-    if (data.splClassDaysUsed !== undefined) updateData.splClassDaysUsed = data.splClassDaysUsed;
-    if (data.totalWorkingDays !== undefined) updateData.totalWorkingDays = data.totalWorkingDays;
+    if (data.splClassStartDate !== undefined)
+      updateData.splClassStartDate = new Date(data.splClassStartDate);
+    if (data.splClassEndDate !== undefined)
+      updateData.splClassEndDate = new Date(data.splClassEndDate);
+    if (data.splClassDaysUsed !== undefined)
+      updateData.splClassDaysUsed = data.splClassDaysUsed;
+    if (data.totalWorkingDays !== undefined)
+      updateData.totalWorkingDays = data.totalWorkingDays;
 
     return this.prisma.studentTransport.update({
       where: { studentId: data.studentId },
       data: updateData,
-      include: { route: true, stop: true, student: { select: { id: true, name: true, standard: true } } },
+      include: {
+        route: true,
+        stop: true,
+        student: { select: { id: true, name: true, standard: true } },
+      },
     });
   }
 
   // Stop special class transport for a student (sets end date)
-  async stopSplClass(studentId: string, daysUsed: number, totalWorkingDays: number) {
+  async stopSplClass(
+    studentId: string,
+    daysUsed: number,
+    totalWorkingDays: number,
+  ) {
     const assignment = await this.prisma.studentTransport.findUnique({
       where: { studentId },
     });
-    if (!assignment) throw new NotFoundException('No transport assignment found');
-    if (!assignment.isSplClass) throw new BadRequestException('Student is not assigned to special class transport');
+    if (!assignment)
+      throw new NotFoundException('No transport assignment found');
+    if (!assignment.isSplClass)
+      throw new BadRequestException(
+        'Student is not assigned to special class transport',
+      );
 
     return this.prisma.studentTransport.update({
       where: { studentId },
@@ -1064,7 +1316,11 @@ export class TransportService {
         splClassDaysUsed: daysUsed,
         totalWorkingDays: totalWorkingDays,
       },
-      include: { route: true, stop: true, student: { select: { id: true, name: true, standard: true } } },
+      include: {
+        route: true,
+        stop: true,
+        student: { select: { id: true, name: true, standard: true } },
+      },
     });
   }
 
@@ -1079,7 +1335,7 @@ export class TransportService {
     }
 
     // Resolve bus and route relationships (strictly manual linking)
-    let resolvedBusId: string | null = data.busId || null;
+    const resolvedBusId: string | null = data.busId || null;
     if (resolvedBusId && data.route !== undefined) {
       // Link this bus to the selected route in the DB
       await this.prisma.bus.update({
@@ -1108,7 +1364,10 @@ export class TransportService {
         include: { bus: { include: { route: true } } },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException('A driver with this email already exists');
       }
       throw error;
@@ -1125,19 +1384,27 @@ export class TransportService {
     if (data.email !== undefined) updateData.email = data.email || null;
     if (data.phone !== undefined) {
       updateData.phone = data.phone || null;
-      if (!data.deviceId && data.phone && (!existing.deviceId || existing.deviceId === existing.phone)) {
+      if (
+        !data.deviceId &&
+        data.phone &&
+        (!existing.deviceId || existing.deviceId === existing.phone)
+      ) {
         updateData.deviceId = data.phone;
       }
     }
-    if (data.deviceId !== undefined) updateData.deviceId = data.deviceId || null;
+    if (data.deviceId !== undefined)
+      updateData.deviceId = data.deviceId || null;
     if (data.busId !== undefined) updateData.busId = data.busId || null;
-    if (data.licenseNo !== undefined) updateData.licenseNo = data.licenseNo || null;
+    if (data.licenseNo !== undefined)
+      updateData.licenseNo = data.licenseNo || null;
     if (data.address !== undefined) updateData.address = data.address || null;
-    if (data.bloodGroup !== undefined) updateData.bloodGroup = data.bloodGroup || null;
+    if (data.bloodGroup !== undefined)
+      updateData.bloodGroup = data.bloodGroup || null;
     if (data.status !== undefined) updateData.status = data.status;
 
     // Resolve bus and route relationships during update (strictly manual linking)
-    const targetBusId = updateData.busId !== undefined ? updateData.busId : existing.busId;
+    const targetBusId =
+      updateData.busId !== undefined ? updateData.busId : existing.busId;
     if (targetBusId && data.route !== undefined) {
       // Link this bus to the selected route (or null if cleared) in the DB
       await this.prisma.bus.update({
@@ -1158,7 +1425,10 @@ export class TransportService {
         include: { bus: { include: { route: true } } },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException('A driver with this email already exists');
       }
       throw error;
@@ -1167,7 +1437,10 @@ export class TransportService {
 
   async getAllDrivers() {
     const drivers = await this.prisma.driver.findMany({
-      include: { bus: { include: { route: true } }, _count: { select: { locations: true } } },
+      include: {
+        bus: { include: { route: true } },
+        _count: { select: { locations: true } },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -1241,15 +1514,18 @@ export class TransportService {
       const a =
         Math.sin(dLat / 2) * Math.sin(dLat / 2) +
         Math.cos((schoolLat * Math.PI) / 180) *
-        Math.cos((lastLocation.latitude * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-      distanceToSchool = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+          Math.cos((lastLocation.latitude * Math.PI) / 180) *
+          Math.sin(dLon / 2) *
+          Math.sin(dLon / 2);
+      distanceToSchool = Math.round(
+        R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)),
+      );
       insideGeofence = distanceToSchool <= radiusM;
     }
 
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
-    const isOnline = lastLocation && new Date(lastLocation.createdAt) > fiveMinAgo;
+    const isOnline =
+      lastLocation && new Date(lastLocation.createdAt) > fiveMinAgo;
 
     return {
       ...driver,
@@ -1257,7 +1533,11 @@ export class TransportService {
       distanceToSchoolMeters: distanceToSchool,
       insideGeofence,
       isOnline: !!isOnline,
-      trackingStatus: !isOnline ? 'OFFLINE' : insideGeofence ? 'AT_SCHOOL' : 'ON_ROUTE',
+      trackingStatus: !isOnline
+        ? 'OFFLINE'
+        : insideGeofence
+          ? 'AT_SCHOOL'
+          : 'ON_ROUTE',
     };
   }
 
@@ -1297,7 +1577,9 @@ export class TransportService {
     return this.prisma.bus.findMany({
       include: {
         route: true,
-        drivers: { select: { id: true, name: true, phone: true, status: true } },
+        drivers: {
+          select: { id: true, name: true, phone: true, status: true },
+        },
         _count: { select: { locations: true } },
       },
       orderBy: { number: 'asc' },
@@ -1323,7 +1605,9 @@ export class TransportService {
     });
     if (!existing) throw new NotFoundException('Bus not found');
     if (existing._count.drivers > 0) {
-      throw new BadRequestException('Cannot delete bus — it has assigned drivers. Remove driver assignments first.');
+      throw new BadRequestException(
+        'Cannot delete bus — it has assigned drivers. Remove driver assignments first.',
+      );
     }
 
     await this.prisma.location.deleteMany({ where: { busId: id } });
@@ -1342,9 +1626,14 @@ export class TransportService {
 
   /** Assign a driver to a bus */
   async assignDriverToBus(driverId: string, busId: string) {
-    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    const driver = await this.prisma.driver.findUnique({
+      where: { id: driverId },
+    });
     if (!driver) throw new NotFoundException('Driver not found');
-    const bus = await this.prisma.bus.findUnique({ where: { id: busId }, include: { route: true } });
+    const bus = await this.prisma.bus.findUnique({
+      where: { id: busId },
+      include: { route: true },
+    });
     if (!bus) throw new NotFoundException('Bus not found');
 
     await this.clearBusAssignments(busId, driverId);
@@ -1371,7 +1660,9 @@ export class TransportService {
 
   /** Assign a driver to a route — auto-assigns the route's bus */
   async assignDriverToRoute(driverId: string, routeId: string) {
-    const driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    const driver = await this.prisma.driver.findUnique({
+      where: { id: driverId },
+    });
     if (!driver) throw new NotFoundException('Driver not found');
 
     const route = await this.prisma.transportRoute.findUnique({
@@ -1381,7 +1672,9 @@ export class TransportService {
     if (!route) throw new NotFoundException('Route not found');
 
     if (!route.buses || route.buses.length === 0) {
-      throw new BadRequestException(`Route "${route.routeName}" has no buses assigned. Create a bus for this route first.`);
+      throw new BadRequestException(
+        `Route "${route.routeName}" has no buses assigned. Create a bus for this route first.`,
+      );
     }
 
     // Assign driver to the first available bus on the route
@@ -1412,9 +1705,13 @@ export class TransportService {
   /** Unassign a driver from their bus */
   async unassignDriverFromBus(driverId: string) {
     // Try finding by ID first, then by phone
-    let driver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+    let driver = await this.prisma.driver.findUnique({
+      where: { id: driverId },
+    });
     if (!driver) {
-      driver = await this.prisma.driver.findFirst({ where: { phone: driverId } });
+      driver = await this.prisma.driver.findFirst({
+        where: { phone: driverId },
+      });
     }
     if (!driver) throw new NotFoundException('Driver not found');
 
@@ -1438,8 +1735,6 @@ export class TransportService {
     return updated;
   }
 
-
-
   // ═══════════════════════════════════════════════
   // VEHICLE-DRIVER MAPPING
   // ═══════════════════════════════════════════════
@@ -1448,7 +1743,15 @@ export class TransportService {
   async getVehicleDriverMappings() {
     const buses = await this.prisma.bus.findMany({
       include: {
-        drivers: { select: { id: true, name: true, phone: true, licenseNo: true, status: true } },
+        drivers: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            licenseNo: true,
+            status: true,
+          },
+        },
       },
       orderBy: { number: 'asc' },
     });
@@ -1478,8 +1781,12 @@ export class TransportService {
     const busId = dto?.busId ? String(dto.busId) : undefined;
     const driverId = dto?.driverId ? String(dto.driverId) : undefined;
     const plateNo = dto?.plateNo ? String(dto.plateNo).trim() : undefined;
-    const driverName = dto?.driverName ? String(dto.driverName).trim() : undefined;
-    const driverPhone = dto?.driverPhone ? String(dto.driverPhone).trim() : undefined;
+    const driverName = dto?.driverName
+      ? String(dto.driverName).trim()
+      : undefined;
+    const driverPhone = dto?.driverPhone
+      ? String(dto.driverPhone).trim()
+      : undefined;
     const licenseNo = dto?.licenseNo ? String(dto.licenseNo).trim() : undefined;
 
     let bus = null as any;
@@ -1497,19 +1804,20 @@ export class TransportService {
 
     let assignedDriver = null as any;
     if (driverId) {
-      assignedDriver = await this.prisma.driver.findUnique({ where: { id: driverId } });
+      assignedDriver = await this.prisma.driver.findUnique({
+        where: { id: driverId },
+      });
       if (!assignedDriver) throw new NotFoundException('Driver not found');
     } else {
       if (!driverName || !driverPhone) {
-        throw new BadRequestException('driverId or driverName and driverPhone are required');
+        throw new BadRequestException(
+          'driverId or driverName and driverPhone are required',
+        );
       }
 
       assignedDriver = await this.prisma.driver.findFirst({
         where: {
-          OR: [
-            { phone: driverPhone },
-            ...(licenseNo ? [{ licenseNo }] : []),
-          ],
+          OR: [{ phone: driverPhone }, ...(licenseNo ? [{ licenseNo }] : [])],
         },
       });
 
@@ -1556,21 +1864,23 @@ export class TransportService {
 
     if (bus && bus.drivers.length > 0) {
       // Unassign all drivers from this bus
-      const updatePromises = bus.drivers.map(driver =>
+      const updatePromises = bus.drivers.map((driver) =>
         this.prisma.driver.update({
           where: { id: driver.id },
-          data: { busId: null }
-        })
+          data: { busId: null },
+        }),
       );
       await Promise.all(updatePromises);
     }
-    return { success: true, message: `Driver mappings removed for bus ${plateNo}` };
+    return {
+      success: true,
+      message: `Driver mappings removed for bus ${plateNo}`,
+    };
   }
 
   // ═══════════════════════════════════════════════
   // MILEAGE APIs
   // ═══════════════════════════════════════════════
-
 
   /** Create a mileage snapshot for a bus/driver */
   async createMileageSnapshot(dto: any) {
@@ -1582,7 +1892,7 @@ export class TransportService {
         // Find bus by plateNo
         const bus = await this.prisma.bus.findFirst({
           where: { number: snap.plateNo },
-          include: { drivers: true }
+          include: { drivers: true },
         });
 
         if (!bus || bus.drivers.length === 0) continue; // driverId is required by schema
@@ -1590,7 +1900,7 @@ export class TransportService {
 
         // Prevent duplicate odometer spamming
         const existing = await this.prisma.mileage.findFirst({
-          where: { busId: bus.id, odometer: Number(snap.odometer) }
+          where: { busId: bus.id, odometer: Number(snap.odometer) },
         });
         if (existing) continue;
 
@@ -1599,8 +1909,8 @@ export class TransportService {
             busId: bus.id,
             driverId: driverId,
             odometer: Number(snap.odometer),
-            snapshotTime: new Date()
-          }
+            snapshotTime: new Date(),
+          },
         });
         results.push(mileage);
       }
@@ -1613,17 +1923,31 @@ export class TransportService {
 
     let driverId = dto.driverId;
     if (!driverId) {
-      const driver = await this.prisma.driver.findFirst({ where: { phone: dto.driverId || dto.driverId } });
-      if (!driver) throw new NotFoundException(`Driver not found for reference: ${dto.driverId || dto.driverId}`);
+      const driver = await this.prisma.driver.findFirst({
+        where: { phone: dto.driverId || dto.driverId },
+      });
+      if (!driver)
+        throw new NotFoundException(
+          `Driver not found for reference: ${dto.driverId || dto.driverId}`,
+        );
       driverId = driver.id;
     }
-    if (!driverId) throw new BadRequestException('driverId or driverPhone is required');
+    if (!driverId)
+      throw new BadRequestException('driverId or driverPhone is required');
 
-    if (dto.odometer === undefined || dto.odometer === null || isNaN(Number(dto.odometer))) {
-      throw new BadRequestException('odometer is required and must be a number');
+    if (
+      dto.odometer === undefined ||
+      dto.odometer === null ||
+      isNaN(Number(dto.odometer))
+    ) {
+      throw new BadRequestException(
+        'odometer is required and must be a number',
+      );
     }
 
-    const snapshotTime = dto.snapshotTime ? new Date(dto.snapshotTime) : new Date();
+    const snapshotTime = dto.snapshotTime
+      ? new Date(dto.snapshotTime)
+      : new Date();
     const mileage = await this.prisma.mileage.create({
       data: {
         busId: dto.busId,
@@ -1657,7 +1981,12 @@ export class TransportService {
     });
 
     if (snapshots.length === 0) {
-      return { busId, date: start.toISOString().slice(0, 10), mileage: 0, snapshots: [] };
+      return {
+        busId,
+        date: start.toISOString().slice(0, 10),
+        mileage: 0,
+        snapshots: [],
+      };
     }
 
     // Sum only positive deltas between consecutive readings (ignores odometer resets)
@@ -1707,11 +2036,17 @@ export class TransportService {
       const dayKey = entry.timestamp.toISOString().slice(0, 10);
       dailyBreakdown.set(
         dayKey,
-        Math.round(((dailyBreakdown.get(dayKey) || 0) + entry.distanceSincePreviousFill) * 100) / 100,
+        Math.round(
+          ((dailyBreakdown.get(dayKey) || 0) +
+            entry.distanceSincePreviousFill) *
+            100,
+        ) / 100,
       );
       dailyFuelBreakdown.set(
         dayKey,
-        Math.round(((dailyFuelBreakdown.get(dayKey) || 0) + entry.litres) * 100) / 100,
+        Math.round(
+          ((dailyFuelBreakdown.get(dayKey) || 0) + entry.litres) * 100,
+        ) / 100,
       );
     });
 
@@ -1725,7 +2060,9 @@ export class TransportService {
         number: bus.number,
         routeName: bus.routeName,
         capacity: bus.capacity,
-        route: bus.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+        route: bus.route
+          ? { id: bus.route.id, routeName: bus.route.routeName }
+          : null,
         drivers: bus.drivers,
       },
       summary: {
@@ -1737,16 +2074,20 @@ export class TransportService {
         startOdometer: summaryMetrics.startOdometer,
         endOdometer: summaryMetrics.endOdometer,
       },
-      dailyBreakdown: Array.from(dailyBreakdown.entries()).map(([date, distanceKm]) => {
-        const litres = dailyFuelBreakdown.get(date) || 0;
-        return {
-          date,
-          distanceKm,
-          litres,
-          averageKmPerLitre:
-            distanceKm > 0 && litres > 0 ? Math.round((distanceKm / litres) * 100) / 100 : null,
-        };
-      }),
+      dailyBreakdown: Array.from(dailyBreakdown.entries()).map(
+        ([date, distanceKm]) => {
+          const litres = dailyFuelBreakdown.get(date) || 0;
+          return {
+            date,
+            distanceKm,
+            litres,
+            averageKmPerLitre:
+              distanceKm > 0 && litres > 0
+                ? Math.round((distanceKm / litres) * 100) / 100
+                : null,
+          };
+        },
+      ),
       entries,
     };
   }
@@ -1820,7 +2161,9 @@ export class TransportService {
       const ignOnCount = evts.filter((e) => e.event === 'IGNITION_ON').length;
       const ignOffCount = evts.filter((e) => e.event === 'IGNITION_OFF').length;
       const firstIgnOn = evts.find((e) => e.event === 'IGNITION_ON');
-      const lastIgnOff = [...evts].reverse().find((e) => e.event === 'IGNITION_OFF');
+      const lastIgnOff = [...evts]
+        .reverse()
+        .find((e) => e.event === 'IGNITION_OFF');
 
       let totalRunningMs = 0;
       let lastOnTime: Date | null = null;
@@ -1828,16 +2171,21 @@ export class TransportService {
         if (evt.event === 'IGNITION_ON') {
           lastOnTime = evt.timestamp;
         } else if (evt.event === 'IGNITION_OFF' && lastOnTime) {
-          totalRunningMs += new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
+          totalRunningMs +=
+            new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
           lastOnTime = null;
         }
       }
 
       const startOdometer = firstIgnOn?.odometer ?? null;
-      const endOdometer = lastIgnOff?.odometer ?? evts[evts.length - 1]?.odometer ?? null;
-      const distanceKm = startOdometer != null && endOdometer != null && endOdometer >= startOdometer
-        ? Math.round((endOdometer - startOdometer) * 100) / 100
-        : null;
+      const endOdometer =
+        lastIgnOff?.odometer ?? evts[evts.length - 1]?.odometer ?? null;
+      const distanceKm =
+        startOdometer != null &&
+        endOdometer != null &&
+        endOdometer >= startOdometer
+          ? Math.round((endOdometer - startOdometer) * 100) / 100
+          : null;
 
       return {
         plateNo,
@@ -1877,7 +2225,12 @@ export class TransportService {
       include: { drivers: true, route: true },
     });
 
-    let mileageData: { dailyKm: number; startOdometer: number; endOdometer: number; snapshotCount: number } | null = null;
+    let mileageData: {
+      dailyKm: number;
+      startOdometer: number;
+      endOdometer: number;
+      snapshotCount: number;
+    } | null = null;
     if (bus) {
       const snapshots = await this.prisma.mileage.findMany({
         where: {
@@ -1903,15 +2256,16 @@ export class TransportService {
     }
 
     // Compute ignition summary
-    const ignOnEvents = tripEvents.filter(e => e.event === 'IGNITION_ON');
-    const ignOffEvents = tripEvents.filter(e => e.event === 'IGNITION_OFF');
+    const ignOnEvents = tripEvents.filter((e) => e.event === 'IGNITION_ON');
+    const ignOffEvents = tripEvents.filter((e) => e.event === 'IGNITION_OFF');
 
     let totalRunningMs = 0;
     let lastOnTime: Date | null = null;
     for (const evt of tripEvents) {
       if (evt.event === 'IGNITION_ON') lastOnTime = evt.timestamp;
       else if (evt.event === 'IGNITION_OFF' && lastOnTime) {
-        totalRunningMs += new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
+        totalRunningMs +=
+          new Date(evt.timestamp).getTime() - new Date(lastOnTime).getTime();
         lastOnTime = null;
       }
     }
@@ -1939,9 +2293,24 @@ export class TransportService {
     return {
       plateNo,
       date: targetDate,
-      bus: bus ? { id: bus.id, number: bus.number, routeName: bus.routeName, capacity: bus.capacity } : null,
-      driver: assignedDriver ? { id: assignedDriver.id, name: assignedDriver.name, phone: assignedDriver.phone } : null,
-      route: bus?.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+      bus: bus
+        ? {
+            id: bus.id,
+            number: bus.number,
+            routeName: bus.routeName,
+            capacity: bus.capacity,
+          }
+        : null,
+      driver: assignedDriver
+        ? {
+            id: assignedDriver.id,
+            name: assignedDriver.name,
+            phone: assignedDriver.phone,
+          }
+        : null,
+      route: bus?.route
+        ? { id: bus.route.id, routeName: bus.route.routeName }
+        : null,
       mileage: mileageData,
       ignitionSummary: {
         onCount: ignOnEvents.length,
@@ -1962,8 +2331,10 @@ export class TransportService {
   /** Create fuel log from ERP dashboard (authenticated) */
   async createFuelLog(dto: any) {
     if (!dto.driverId) throw new BadRequestException('driverId is required');
-    if (dto.odometer == null || isNaN(Number(dto.odometer))) throw new BadRequestException('odometer is required');
-    if (dto.litres == null || isNaN(Number(dto.litres))) throw new BadRequestException('litres is required');
+    if (dto.odometer == null || isNaN(Number(dto.odometer)))
+      throw new BadRequestException('odometer is required');
+    if (dto.litres == null || isNaN(Number(dto.litres)))
+      throw new BadRequestException('litres is required');
 
     const driver = await this.prisma.driver.findUnique({
       where: { id: dto.driverId },
@@ -1978,7 +2349,8 @@ export class TransportService {
         plateNo: driver.bus?.number || dto.plateNo || null,
         odometer: Number(dto.odometer),
         litres: Number(dto.litres),
-        fuelCostPerLitre: dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
+        fuelCostPerLitre:
+          dto.fuelCostPerLitre != null ? Number(dto.fuelCostPerLitre) : null,
         totalCost: dto.totalCost != null ? Number(dto.totalCost) : null,
         note: dto.note || null,
         imageUrl: dto.imageUrl || null,
@@ -2005,11 +2377,19 @@ export class TransportService {
   /** Create fuel log from Flutter driver app (public, resolves driver by phone) */
   async createFuelLogFromDriver(dto: any) {
     const driverRef = String(
-      dto.driverId ?? dto.driver_id ?? dto.driverPhone ?? dto.phone ?? dto.phoneNumber ?? dto.deviceId ?? '',
+      dto.driverId ??
+        dto.driver_id ??
+        dto.driverPhone ??
+        dto.phone ??
+        dto.phoneNumber ??
+        dto.deviceId ??
+        '',
     ).trim();
-    if (!driverRef) throw new BadRequestException('driverId or driverPhone is required');
+    if (!driverRef)
+      throw new BadRequestException('driverId or driverPhone is required');
 
-    const odometerValue = dto.odometer ?? dto.distance ?? dto.distanceKm ?? dto.km;
+    const odometerValue =
+      dto.odometer ?? dto.distance ?? dto.distanceKm ?? dto.km;
     const litresValue = dto.litres ?? dto.liters ?? dto.fuelLitres;
 
     if (odometerValue == null || isNaN(Number(odometerValue))) {
@@ -2036,12 +2416,15 @@ export class TransportService {
           include: { bus: true },
         });
         const target = refDigits.slice(-10);
-        const phoneMatches = allDrivers.filter((d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target);
+        const phoneMatches = allDrivers.filter(
+          (d) => (d.phone || '').replace(/\D/g, '').slice(-10) === target,
+        );
         driver = phoneMatches.find((d) => d.busId) || phoneMatches[0] || null;
       }
     }
 
-    if (!driver) throw new NotFoundException(`Driver not found for: ${driverRef}`);
+    if (!driver)
+      throw new NotFoundException(`Driver not found for: ${driverRef}`);
 
     let resolvedBusId = driver.busId || dto.busId || null;
     let resolvedPlateNo = driver.bus?.number || dto.plateNo || null;
@@ -2149,9 +2532,13 @@ export class TransportService {
     const enriched = logs.map((log, idx) => {
       let kmPerLitre: number | null = null;
       if (log.plateNo) {
-        const prevLog = logs.slice(idx + 1).find((l) => l.plateNo === log.plateNo);
+        const prevLog = logs
+          .slice(idx + 1)
+          .find((l) => l.plateNo === log.plateNo);
         if (prevLog && log.odometer > prevLog.odometer && log.litres > 0) {
-          kmPerLitre = Math.round(((log.odometer - prevLog.odometer) / log.litres) * 100) / 100;
+          kmPerLitre =
+            Math.round(((log.odometer - prevLog.odometer) / log.litres) * 100) /
+            100;
         }
       }
       return { ...log, kmPerLitre };
@@ -2182,7 +2569,10 @@ export class TransportService {
     const enrichedLogs = this.buildFuelMileageEntries(logs);
 
     const totalLitres = enrichedLogs.reduce((sum, log) => sum + log.litres, 0);
-    const totalCost = enrichedLogs.reduce((sum, log) => sum + (log.totalCost || 0), 0);
+    const totalCost = enrichedLogs.reduce(
+      (sum, log) => sum + (log.totalCost || 0),
+      0,
+    );
     const summaryMetrics = this.buildFuelMileageSummary(enrichedLogs);
 
     return {
@@ -2195,7 +2585,9 @@ export class TransportService {
         number: bus.number,
         routeName: bus.routeName,
         capacity: bus.capacity,
-        route: bus.route ? { id: bus.route.id, routeName: bus.route.routeName } : null,
+        route: bus.route
+          ? { id: bus.route.id, routeName: bus.route.routeName }
+          : null,
         drivers: bus.drivers,
       },
       summary: {
@@ -2211,7 +2603,11 @@ export class TransportService {
     };
   }
 
-  async exportBusFuelReportExcel(busId: string, from?: string, to?: string): Promise<ExportFile> {
+  async exportBusFuelReportExcel(
+    busId: string,
+    from?: string,
+    to?: string,
+  ): Promise<ExportFile> {
     const report = await this.getBusFuelReport(busId, from, to);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'GitHub Copilot';
@@ -2231,7 +2627,10 @@ export class TransportService {
       { field: 'Total Litres', value: report.summary.totalLitres },
       { field: 'Total Cost', value: report.summary.totalCost },
       { field: 'Total Distance Km', value: report.summary.totalDistanceKm },
-      { field: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+      {
+        field: 'Average Km Per Litre',
+        value: report.summary.averageKmPerLitre ?? '-',
+      },
       { field: 'Last Odometer', value: report.summary.lastOdometer ?? '-' },
     ]);
 
@@ -2268,7 +2667,11 @@ export class TransportService {
     };
   }
 
-  async exportBusFuelReportPdf(busId: string, from?: string, to?: string): Promise<ExportFile> {
+  async exportBusFuelReportPdf(
+    busId: string,
+    from?: string,
+    to?: string,
+  ): Promise<ExportFile> {
     const report = await this.getBusFuelReport(busId, from, to);
     const content = await this.buildPdfBuffer((doc) => {
       doc.fontSize(18).font('Helvetica-Bold').text('Bus Fuel Report');
@@ -2283,9 +2686,18 @@ export class TransportService {
       this.writePdfSummarySection(doc, 'Summary', [
         { label: 'Fuel Entries', value: report.summary.fuelEntries },
         { label: 'Total Litres', value: report.summary.totalLitres },
-        { label: 'Total Cost', value: formatCurrency(report.summary.totalCost) },
-        { label: 'Total Distance', value: `${report.summary.totalDistanceKm} km` },
-        { label: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+        {
+          label: 'Total Cost',
+          value: formatCurrency(report.summary.totalCost),
+        },
+        {
+          label: 'Total Distance',
+          value: `${report.summary.totalDistanceKm} km`,
+        },
+        {
+          label: 'Average Km Per Litre',
+          value: report.summary.averageKmPerLitre ?? '-',
+        },
         { label: 'Last Odometer', value: report.summary.lastOdometer ?? '-' },
       ]);
 
@@ -2311,7 +2723,11 @@ export class TransportService {
     };
   }
 
-  async exportBusMileageReportExcel(busId: string, from?: string, to?: string): Promise<ExportFile> {
+  async exportBusMileageReportExcel(
+    busId: string,
+    from?: string,
+    to?: string,
+  ): Promise<ExportFile> {
     const report = await this.getBusMileageReport(busId, from, to);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'GitHub Copilot';
@@ -2330,8 +2746,14 @@ export class TransportService {
       { field: 'Fuel Entries', value: report.summary.fuelEntries },
       { field: 'Mileage Segments', value: report.summary.mileageSegments },
       { field: 'Total Distance Km', value: report.summary.totalDistanceKm },
-      { field: 'Fuel Used For Mileage', value: report.summary.totalFuelConsumedLitres },
-      { field: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+      {
+        field: 'Fuel Used For Mileage',
+        value: report.summary.totalFuelConsumedLitres,
+      },
+      {
+        field: 'Average Km Per Litre',
+        value: report.summary.averageKmPerLitre ?? '-',
+      },
       { field: 'Start Odometer', value: report.summary.startOdometer ?? '-' },
       { field: 'End Odometer', value: report.summary.endOdometer ?? '-' },
     ]);
@@ -2375,7 +2797,11 @@ export class TransportService {
     };
   }
 
-  async exportBusMileageReportPdf(busId: string, from?: string, to?: string): Promise<ExportFile> {
+  async exportBusMileageReportPdf(
+    busId: string,
+    from?: string,
+    to?: string,
+  ): Promise<ExportFile> {
     const report = await this.getBusMileageReport(busId, from, to);
     const content = await this.buildPdfBuffer((doc) => {
       doc.fontSize(18).font('Helvetica-Bold').text('Bus Mileage Report');
@@ -2390,9 +2816,18 @@ export class TransportService {
       this.writePdfSummarySection(doc, 'Summary', [
         { label: 'Fuel Entries', value: report.summary.fuelEntries },
         { label: 'Mileage Segments', value: report.summary.mileageSegments },
-        { label: 'Total Distance', value: `${report.summary.totalDistanceKm} km` },
-        { label: 'Fuel Used For Mileage', value: `${report.summary.totalFuelConsumedLitres} L` },
-        { label: 'Average Km Per Litre', value: report.summary.averageKmPerLitre ?? '-' },
+        {
+          label: 'Total Distance',
+          value: `${report.summary.totalDistanceKm} km`,
+        },
+        {
+          label: 'Fuel Used For Mileage',
+          value: `${report.summary.totalFuelConsumedLitres} L`,
+        },
+        {
+          label: 'Average Km Per Litre',
+          value: report.summary.averageKmPerLitre ?? '-',
+        },
         { label: 'Start Odometer', value: report.summary.startOdometer ?? '-' },
         { label: 'End Odometer', value: report.summary.endOdometer ?? '-' },
       ]);
@@ -2405,7 +2840,9 @@ export class TransportService {
           entry.date,
           String(entry.distanceKm),
           String(entry.litres),
-          entry.averageKmPerLitre == null ? '-' : String(entry.averageKmPerLitre),
+          entry.averageKmPerLitre == null
+            ? '-'
+            : String(entry.averageKmPerLitre),
         ]),
       );
 
@@ -2418,7 +2855,9 @@ export class TransportService {
           entry.driver?.name || '-',
           entry.previousOdometer == null ? '-' : String(entry.previousOdometer),
           String(entry.odometer),
-          entry.distanceSincePreviousFill == null ? '-' : String(entry.distanceSincePreviousFill),
+          entry.distanceSincePreviousFill == null
+            ? '-'
+            : String(entry.distanceSincePreviousFill),
           String(entry.litres),
           entry.kmPerLitre == null ? '-' : String(entry.kmPerLitre),
         ]),
@@ -2501,17 +2940,26 @@ export class TransportService {
       where: { id: studentId },
       select: { standard: true },
     });
-    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+      studentId,
+      academicYear,
+      student?.standard == null ? null : String(student.standard),
+    );
     const specialClassTransportMonths = sctConfig.months;
     const specialClassTransportFee = sctConfig.monthlyFee;
 
     const normalizedTimeline = timeline.map((entry) => {
-      const multiplier = (entry.commuteMode === 'MORNING_ONLY' || entry.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
-      const feeCharged = entry.isSplClass && entry.commuteMode !== 'SUSPENDED'
-        ? (specialClassTransportFee > 0
-          ? Math.round((specialClassTransportFee * multiplier) * 100) / 100
-          : Math.round((entry.feeCharged || 0) * 100) / 100)
-        : 0;
+      const multiplier =
+        entry.commuteMode === 'MORNING_ONLY' ||
+        entry.commuteMode === 'EVENING_ONLY'
+          ? 0.5
+          : 1.0;
+      const feeCharged =
+        entry.isSplClass && entry.commuteMode !== 'SUSPENDED'
+          ? specialClassTransportFee > 0
+            ? Math.round(specialClassTransportFee * multiplier * 100) / 100
+            : Math.round((entry.feeCharged || 0) * 100) / 100
+          : 0;
 
       return {
         ...entry,
@@ -2519,11 +2967,14 @@ export class TransportService {
       };
     });
 
-    const specialClassTransportTotal = Math.round(
-      normalizedTimeline
-        .filter((entry) => entry.isSplClass && entry.commuteMode !== 'SUSPENDED')
-        .reduce((sum, entry) => sum + Number(entry.feeCharged || 0), 0) * 100,
-    ) / 100;
+    const specialClassTransportTotal =
+      Math.round(
+        normalizedTimeline
+          .filter(
+            (entry) => entry.isSplClass && entry.commuteMode !== 'SUSPENDED',
+          )
+          .reduce((sum, entry) => sum + Number(entry.feeCharged || 0), 0) * 100,
+      ) / 100;
 
     return {
       timeline: normalizedTimeline,
@@ -2533,11 +2984,20 @@ export class TransportService {
     };
   }
 
-
   async updateStudentTransportTimeline(dto: any) {
-    const { studentId, academicYear, month, routeId, stopId, commuteMode, isSplClass } = dto;
+    const {
+      studentId,
+      academicYear,
+      month,
+      routeId,
+      stopId,
+      commuteMode,
+      isSplClass,
+    } = dto;
     if (!studentId || !academicYear || !month) {
-      throw new BadRequestException('studentId, academicYear, and month are required');
+      throw new BadRequestException(
+        'studentId, academicYear, and month are required',
+      );
     }
 
     const targetRouteId = routeId;
@@ -2566,19 +3026,33 @@ export class TransportService {
     });
 
     if (isSplClass && student) {
-      const isEligible = student.standard === 'STD_9' || student.standard === 'STD_10' || student.standard === 'STD_11' || student.standard === 'STD_12';
+      const isEligible =
+        student.standard === 'STD_9' ||
+        student.standard === 'STD_10' ||
+        student.standard === 'STD_11' ||
+        student.standard === 'STD_12';
       if (!isEligible) {
-        throw new BadRequestException('Special Class transport is only applicable for standards 9, 10, 11, and 12');
+        throw new BadRequestException(
+          'Special Class transport is only applicable for standards 9, 10, 11, and 12',
+        );
       }
     }
 
-    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+      studentId,
+      academicYear,
+      student?.standard == null ? null : String(student.standard),
+    );
     const splClassMonthlyFee = sctConfig.monthlyFee;
 
     let feeCharged = 0;
     const finalCommuteMode = commuteMode || 'BOTH_WAYS';
     if (finalCommuteMode !== 'SUSPENDED') {
-      const multiplier = (finalCommuteMode === 'MORNING_ONLY' || finalCommuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+      const multiplier =
+        finalCommuteMode === 'MORNING_ONLY' ||
+        finalCommuteMode === 'EVENING_ONLY'
+          ? 0.5
+          : 1.0;
       if (isSplClass) {
         // Special class is an evening session — if student uses only morning/evening transport,
         // charge half the special class transport fee for that month.
@@ -2619,8 +3093,8 @@ export class TransportService {
   async setStudentSplClassRange(dto: {
     studentId: string;
     academicYear: string;
-    startMonth: string | null;  // "YYYY-MM" or null to clear all
-    endMonth: string | null;    // "YYYY-MM" or null to clear all
+    startMonth: string | null; // "YYYY-MM" or null to clear all
+    endMonth: string | null; // "YYYY-MM" or null to clear all
   }) {
     const { studentId, academicYear, startMonth, endMonth } = dto;
     if (!studentId || !academicYear) {
@@ -2633,14 +3107,22 @@ export class TransportService {
       orderBy: { month: 'asc' },
     });
     if (timelines.length === 0) {
-      throw new BadRequestException('No transport timeline found. Please visit the Month-wise tab first to initialise the timeline.');
+      throw new BadRequestException(
+        'No transport timeline found. Please visit the Month-wise tab first to initialise the timeline.',
+      );
     }
 
     // Fetch student + fee structure for spl class fee rate
-    const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+    });
     if (!student) throw new BadRequestException('Student not found');
 
-    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, String(student.standard));
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+      studentId,
+      academicYear,
+      String(student.standard),
+    );
     const splClassMonthlyFee = sctConfig.monthlyFee;
 
     // For each timeline row decide isSplClass based on range
@@ -2650,7 +3132,10 @@ export class TransportService {
           ? t.month >= startMonth && t.month <= endMonth
           : false; // null start/end clears everything
 
-      const commuteMultiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+      const commuteMultiplier =
+        t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY'
+          ? 0.5
+          : 1.0;
 
       let feeCharged = 0;
       if (t.commuteMode !== 'SUSPENDED' && inRange) {
@@ -2682,13 +3167,27 @@ export class TransportService {
       timeline: freshTimeline,
       specialClassTransportMonths: sctConfig.months,
       specialClassTransportFee: sctConfig.monthlyFee,
-      specialClassTransportTotal: sctConfig.monthlyFee > 0 ? Math.round((freshTimeline.filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED').reduce((sum, t) => {
-        const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
-        return sum + (sctConfig.monthlyFee * multiplier);
-      }, 0)) * 100) / 100 : Math.round(freshTimeline.filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED').reduce((sum, t) => sum + Number(t.feeCharged || 0), 0) * 100) / 100,
+      specialClassTransportTotal:
+        sctConfig.monthlyFee > 0
+          ? Math.round(
+              freshTimeline
+                .filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED')
+                .reduce((sum, t) => {
+                  const multiplier =
+                    t.commuteMode === 'MORNING_ONLY' ||
+                    t.commuteMode === 'EVENING_ONLY'
+                      ? 0.5
+                      : 1.0;
+                  return sum + sctConfig.monthlyFee * multiplier;
+                }, 0) * 100,
+            ) / 100
+          : Math.round(
+              freshTimeline
+                .filter((t) => t.isSplClass && t.commuteMode !== 'SUSPENDED')
+                .reduce((sum, t) => sum + Number(t.feeCharged || 0), 0) * 100,
+            ) / 100,
     };
   }
-
 
   async syncStudentTimelineFees(studentId: string, academicYear: string) {
     const timelines = await this.prisma.studentTransportTimeline.findMany({
@@ -2705,8 +3204,15 @@ export class TransportService {
     const routeMap = new Map(routes.map((r) => [r.id, r]));
 
     // ── Fetch student + fee structure ONCE (eliminates N+1 per spl-class month) ──
-    const student = await this.prisma.student.findUnique({ where: { id: studentId }, select: { standard: true } });
-    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(studentId, academicYear, student?.standard == null ? null : String(student.standard));
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { standard: true },
+    });
+    const sctConfig = await this.resolveStudentSpecialClassTransportConfig(
+      studentId,
+      academicYear,
+      student?.standard == null ? null : String(student.standard),
+    );
     const splFeeRate = sctConfig.monthlyFee;
     const configuredSpecialClassTransportMonths = sctConfig.months;
 
@@ -2730,7 +3236,10 @@ export class TransportService {
           monthlyBase = Math.round((yearlyBase / 10) * 100) / 100;
         }
 
-        const multiplier = (t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY') ? 0.5 : 1.0;
+        const multiplier =
+          t.commuteMode === 'MORNING_ONLY' || t.commuteMode === 'EVENING_ONLY'
+            ? 0.5
+            : 1.0;
 
         if (t.isSplClass) {
           specialClassTransportMonths += multiplier;
@@ -2758,7 +3267,10 @@ export class TransportService {
           specialClassTransportMonths: specialClassTransportMonths,
         } as any);
       } catch (err) {
-        console.error("Failed to sync student timeline fees via updateStudentFee", err);
+        console.error(
+          'Failed to sync student timeline fees via updateStudentFee',
+          err,
+        );
       }
     }
   }
@@ -2782,7 +3294,9 @@ export class TransportService {
   async updateDriverRotation(dto: any) {
     const { driverId, routeId, academicYear, month, extraPayRate } = dto;
     if (!driverId || !routeId || !academicYear || !month) {
-      throw new BadRequestException('driverId, routeId, academicYear, and month are required');
+      throw new BadRequestException(
+        'driverId, routeId, academicYear, and month are required',
+      );
     }
 
     return this.prisma.driverRotation.upsert({
@@ -2804,5 +3318,3 @@ export class TransportService {
     });
   }
 }
-
-

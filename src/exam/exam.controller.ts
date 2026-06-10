@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { Standard } from '@prisma/client';
 import { ExamService } from './exam.service';
 import {
@@ -71,7 +80,10 @@ export class ExamController {
 
   @Post(':examId/auto-full')
   @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
-  autoGenerateFullTimetable(@Param('examId') examId: string, @Body() dto: AutoGenerateFullTimetableDto) {
+  autoGenerateFullTimetable(
+    @Param('examId') examId: string,
+    @Body() dto: AutoGenerateFullTimetableDto,
+  ) {
     return this.examService.autoGenerateFullTimetable(examId, dto);
   }
 
@@ -87,13 +99,19 @@ export class ExamController {
 
   @Get(':examId/teacher')
   @Permissions(Permission.EXAM_READ)
-  getTeacherTimetableByQuery(@Param('examId') examId: string, @Query('teacherId') teacherId: string) {
+  getTeacherTimetableByQuery(
+    @Param('examId') examId: string,
+    @Query('teacherId') teacherId: string,
+  ) {
     return this.examService.getTeacherTimetable(examId, teacherId);
   }
 
   @Patch('schedule/:id')
   @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
-  updateScheduleCell(@Param('id') id: string, @Body() dto: UpdateExamScheduleCellDto) {
+  updateScheduleCell(
+    @Param('id') id: string,
+    @Body() dto: UpdateExamScheduleCellDto,
+  ) {
     return this.examService.updateScheduleCell(id, dto);
   }
 
@@ -105,7 +123,10 @@ export class ExamController {
 
   @Post(':examId/roll-numbers/generate')
   @Permissions(Permission.EXAM_ROLL_GENERATE)
-  generateRollNumbers(@Param('examId') examId: string, @Body() dto: GenerateRollNumbersDto) {
+  generateRollNumbers(
+    @Param('examId') examId: string,
+    @Body() dto: GenerateRollNumbersDto,
+  ) {
     return this.examService.generateRollNumbers(examId, dto);
   }
 
@@ -117,21 +138,30 @@ export class ExamController {
 
   @Post('timetable/:scheduleId/seat-allocation/auto')
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
-  autoAllocateSeats(@Param('scheduleId') scheduleId: string, @Body() body: { hallIds: string[] }) {
+  autoAllocateSeats(
+    @Param('scheduleId') scheduleId: string,
+    @Body() body: { hallIds: string[] },
+  ) {
     return this.examService.autoAllocateSeats(scheduleId, body.hallIds);
   }
 
   /** Manual seat allocation: mix two standards per hall with configurable counts */
   @Post('timetable/:scheduleId/seat-allocation/manual')
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
-  manualAllocateSeats(@Param('scheduleId') scheduleId: string, @Body() dto: ManualSeatAllocationDto) {
+  manualAllocateSeats(
+    @Param('scheduleId') scheduleId: string,
+    @Body() dto: ManualSeatAllocationDto,
+  ) {
     return this.examService.manualAllocateSeats(scheduleId, dto);
   }
 
   /** Update exam start/end timings for a schedule slot */
   @Patch('schedule/:id/timing')
   @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
-  updateScheduleTiming(@Param('id') id: string, @Body() dto: UpdateScheduleTimingDto) {
+  updateScheduleTiming(
+    @Param('id') id: string,
+    @Body() dto: UpdateScheduleTimingDto,
+  ) {
     return this.examService.updateScheduleTiming(id, dto);
   }
 
@@ -161,7 +191,10 @@ export class ExamController {
 
   @Post('timetable/:scheduleId/invigilators')
   @Permissions(Permission.EXAM_SEAT_ALLOCATE)
-  assignInvigilator(@Param('scheduleId') scheduleId: string, @Body() dto: AssignInvigilatorDto) {
+  assignInvigilator(
+    @Param('scheduleId') scheduleId: string,
+    @Body() dto: AssignInvigilatorDto,
+  ) {
     return this.examService.assignInvigilator(scheduleId, dto);
   }
 
@@ -179,14 +212,20 @@ export class ExamController {
   /** Get timetable for a specific teacher */
   @Get(':examId/timetable/teacher/:staffId')
   @Permissions(Permission.EXAM_READ)
-  getTeacherTimetable(@Param('examId') examId: string, @Param('staffId') staffId: string) {
+  getTeacherTimetable(
+    @Param('examId') examId: string,
+    @Param('staffId') staffId: string,
+  ) {
     return this.examService.getTeacherTimetable(examId, staffId);
   }
 
   /** Auto-generate period blocks for a subject based on marks pattern and class group */
   @Post(':examId/timetable/auto-generate-periods')
   @Permissions(Permission.EXAM_TIMETABLE_MANAGE)
-  autoGeneratePeriods(@Param('examId') examId: string, @Body() dto: AutoGeneratePeriodsDto) {
+  autoGeneratePeriods(
+    @Param('examId') examId: string,
+    @Body() dto: AutoGeneratePeriodsDto,
+  ) {
     return this.examService.autoGeneratePeriods(examId, dto);
   }
 
@@ -206,7 +245,10 @@ export class ExamController {
 
   @Patch('subjects/:id')
   @Permissions(Permission.EXAM_SUBJECT_MANAGE)
-  updateSubject(@Param('id') id: string, @Body() dto: Partial<CreateExamSubjectDto>) {
+  updateSubject(
+    @Param('id') id: string,
+    @Body() dto: Partial<CreateExamSubjectDto>,
+  ) {
     return this.examService.updateSubject(id, dto);
   }
 

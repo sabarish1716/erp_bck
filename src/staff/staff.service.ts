@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import * as bcrypt from 'bcrypt';
@@ -19,7 +24,9 @@ export class StaffService {
     return Number(normalized.toFixed(2));
   }
 
-  private withPerDaySalary<T extends { staffStatutory?: { dailyRate?: number | null } | null }>(staff: T) {
+  private withPerDaySalary<
+    T extends { staffStatutory?: { dailyRate?: number | null } | null },
+  >(staff: T) {
     return {
       ...staff,
       perDaySalary: staff.staffStatutory?.dailyRate ?? null,
@@ -74,7 +81,9 @@ export class StaffService {
     );
   }
 
-  private async generateEmployeeId(client: Prisma.TransactionClient | PrismaService = this.prisma) {
+  private async generateEmployeeId(
+    client: Prisma.TransactionClient | PrismaService = this.prisma,
+  ) {
     const staffMembers = await client.staff.findMany({
       select: { employeeId: true },
       orderBy: { createdAt: 'desc' },
@@ -90,7 +99,10 @@ export class StaffService {
   }
 
   private handleStaffWriteError(error: unknown): never {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
       const target = Array.isArray(error.meta?.target)
         ? error.meta.target.join(', ')
         : String(error.meta?.target || 'staff record');
@@ -100,7 +112,9 @@ export class StaffService {
       }
 
       if (target.includes('email')) {
-        throw new ConflictException('A staff record with this email already exists');
+        throw new ConflictException(
+          'A staff record with this email already exists',
+        );
       }
 
       throw new ConflictException('A duplicate staff record already exists');
@@ -113,30 +127,39 @@ export class StaffService {
     return { employeeId: await this.generateEmployeeId() };
   }
 
-
   async autoAddMaster(type: 'department' | 'designation', name: string) {
     if (!name || name.trim() === '') return;
     const cleanName = name.trim();
     if (type === 'department') {
-      const exists = await this.prisma.department.findFirst({ where: { name: { equals: cleanName, mode: 'insensitive' } } });
-      if (!exists) await this.prisma.department.create({ data: { name: cleanName } });
+      const exists = await this.prisma.department.findFirst({
+        where: { name: { equals: cleanName, mode: 'insensitive' } },
+      });
+      if (!exists)
+        await this.prisma.department.create({ data: { name: cleanName } });
     } else {
-      const exists = await this.prisma.designation.findFirst({ where: { name: { equals: cleanName, mode: 'insensitive' } } });
-      if (!exists) await this.prisma.designation.create({ data: { name: cleanName } });
+      const exists = await this.prisma.designation.findFirst({
+        where: { name: { equals: cleanName, mode: 'insensitive' } },
+      });
+      if (!exists)
+        await this.prisma.designation.create({ data: { name: cleanName } });
     }
   }
 
   async create(data: CreateStaffDto) {
     await this.autoAddMaster('designation', data.designation);
-    if (data.department) await this.autoAddMaster('department', data.department);
-    const hashedPassword = data.password ? await bcrypt.hash(data.password, 10) : undefined;
+    if (data.department)
+      await this.autoAddMaster('department', data.department);
+    const hashedPassword = data.password
+      ? await bcrypt.hash(data.password, 10)
+      : undefined;
     const isActive = data.isActive ?? true;
     const userRole = this.resolveStaffUserRole(data.role);
     const perDaySalary = this.sanitizePerDaySalary(data.perDaySalary);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const employeeId = data.employeeId?.trim() || await this.generateEmployeeId(tx);
+        const employeeId =
+          data.employeeId?.trim() || (await this.generateEmployeeId(tx));
 
         const staff = await tx.staff.create({
           data: {
@@ -148,7 +171,9 @@ export class StaffService {
             department: data.department,
             otherQualifications: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
-            relievingDate: data.relievingDate ? new Date(data.relievingDate) : null,
+            relievingDate: data.relievingDate
+              ? new Date(data.relievingDate)
+              : null,
             salary: data.salary,
             isActive,
             category: (data.category as any) || 'TEACHING_REGULAR',
@@ -156,7 +181,9 @@ export class StaffService {
             bankName: data.bankName,
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
-            pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
+            pfJoiningDate: data.pfJoiningDate
+              ? new Date(data.pfJoiningDate)
+              : null,
             ugDegree: data.ugDegree,
             pgDegree: data.pgDegree,
             bEdStatus: data.bEdStatus ?? false,
@@ -279,7 +306,7 @@ export class StaffService {
       where: {
         role: Role.TRANSPORT_MANAGER,
         staffId: { not: null },
-        isActive:true
+        isActive: true,
       },
       select: {
         id: true,
@@ -338,8 +365,14 @@ export class StaffService {
     return this.withPerDaySalary(staff);
   }
 
-  async addDocument(staffId: string, data: CreateStaffDocumentDto, file: Express.Multer.File) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+  async addDocument(
+    staffId: string,
+    data: CreateStaffDocumentDto,
+    file: Express.Multer.File,
+  ) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+    });
     if (!staff) {
       throw new NotFoundException('Staff not found');
     }
@@ -350,7 +383,9 @@ export class StaffService {
 
     const virtualPath = `staff_documents/${file.filename}`;
     const documentType = data.type || StaffDocumentType.OTHER;
-    const title = data.title?.trim() || this.buildDocumentTitle(documentType, file.originalname);
+    const title =
+      data.title?.trim() ||
+      this.buildDocumentTitle(documentType, file.originalname);
 
     return this.prisma.staffDocument.create({
       data: {
@@ -371,7 +406,9 @@ export class StaffService {
   }
 
   async listDocuments(staffId: string, type?: StaffDocumentType) {
-    const staff = await this.prisma.staff.findUnique({ where: { id: staffId } });
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+    });
     if (!staff) {
       throw new NotFoundException('Staff not found');
     }
@@ -436,7 +473,9 @@ export class StaffService {
             department: data.department,
             otherQualifications: data.otherQualifications,
             joiningDate: data.joiningDate ? new Date(data.joiningDate) : null,
-            relievingDate: data.relievingDate ? new Date(data.relievingDate) : null,
+            relievingDate: data.relievingDate
+              ? new Date(data.relievingDate)
+              : null,
             salary: data.salary,
             isActive: data.isActive,
             category: (data.category as any) || undefined,
@@ -444,7 +483,9 @@ export class StaffService {
             bankName: data.bankName,
             bankAccountNo: data.bankAccountNo,
             bankIfsc: data.bankIfsc,
-            pfJoiningDate: data.pfJoiningDate ? new Date(data.pfJoiningDate) : null,
+            pfJoiningDate: data.pfJoiningDate
+              ? new Date(data.pfJoiningDate)
+              : null,
             ugDegree: data.ugDegree,
             pgDegree: data.pgDegree,
             bEdStatus: data.bEdStatus,
@@ -484,7 +525,9 @@ export class StaffService {
 
         let existingUser: any = null;
         if (existing.email) {
-          existingUser = await tx.user.findUnique({ where: { email: existing.email } });
+          existingUser = await tx.user.findUnique({
+            where: { email: existing.email },
+          });
         }
 
         if (existingUser && data.email) {
@@ -564,10 +607,22 @@ export class StaffService {
   }
 
   // --- Master endpoints ---
-  async getDepartments() { return this.prisma.department.findMany({ orderBy: { name: 'asc' } }); }
-  async createDepartment(name: string) { return this.prisma.department.create({ data: { name } }); }
-  async deleteDepartment(id: string) { return this.prisma.department.delete({ where: { id } }); }
-  async getDesignations() { return this.prisma.designation.findMany({ orderBy: { name: 'asc' } }); }
-  async createDesignation(name: string) { return this.prisma.designation.create({ data: { name } }); }
-  async deleteDesignation(id: string) { return this.prisma.designation.delete({ where: { id } }); }
+  async getDepartments() {
+    return this.prisma.department.findMany({ orderBy: { name: 'asc' } });
+  }
+  async createDepartment(name: string) {
+    return this.prisma.department.create({ data: { name } });
+  }
+  async deleteDepartment(id: string) {
+    return this.prisma.department.delete({ where: { id } });
+  }
+  async getDesignations() {
+    return this.prisma.designation.findMany({ orderBy: { name: 'asc' } });
+  }
+  async createDesignation(name: string) {
+    return this.prisma.designation.create({ data: { name } });
+  }
+  async deleteDesignation(id: string) {
+    return this.prisma.designation.delete({ where: { id } });
+  }
 }

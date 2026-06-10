@@ -55,7 +55,9 @@ export class SupabaseService implements OnModuleInit {
     const key = process.env.SUPABASE_SERVICE_KEY;
 
     if (!url || !key) {
-      this.logger.warn('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY - queued sync will remain pending');
+      this.logger.warn(
+        'Missing SUPABASE_URL or SUPABASE_SERVICE_KEY - queued sync will remain pending',
+      );
       return;
     }
 
@@ -100,7 +102,8 @@ export class SupabaseService implements OnModuleInit {
         return await action();
       } catch (error) {
         lastError = error;
-        const shouldRetry = this.isTransientFetchFailure(error) && attempt < maxAttempts;
+        const shouldRetry =
+          this.isTransientFetchFailure(error) && attempt < maxAttempts;
         if (!shouldRetry) {
           throw error;
         }
@@ -143,7 +146,12 @@ export class SupabaseService implements OnModuleInit {
       select: { value: true },
     });
 
-    if (!row || !row.value || typeof row.value !== 'object' || Array.isArray(row.value)) {
+    if (
+      !row ||
+      !row.value ||
+      typeof row.value !== 'object' ||
+      Array.isArray(row.value)
+    ) {
       return {};
     }
 
@@ -169,7 +177,11 @@ export class SupabaseService implements OnModuleInit {
 
     let driver = await this.prisma.driver.findFirst({
       where: {
-        OR: [{ id: trimmedRef }, { phone: trimmedRef }, { deviceId: trimmedRef }],
+        OR: [
+          { id: trimmedRef },
+          { phone: trimmedRef },
+          { deviceId: trimmedRef },
+        ],
       },
       include: { bus: true },
     });
@@ -183,9 +195,11 @@ export class SupabaseService implements OnModuleInit {
         });
         const target = refDigits.slice(-10);
         const matches = allDrivers.filter(
-          (candidate) => (candidate.phone || '').replace(/\D/g, '').slice(-10) === target,
+          (candidate) =>
+            (candidate.phone || '').replace(/\D/g, '').slice(-10) === target,
         );
-        driver = matches.find((candidate) => candidate.busId) || matches[0] || null;
+        driver =
+          matches.find((candidate) => candidate.busId) || matches[0] || null;
       }
     }
 
@@ -199,7 +213,10 @@ export class SupabaseService implements OnModuleInit {
   private async resolveBusForImportedFuelLog(
     busId?: string | null,
     plateNo?: string | null,
-    driver?: { busId?: string | null; bus?: { id: string; number: string } | null } | null,
+    driver?: {
+      busId?: string | null;
+      bus?: { id: string; number: string } | null;
+    } | null,
     localDriverId?: string,
   ) {
     if (busId) {
@@ -253,7 +270,11 @@ export class SupabaseService implements OnModuleInit {
 
   private async resolveBusIdForImportedLocation(
     remoteBusId: string | null | undefined,
-    driver?: { id?: string; phone?: string | null; busId?: string | null } | null,
+    driver?: {
+      id?: string;
+      phone?: string | null;
+      busId?: string | null;
+    } | null,
     remoteDriverRef?: string | null,
   ) {
     if (driver?.busId) {
@@ -290,12 +311,13 @@ export class SupabaseService implements OnModuleInit {
       }
     }
 
-    const phoneCandidate = String(remoteDriverRef || driver?.phone || '').trim();
+    const phoneCandidate = String(
+      remoteDriverRef || driver?.phone || '',
+    ).trim();
     if (this.client && phoneCandidate) {
       const response = await this.withSupabaseRetry(
         () =>
-          this.client!
-            .from('drivers')
+          this.client!.from('drivers')
             .select('bus_id,phone,driver_id,updated_at')
             .or(`phone.eq.${phoneCandidate},driver_id.eq.${phoneCandidate}`)
             .order('updated_at', { ascending: false })
@@ -303,8 +325,12 @@ export class SupabaseService implements OnModuleInit {
         'Driver location remote bus lookup',
       );
 
-      const remoteDriver = Array.isArray(response.data) ? response.data[0] : null;
-      const remoteResolvedBusId = remoteDriver?.bus_id ? String(remoteDriver.bus_id) : null;
+      const remoteDriver = Array.isArray(response.data)
+        ? response.data[0]
+        : null;
+      const remoteResolvedBusId = remoteDriver?.bus_id
+        ? String(remoteDriver.bus_id)
+        : null;
 
       if (remoteResolvedBusId) {
         const bus = await this.prisma.bus.findUnique({
@@ -332,9 +358,10 @@ export class SupabaseService implements OnModuleInit {
 
     const response = await this.withSupabaseRetry(
       () =>
-        this.client!
-          .from('driver_locations')
-          .select('id,driver_id,bus_id,latitude,longitude,speed,mileage_km,created_at')
+        this.client!.from('driver_locations')
+          .select(
+            'id,driver_id,bus_id,latitude,longitude,speed,mileage_km,created_at',
+          )
           .gte('created_at', since.toISOString())
           .order('created_at', { ascending: false })
           .limit(2000),
@@ -370,8 +397,7 @@ export class SupabaseService implements OnModuleInit {
         try {
           const updateResponse = await this.withSupabaseRetry(
             () =>
-              this.client!
-                .from('driver_locations')
+              this.client!.from('driver_locations')
                 .update({ bus_id: busId })
                 .eq('id', row.id),
             'Driver location remote bus repair',
@@ -443,8 +469,7 @@ export class SupabaseService implements OnModuleInit {
     if (bus && needsRemoteRepair) {
       const updateResponse = await this.withSupabaseRetry(
         () =>
-          this.client!
-            .from('fuel_logs')
+          this.client!.from('fuel_logs')
             .update({
               bus_id: bus.id,
               plate_no: bus.number,
@@ -516,7 +541,9 @@ export class SupabaseService implements OnModuleInit {
         note: row.note,
         imageUrl: row.image_url,
         timestamp: new Date(row.timestamp),
-        createdAt: row.created_at ? new Date(row.created_at) : new Date(row.timestamp),
+        createdAt: row.created_at
+          ? new Date(row.created_at)
+          : new Date(row.timestamp),
       },
     });
 
@@ -547,8 +574,7 @@ export class SupabaseService implements OnModuleInit {
 
     const response = await this.withSupabaseRetry(
       () =>
-        this.client!
-          .from('fuel_logs')
+        this.client!.from('fuel_logs')
           .select(
             'id,driver_id,bus_id,plate_no,odometer,litres,fuel_cost_per_litre,total_cost,note,image_url,timestamp,created_at',
           )
@@ -586,11 +612,15 @@ export class SupabaseService implements OnModuleInit {
       }
     }
 
-    const nextCursor = rows.length > 0 ? rows[rows.length - 1].timestamp : cursorTimestamp;
+    const nextCursor =
+      rows.length > 0 ? rows[rows.length - 1].timestamp : cursorTimestamp;
     const nextState: FuelLogImportState = {
       cursorTimestamp: nextCursor,
       lastRunAt: new Date().toISOString(),
-      lastImportedAt: importedCount > 0 ? new Date().toISOString() : previousState.lastImportedAt,
+      lastImportedAt:
+        importedCount > 0
+          ? new Date().toISOString()
+          : previousState.lastImportedAt,
       lastImportedCount: importedCount,
       lastSkippedCount: skippedCount,
       lastRepairedCount: repairedCount,
@@ -610,47 +640,48 @@ export class SupabaseService implements OnModuleInit {
 
   async getSyncDashboard(limit = 10) {
     const safeLimit = Math.min(Math.max(Number(limit) || 10, 1), 100);
-    const [statusCounts, typeCounts, recentFailures, oldestPending] = await Promise.all([
-      this.prisma.supabaseSyncJob.groupBy({
-        by: ['status'],
-        _count: { _all: true },
-      }),
-      this.prisma.supabaseSyncJob.groupBy({
-        by: ['type'],
-        _count: { _all: true },
-      }),
-      this.prisma.supabaseSyncJob.findMany({
-        where: { status: SyncJobStatus.FAILED },
-        orderBy: { updatedAt: 'desc' },
-        take: safeLimit,
-        select: {
-          id: true,
-          type: true,
-          status: true,
-          dedupeKey: true,
-          attempts: true,
-          lastError: true,
-          availableAt: true,
-          processedAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-      this.prisma.supabaseSyncJob.findFirst({
-        where: { status: SyncJobStatus.PENDING },
-        orderBy: { createdAt: 'asc' },
-        select: {
-          id: true,
-          type: true,
-          status: true,
-          dedupeKey: true,
-          attempts: true,
-          availableAt: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      }),
-    ]);
+    const [statusCounts, typeCounts, recentFailures, oldestPending] =
+      await Promise.all([
+        this.prisma.supabaseSyncJob.groupBy({
+          by: ['status'],
+          _count: { _all: true },
+        }),
+        this.prisma.supabaseSyncJob.groupBy({
+          by: ['type'],
+          _count: { _all: true },
+        }),
+        this.prisma.supabaseSyncJob.findMany({
+          where: { status: SyncJobStatus.FAILED },
+          orderBy: { updatedAt: 'desc' },
+          take: safeLimit,
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            dedupeKey: true,
+            attempts: true,
+            lastError: true,
+            availableAt: true,
+            processedAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+        this.prisma.supabaseSyncJob.findFirst({
+          where: { status: SyncJobStatus.PENDING },
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            type: true,
+            status: true,
+            dedupeKey: true,
+            attempts: true,
+            availableAt: true,
+            createdAt: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
 
     const countsByStatus = Object.values(SyncJobStatus).reduce(
       (result, status) => {
@@ -680,7 +711,10 @@ export class SupabaseService implements OnModuleInit {
       clientReady: Boolean(this.client),
       retentionDays: this.getSucceededRetentionDays(),
       fuelLogImportState: await this.getFuelLogImportState(),
-      queueDepth: countsByStatus.PENDING + countsByStatus.FAILED + countsByStatus.PROCESSING,
+      queueDepth:
+        countsByStatus.PENDING +
+        countsByStatus.FAILED +
+        countsByStatus.PROCESSING,
       countsByStatus,
       countsByType,
       oldestPending,
@@ -759,7 +793,11 @@ export class SupabaseService implements OnModuleInit {
     mileageKm?: number;
     createdAt: string;
   }) {
-    await this.queueJob(SyncJobType.LOCATION, data, `location:${data.locationId}`);
+    await this.queueJob(
+      SyncJobType.LOCATION,
+      data,
+      `location:${data.locationId}`,
+    );
   }
 
   async enqueueMileageSync(data: {
@@ -782,7 +820,11 @@ export class SupabaseService implements OnModuleInit {
     busId?: string;
     status: string;
   }) {
-    await this.queueJob(SyncJobType.DRIVER_STATUS, data, `driver-status:${data.driverId}`);
+    await this.queueJob(
+      SyncJobType.DRIVER_STATUS,
+      data,
+      `driver-status:${data.driverId}`,
+    );
   }
 
   async enqueueFuelLogSync(data: {
@@ -798,10 +840,18 @@ export class SupabaseService implements OnModuleInit {
     imageUrl?: string;
     timestamp: string;
   }) {
-    await this.queueJob(SyncJobType.FUEL_LOG, data, `fuel-log:${data.fuelLogId}`);
+    await this.queueJob(
+      SyncJobType.FUEL_LOG,
+      data,
+      `fuel-log:${data.fuelLogId}`,
+    );
   }
 
-  private async queueJob(type: SyncJobType, payload: Prisma.InputJsonValue, dedupeKey?: string) {
+  private async queueJob(
+    type: SyncJobType,
+    payload: Prisma.InputJsonValue,
+    dedupeKey?: string,
+  ) {
     if (!dedupeKey) {
       await this.prisma.supabaseSyncJob.create({
         data: { type, payload },
@@ -827,7 +877,7 @@ export class SupabaseService implements OnModuleInit {
     });
   }
 
-  @Cron('*/30 * * * * *')// Every 30 seconds
+  @Cron('*/30 * * * * *') // Every 30 seconds
   async processPendingJobs() {
     if (this.isProcessing) {
       return;
@@ -867,7 +917,10 @@ export class SupabaseService implements OnModuleInit {
         }
 
         try {
-          await this.dispatchJob(job.type, job.payload as Record<string, unknown>);
+          await this.dispatchJob(
+            job.type,
+            job.payload as Record<string, unknown>,
+          );
           await this.prisma.supabaseSyncJob.update({
             where: { id: job.id },
             data: {
@@ -877,13 +930,16 @@ export class SupabaseService implements OnModuleInit {
             },
           });
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
+          const message =
+            error instanceof Error ? error.message : String(error);
           await this.prisma.supabaseSyncJob.update({
             where: { id: job.id },
             data: {
               status: SyncJobStatus.FAILED,
               lastError: message.slice(0, 1000),
-              availableAt: new Date(Date.now() + Math.min((job.attempts + 1) * 60_000, 15 * 60_000)),
+              availableAt: new Date(
+                Date.now() + Math.min((job.attempts + 1) * 60_000, 15 * 60_000),
+              ),
             },
           });
           this.logger.error(`Sync job ${job.id} failed: ${message}`);
@@ -894,7 +950,7 @@ export class SupabaseService implements OnModuleInit {
     }
   }
 
-  @Cron('0 15 */6 * * *')// Every 6 hours at 15 minutes past the hour
+  @Cron('0 15 */6 * * *') // Every 6 hours at 15 minutes past the hour
   async cleanupSucceededJobs() {
     const result = await this.purgeSucceededJobs();
 
@@ -917,7 +973,9 @@ export class SupabaseService implements OnModuleInit {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (this.isTransientFetchFailure(error)) {
-        this.logger.warn(`Fuel log reverse import transient fetch issue: ${message}`);
+        this.logger.warn(
+          `Fuel log reverse import transient fetch issue: ${message}`,
+        );
         return;
       }
 
@@ -933,7 +991,8 @@ export class SupabaseService implements OnModuleInit {
 
     try {
       const { error } = await this.withSupabaseRetry(
-        () => this.client!.from('driver_locations').delete().not('id', 'is', null),
+        () =>
+          this.client!.from('driver_locations').delete().not('id', 'is', null),
         'Driver location nightly cleanup',
       );
 
@@ -948,7 +1007,10 @@ export class SupabaseService implements OnModuleInit {
     }
   }
 
-  private async dispatchJob(type: SyncJobType, payload: Record<string, unknown>) {
+  private async dispatchJob(
+    type: SyncJobType,
+    payload: Record<string, unknown>,
+  ) {
     switch (type) {
       case SyncJobType.LOCATION:
         await this.syncLocation({
@@ -957,7 +1019,8 @@ export class SupabaseService implements OnModuleInit {
           latitude: Number(payload.latitude),
           longitude: Number(payload.longitude),
           speed: payload.speed == null ? undefined : Number(payload.speed),
-          mileageKm: payload.mileageKm == null ? undefined : Number(payload.mileageKm),
+          mileageKm:
+            payload.mileageKm == null ? undefined : Number(payload.mileageKm),
           createdAt: String(payload.createdAt),
         });
         return;
@@ -986,8 +1049,11 @@ export class SupabaseService implements OnModuleInit {
           odometer: Number(payload.odometer),
           litres: Number(payload.litres),
           fuelCostPerLitre:
-            payload.fuelCostPerLitre == null ? undefined : Number(payload.fuelCostPerLitre),
-          totalCost: payload.totalCost == null ? undefined : Number(payload.totalCost),
+            payload.fuelCostPerLitre == null
+              ? undefined
+              : Number(payload.fuelCostPerLitre),
+          totalCost:
+            payload.totalCost == null ? undefined : Number(payload.totalCost),
           note: payload.note ? String(payload.note) : undefined,
           imageUrl: payload.imageUrl ? String(payload.imageUrl) : undefined,
           timestamp: payload.timestamp ? String(payload.timestamp) : undefined,

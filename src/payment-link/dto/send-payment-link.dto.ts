@@ -1,4 +1,11 @@
-import { IsString, IsNumber, IsIn, Min, IsOptional, IsInt } from 'class-validator';
+import {
+  IsString,
+  IsNumber,
+  IsIn,
+  Min,
+  IsOptional,
+  IsInt,
+} from 'class-validator';
 
 export class SendPaymentLinkDto {
   @IsString()

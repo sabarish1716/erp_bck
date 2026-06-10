@@ -38,10 +38,11 @@ export class PermissionsGuard implements CanActivate {
     if (!user) throw new ForbiddenException('Not authenticated');
 
     const userRole: Role = user.role;
-    const grantedPermissions = await this.rolePermissionsService.getEffectivePermissionsForUser({
-      id: user.id,
-      role: userRole,
-    });
+    const grantedPermissions =
+      await this.rolePermissionsService.getEffectivePermissionsForUser({
+        id: user.id,
+        role: userRole,
+      });
 
     const hasAll = requiredPermissions.every((p) =>
       grantedPermissions.includes(p),

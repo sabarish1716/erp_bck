@@ -108,13 +108,18 @@ export class NotificationService {
 
   // ── Twilio WhatsApp ───────────────────────────────────────────────────────
 
-  private async sendViaTwilioWhatsApp(phone: string, message: string): Promise<void> {
+  private async sendViaTwilioWhatsApp(
+    phone: string,
+    message: string,
+  ): Promise<void> {
     const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken  = process.env.TWILIO_AUTH_TOKEN;
-    const from       = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    const from = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
 
     if (!accountSid || !authToken) {
-      throw new Error('Twilio credentials (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN) are not configured');
+      throw new Error(
+        'Twilio credentials (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN) are not configured',
+      );
     }
 
     const toNumber = `whatsapp:+91${phone}`;
@@ -123,18 +128,20 @@ export class NotificationService {
       `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
       new URLSearchParams({
         From: from,
-        To:   toNumber,
+        To: toNumber,
         Body: message,
       }).toString(),
       {
-        auth:    { username: accountSid, password: authToken },
+        auth: { username: accountSid, password: authToken },
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         timeout: 10000,
       },
     );
 
     if (response.data?.error_code) {
-      throw new Error(`Twilio error ${response.data.error_code}: ${response.data.error_message}`);
+      throw new Error(
+        `Twilio error ${response.data.error_code}: ${response.data.error_message}`,
+      );
     }
     this.logger.log(`WhatsApp sent via Twilio to +91${phone}`);
   }

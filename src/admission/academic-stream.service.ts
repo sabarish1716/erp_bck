@@ -25,7 +25,7 @@ export class AcademicStreamService implements OnModuleInit {
         update: {},
         create: {
           ...stream,
-          isActive: true
+          isActive: true,
         },
       });
     }
@@ -71,4 +71,3 @@ export class AcademicStreamService implements OnModuleInit {
     });
   }
 }
-
