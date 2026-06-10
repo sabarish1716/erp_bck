@@ -913,14 +913,25 @@ export class ExamService {
 
   async resetTimetable(examId: string) {
     await this.ensureExamExists(examId);
-    const deleted = await this.prisma.examSchedule.deleteMany({
-      where: { examId },
+
+    // Delete in dependency order: seat allocations → schedule halls → invigilator assignments → schedules
+    await this.prisma.$transaction(async (tx) => {
+      const schedules = await tx.examSchedule.findMany({
+        where: { examId },
+        select: { id: true },
+      });
+      const scheduleIds = schedules.map((s) => s.id);
+
+      if (scheduleIds.length > 0) {
+        await tx.examSeatAllocation.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+        await tx.examScheduleHall.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+        await tx.examInvigilatorAssignment.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+      }
+
+      await tx.examSchedule.deleteMany({ where: { examId } });
     });
-    return {
-      message: 'Timetable reset successfully',
-      examId,
-      deletedSchedules: deleted.count,
-    };
+
+    return { message: 'Timetable reset successfully', examId };
   }
 
   /** Returns true if the class group uses the "swapped" pattern (exam first, then revision) */

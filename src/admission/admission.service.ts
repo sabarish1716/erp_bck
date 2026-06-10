@@ -288,6 +288,136 @@ function normalizeBulkUploadKey(key: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Maps the flat-key form (from normalizeBulkUploadKey) to the camelCase key
+ * expected by bulkCreateFromCsv. Also returns the camelCase key directly so
+ * we can re-key the incoming row object before processing.
+ */
+const HEADER_TO_CAMEL: Record<string, string> = {
+  studentname: 'studentName',
+  name: 'name',
+  standard: 'standard',
+  section: 'section',
+  academicyear: 'academicYear',
+  admissiondate: 'admissionDate',
+  admissionno: 'admissionNo',
+  admissionnumber: 'admissionNo',
+  gender: 'gender',
+  dateofbirth: 'dateOfBirth',
+  dob: 'dob',
+  religion: 'religion',
+  community: 'community',
+  customcommunity: 'customCommunity',
+  communityother: 'communityOther',
+  caste: 'caste',
+  mothertongue: 'motherTongue',
+  aadharno: 'aadharNo',
+  bloodgroup: 'bloodGroup',
+  identitymark1: 'identityMark1',
+  identitymark2: 'identityMark2',
+  previouslystudied: 'previouslyStudied',
+  previousschool: 'previousSchool',
+  previousschoolstandard: 'previousSchoolStandard',
+  transportmode: 'transportMode',
+  vanneeded: 'vanNeeded',
+  rte: 'rte',
+  rteapplied: 'rteApplied',
+  rteappliedstudent: 'rteAppliedStudent',
+  academicstream: 'academicStream',
+  academicstreamcustom: 'academicStreamCustom',
+  preferredphone: 'preferredPhone',
+  preferredcontact: 'preferredContact',
+  parentsemail: 'parentsEmail',
+  parentsemailid: 'parentsEmailId',
+  email: 'email',
+  fathername: 'fatherName',
+  fatherphone: 'fatherPhone',
+  fathermobile: 'fatherMobile',
+  fatherwhatsappno: 'fatherWhatsAppNo',
+  fatherwhatsapp: 'fatherWhatsApp',
+  fatheraadharno: 'fatherAadharNo',
+  fatheraadhar: 'fatherAadhar',
+  fatheroccupation: 'fatherOccupation',
+  mothername: 'motherName',
+  motherphone: 'motherPhone',
+  mothermobile: 'motherMobile',
+  motherwhatsappno: 'motherWhatsAppNo',
+  motherwhatsapp: 'motherWhatsApp',
+  motheraadharno: 'motherAadharNo',
+  motheraadhar: 'motherAadhar',
+  motheroccupation: 'motherOccupation',
+  familyincome: 'familyIncome',
+  siblingscount: 'siblingsCount',
+  numberofsiblings: 'numberOfSiblings',
+  sibblings: 'sibblings',
+  hostelrequired: 'hostelRequired',
+  issingleparent: 'isSingleParent',
+  singleparent: 'singleParent',
+  guardianname: 'guardianName',
+  guardianphone: 'guardianPhone',
+  guardianwhatsapp: 'guardianWhatsapp',
+  guardianaadhar: 'guardianAadhar',
+  guardianoccupation: 'guardianOccupation',
+  guardianrelation: 'guardianRelation',
+  sibling1name: 'sibling1Name',
+  sibling1standard: 'sibling1Standard',
+  sibling1school: 'sibling1School',
+  sibling2name: 'sibling2Name',
+  sibling2standard: 'sibling2Standard',
+  sibling2school: 'sibling2School',
+  doorno: 'doorNo',
+  doornohoouseno: 'doorNoHouseNo',
+  doornohousenodoorno: 'doorNoHouseNo',
+  doornohouuseno: 'doorNoHouseNo',
+  street: 'street',
+  streetvillage: 'streetVillage',
+  landmark: 'landmark',
+  city: 'city',
+  state: 'state',
+  pin: 'pin',
+  pincode: 'pincode',
+  taluk: 'taluk',
+  district: 'district',
+  villagepoarea: 'villagePoArea',
+  line1: 'line1',
+  line2: 'line2',
+  line3: 'line3',
+  examname: 'examName',
+  examinationname: 'examinationName',
+  boardexamtype: 'boardExamType',
+  boardname: 'boardName',
+  registerno: 'registerNo',
+  monthyear: 'monthYear',
+  dateofappearance: 'dateOfAppearance',
+  totalmaxmarks: 'totalMaxMarks',
+  totalobtainedmarks: 'totalObtainedMarks',
+  totalpercentage: 'totalPercentage',
+  overallpercentage: 'overallPercentage',
+  subjectsjson: 'subjectsJson',
+  admissionfrom: 'admissionFrom',
+  admissionto: 'admissionTo',
+  nearbusstand: 'nearBusstand',
+};
+
+/**
+ * Re-key a row using HEADER_TO_CAMEL so that human-readable CSV headers
+ * (e.g. "Student Name", "Date of Birth") are converted to the camelCase keys
+ * the rest of bulkCreateFromCsv reads (e.g. "studentName", "dateOfBirth").
+ * Unknown keys are kept as-is so no data is silently dropped.
+ */
+function normalizeRowKeys(row: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {};
+  for (const [rawKey, value] of Object.entries(row)) {
+    const flat = normalizeBulkUploadKey(rawKey);
+    const camel = HEADER_TO_CAMEL[flat] ?? rawKey; // fall back to original if unknown
+    // Prefer first occurrence to avoid overwriting camelCase keys with flat duplicates
+    if (!(camel in out)) {
+      out[camel] = value;
+    }
+  }
+  return out;
+}
+
 const BULK_UPLOAD_TEMPLATE_HEADERS = [
   'Student Name',
   'Standard',
@@ -528,7 +658,8 @@ export class AdmissionService {
     }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
+      // Normalize CSV header keys → camelCase before any field access
+      const row = normalizeRowKeys(rows[i]);
       try {
         const requestedAdmissionNo = asOptionalString(
           row.admissionNo || row.admissionNumber,
