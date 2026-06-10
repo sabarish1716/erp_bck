@@ -455,9 +455,27 @@ export class ExamService {
       throw new BadRequestException('No subjects found');
     }
 
-    let currentDate = new Date(data.startDate);
-    if (Number.isNaN(currentDate.getTime())) {
-      throw new BadRequestException('Invalid startDate');
+    let baseStartDate = new Date(exam.startDate);
+    if (Number.isNaN(baseStartDate.getTime())) {
+      throw new BadRequestException('Exam start date is invalid or not set');
+    }
+
+    // Helper to skip Sundays
+    const advanceDateSkippingSundays = (d: Date) => {
+      const next = new Date(d);
+      next.setDate(next.getDate() + 1);
+      while (next.getDay() === 0) { // 0 is Sunday
+        next.setDate(next.getDate() + 1);
+      }
+      return next;
+    };
+
+    // Group subjects by standard + stream + section so they run concurrently on the same dates
+    const groupedSubjects = new Map<string, typeof subjects>();
+    for (const sub of subjects) {
+      const key = `${sub.standard}-${sub.academicStreamId || 'none'}-${sub.section || 'none'}`;
+      if (!groupedSubjects.has(key)) groupedSubjects.set(key, []);
+      groupedSubjects.get(key)!.push(sub);
     }
 
 
@@ -475,10 +493,18 @@ export class ExamService {
       });
 
       const inserted: any[] = [];
-      for (const subject of subjects) {
-        if (!subject.teacherId) {
-          throw new BadRequestException(`Teacher not assigned for ${subject.name}`);
+
+      for (const [groupKey, groupSubjects] of groupedSubjects.entries()) {
+        let currentDate = new Date(baseStartDate);
+        // Ensure starting date is not Sunday
+        if (currentDate.getDay() === 0) {
+          currentDate.setDate(currentDate.getDate() + 1);
         }
+
+        for (const subject of groupSubjects) {
+          if (!subject.teacherId) {
+            throw new BadRequestException(`Teacher not assigned for ${subject.name} (${subject.standard} ${subject.section || ''})`);
+          }
 
         const pattern = this.getPattern(exam.maxMarks, subject.standard);
         if (pattern.length !== 8) {
@@ -536,9 +562,7 @@ export class ExamService {
           }
 
           // Advance to the Exam Day
-          const nextDate = new Date(currentDate);
-          nextDate.setDate(nextDate.getDate() + 1);
-          currentDate = nextDate;
+          currentDate = advanceDateSkippingSundays(currentDate);
         }
 
         const exDate = subject.examDate ? new Date(subject.examDate) : new Date(currentDate);
@@ -599,9 +623,8 @@ export class ExamService {
           inserted.push(entry);
         }
 
-        const nextDate = new Date(currentDate);
-        nextDate.setDate(nextDate.getDate() + 1);
-        currentDate = nextDate;
+        currentDate = advanceDateSkippingSundays(currentDate);
+        }
       }
 
       return inserted;
@@ -1163,31 +1186,15 @@ export class ExamService {
       throw new BadRequestException('Selected invigilator is invalid or inactive');
     }
 
-    const overlappingAssignment = await this.prisma.examInvigilatorAssignment.findFirst({
-      where: {
-        staffId: dto.staffId,
-        schedule: {
-          id: { not: scheduleId },
-          examDate: schedule.examDate,
-          startsAt: { lt: schedule.endsAt },
-          endsAt: { gt: schedule.startsAt },
-        },
-      },
-      include: {
-        schedule: {
-          include: {
-            subject: { select: { name: true, code: true } },
-          },
-        },
-        hall: { select: { name: true } },
-      },
-    });
-
-    if (overlappingAssignment) {
-      throw new BadRequestException(
-        `Invigilator already assigned to overlapping slot (${overlappingAssignment.hall.name} - ${overlappingAssignment.schedule.subject.code})`,
-      );
-    }
+    await this.ensureNoTeacherClash(
+      dto.staffId,
+      schedule.examDate,
+      schedule.startsAt,
+      schedule.endsAt,
+      scheduleId,
+      schedule.periodStart ?? undefined,
+      schedule.periodEnd ?? undefined
+    );
 
     return this.prisma.examInvigilatorAssignment.upsert({
       where: {
@@ -1339,7 +1346,10 @@ export class ExamService {
         ...(excludeScheduleId ? { id: { not: excludeScheduleId } } : {}),
         examDate,
         ...periodFilter,
-        subject: { teacherId },
+        OR: [
+          { subject: { teacherId } },
+          { invigilatorAssignments: { some: { staffId: teacherId } } },
+        ],
       },
       include: {
         subject: { select: { name: true, code: true, standard: true, section: true } },
