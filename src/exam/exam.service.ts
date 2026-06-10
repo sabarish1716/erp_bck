@@ -672,160 +672,155 @@ export class ExamService {
         // Ensure starting date is not Sunday
         if (currentDate.getDay() === 0) {
           currentDate.setDate(currentDate.getDate() + 1);
-          for (const subject of subjects) {
-            if (!subject.teacherId) {
-              throw new BadRequestException(
-                `Teacher not assigned for ${subject.name}`,
-              );
-            }
+        }
 
-            for (const subject of groupSubjects) {
-              if (!subject.teacherId) {
-                throw new BadRequestException(`Teacher not assigned for ${subject.name} (${subject.standard} ${subject.section || ''})`);
-              }
-
-              const pattern = this.getPattern(exam.maxMarks, subject.standard);
-              if (pattern.length !== 8) {
-                throw new BadRequestException(
-                  'Unable to derive period pattern for provided marks/standard',
-                );
-              }
-
-              if (exam.maxMarks >= 100) {
-                const revDate = subject.revisionDate
-                  ? new Date(subject.revisionDate)
-                  : new Date(currentDate);
-                for (let i = 0; i < 8; i++) {
-                  const startHour = 9 + i;
-                  const startsAt = new Date(revDate);
-                  startsAt.setHours(startHour, 0, 0, 0);
-                  const endsAt = new Date(revDate);
-                  endsAt.setHours(startHour + 1, 0, 0, 0);
-
-                  await this.validateClashes({
-                    prisma: tx,
-                    standard: subject.standard,
-                    section: subject.section ?? undefined,
-                    academicStreamId: subject.academicStreamId,
-                    examDate: new Date(revDate),
-                    startsAt,
-                    endsAt,
-                    teacherId: subject.teacherId,
-                    periodStart: i + 1,
-                    periodEnd: i + 1,
-                  });
-
-                  const entry = await tx.examSchedule.create({
-                    data: {
-                      exam: { connect: { id: examId } },
-                      subject: { connect: { id: subject.id } },
-                      standard: subject.standard,
-                      section: subject.section,
-                      stream: subject.academicStreamId
-                        ? { connect: { id: subject.academicStreamId } }
-                        : undefined,
-                      examDate: new Date(revDate),
-                      startsAt,
-                      endsAt,
-                      session: i < 4 ? 'FN' : 'AN',
-                      periodStart: i + 1,
-                      periodEnd: i + 1,
-                      periodType: PeriodType.REVISION,
-                    },
-                    include: {
-                      subject: {
-                        include: {
-                          teacher: {
-                            select: {
-                              id: true,
-                              name: true,
-                              employeeId: true,
-                              designation: true,
-                              department: true,
-                            },
-                          },
-                        },
-                      },
-                    },
-                  });
-                  inserted.push(entry);
-                }
-
-                // Advance to the Exam Day
-                currentDate = advanceDateSkippingSundays(currentDate);
-              }
-
-              const exDate = subject.examDate
-                ? new Date(subject.examDate)
-                : new Date(currentDate);
-              for (let i = 0; i < pattern.length; i++) {
-                const type = pattern[i];
-                if (type === 'F') continue;
-
-                const startHour = 9 + i;
-                const startsAt = new Date(exDate);
-                startsAt.setHours(startHour, 0, 0, 0);
-                const endsAt = new Date(exDate);
-                endsAt.setHours(startHour + 1, 0, 0, 0);
-
-                await this.validateClashes({
-                  prisma: tx,
-                  standard: subject.standard,
-                  section: subject.section ?? undefined,
-                  academicStreamId: subject.academicStreamId,
-
-                  examDate: new Date(exDate),
-                  startsAt,
-                  endsAt,
-                  teacherId: subject.teacherId,
-                  periodStart: i + 1,
-                  periodEnd: i + 1,
-                });
-
-                const entry = await tx.examSchedule.create({
-                  data: {
-                    exam: { connect: { id: examId } },
-                    subject: { connect: { id: subject.id } },
-                    standard: subject.standard,
-                    section: subject.section,
-                    stream: subject.academicStreamId
-                      ? { connect: { id: subject.academicStreamId } }
-                      : undefined,
-
-                    examDate: new Date(exDate),
-                    startsAt,
-                    endsAt,
-                    session: i < 4 ? 'FN' : 'AN',
-                    periodStart: i + 1,
-                    periodEnd: i + 1,
-                    periodType:
-                      type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
-                  },
-                  include: {
-                    subject: {
-                      include: {
-                        teacher: {
-                          select: {
-                            id: true,
-                            name: true,
-                            employeeId: true,
-                            designation: true,
-                            department: true,
-                          },
-                        },
-                      },
-                    },
-                  },
-                });
-                inserted.push(entry);
-              }
-
-              currentDate = advanceDateSkippingSundays(currentDate);
-            }
+        for (const subject of groupSubjects) {
+          if (!subject.teacherId) {
+            throw new BadRequestException(`Teacher not assigned for ${subject.name} (${subject.standard} ${subject.section || ''})`);
           }
 
-          return inserted;
-        });
+          const pattern = this.getPattern(exam.maxMarks, subject.standard);
+          if (pattern.length !== 8) {
+            throw new BadRequestException(
+              'Unable to derive period pattern for provided marks/standard',
+            );
+          }
+
+          if (exam.maxMarks >= 100) {
+            const revDate = subject.revisionDate
+              ? new Date(subject.revisionDate)
+              : new Date(currentDate);
+            for (let i = 0; i < 8; i++) {
+              const startHour = 9 + i;
+              const startsAt = new Date(revDate);
+              startsAt.setHours(startHour, 0, 0, 0);
+              const endsAt = new Date(revDate);
+              endsAt.setHours(startHour + 1, 0, 0, 0);
+
+              await this.validateClashes({
+                prisma: tx,
+                standard: subject.standard,
+                section: subject.section ?? undefined,
+                academicStreamId: subject.academicStreamId,
+                examDate: new Date(revDate),
+                startsAt,
+                endsAt,
+                teacherId: subject.teacherId,
+                periodStart: i + 1,
+                periodEnd: i + 1,
+              });
+
+              const entry = await tx.examSchedule.create({
+                data: {
+                  exam: { connect: { id: examId } },
+                  subject: { connect: { id: subject.id } },
+                  standard: subject.standard,
+                  section: subject.section,
+                  stream: subject.academicStreamId
+                    ? { connect: { id: subject.academicStreamId } }
+                    : undefined,
+                  examDate: new Date(revDate),
+                  startsAt,
+                  endsAt,
+                  session: i < 4 ? 'FN' : 'AN',
+                  periodStart: i + 1,
+                  periodEnd: i + 1,
+                  periodType: PeriodType.REVISION,
+                },
+                include: {
+                  subject: {
+                    include: {
+                      teacher: {
+                        select: {
+                          id: true,
+                          name: true,
+                          employeeId: true,
+                          designation: true,
+                          department: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              });
+              inserted.push(entry);
+            }
+
+            // Advance to the Exam Day
+            currentDate = advanceDateSkippingSundays(currentDate);
+          }
+
+          const exDate = subject.examDate
+            ? new Date(subject.examDate)
+            : new Date(currentDate);
+          for (let i = 0; i < pattern.length; i++) {
+            const type = pattern[i];
+            if (type === 'F') continue;
+
+            const startHour = 9 + i;
+            const startsAt = new Date(exDate);
+            startsAt.setHours(startHour, 0, 0, 0);
+            const endsAt = new Date(exDate);
+            endsAt.setHours(startHour + 1, 0, 0, 0);
+
+            await this.validateClashes({
+              prisma: tx,
+              standard: subject.standard,
+              section: subject.section ?? undefined,
+              academicStreamId: subject.academicStreamId,
+
+              examDate: new Date(exDate),
+              startsAt,
+              endsAt,
+              teacherId: subject.teacherId,
+              periodStart: i + 1,
+              periodEnd: i + 1,
+            });
+
+            const entry = await tx.examSchedule.create({
+              data: {
+                exam: { connect: { id: examId } },
+                subject: { connect: { id: subject.id } },
+                standard: subject.standard,
+                section: subject.section,
+                stream: subject.academicStreamId
+                  ? { connect: { id: subject.academicStreamId } }
+                  : undefined,
+
+                examDate: new Date(exDate),
+                startsAt,
+                endsAt,
+                session: i < 4 ? 'FN' : 'AN',
+                periodStart: i + 1,
+                periodEnd: i + 1,
+                periodType:
+                  type === 'R' ? PeriodType.REVISION : PeriodType.EXAMINATION,
+              },
+              include: {
+                subject: {
+                  include: {
+                    teacher: {
+                      select: {
+                        id: true,
+                        name: true,
+                        employeeId: true,
+                        designation: true,
+                        department: true,
+                      },
+                    },
+                  },
+                },
+              },
+            });
+            inserted.push(entry);
+          }
+
+          currentDate = advanceDateSkippingSundays(currentDate);
+        }
+      }
+
+      return inserted;
+    });
 
     return {
       message: 'Full timetable generated successfully',

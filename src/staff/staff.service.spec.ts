@@ -64,6 +64,7 @@ describe('StaffService', () => {
       email: 'staff@example.com',
       designation: 'Teacher',
       password: 'secret123',
+      joiningDate: '2026-06-01T00:00:00.000Z',
     });
 
     expect(tx.staff.create).toHaveBeenCalledWith(
@@ -108,6 +109,7 @@ describe('StaffService', () => {
       designation: 'Transport Manager',
       password: 'secret123',
       role: Role.TRANSPORT_MANAGER,
+      joiningDate: '2026-06-01T00:00:00.000Z',
     });
 
     expect(tx.user.create).toHaveBeenCalledWith(

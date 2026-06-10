@@ -56,12 +56,16 @@ describe('TransportService', () => {
       },
     };
 
-    service = new TransportService(prisma, {
-      syncLocation: jest.fn(),
-      syncMileage: jest.fn(),
-      enqueueDriverStatusSync: jest.fn(),
-      getClient: jest.fn(),
-    } as any);
+    service = new TransportService(
+      prisma,
+      {
+        syncLocation: jest.fn(),
+        syncMileage: jest.fn(),
+        enqueueDriverStatusSync: jest.fn(),
+        getClient: jest.fn(),
+      } as any,
+      {} as any, // Mock for FeesService
+    );
   });
 
   it('returns pending transport students with formatted standard labels', async () => {
