@@ -3203,6 +3203,8 @@ export class FeesService {
         grandStaffDiscount: number;
         grandAdditionalDiscount: number;
         grandManualDiscount: number;
+        grandSpecialClassFee: number;
+        grandSpecialClassTransportFee: number;
       }
     >();
 
@@ -3223,6 +3225,8 @@ export class FeesService {
           grandStaffDiscount: 0,
           grandAdditionalDiscount: 0,
           grandManualDiscount: 0,
+          grandSpecialClassFee: 0,
+          grandSpecialClassTransportFee: 0,
         });
       }
       const entry = studentMap.get(sid)!;
@@ -3282,6 +3286,8 @@ export class FeesService {
       entry.grandStaffDiscount += staff;
       entry.grandAdditionalDiscount += addl;
       entry.grandManualDiscount += manual;
+      entry.grandSpecialClassFee += ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
+      entry.grandSpecialClassTransportFee += ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
     }
 
     return {
@@ -3314,6 +3320,8 @@ export class FeesService {
         studentCount: number;
         tuitionFee: number;
         transportFee: number;
+        specialClassFee: number;
+        specialClassTransportFee: number;
         bookFee: number;
         hostelFee: number;
         otherFee: number;
@@ -3335,6 +3343,8 @@ export class FeesService {
           studentCount: 0,
           tuitionFee: 0,
           transportFee: 0,
+          specialClassFee: 0,
+          specialClassTransportFee: 0,
           bookFee: 0,
           hostelFee: 0,
           otherFee: 0,
@@ -3349,22 +3359,49 @@ export class FeesService {
       }
       const entry = classMap.get(std)!;
       entry.studentCount++;
+      const specialClassAmount = ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
+      const specialClassTransportAmount = ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
+
       entry.tuitionFee += fee.tuitionFee || 0;
       entry.transportFee += fee.transportFee || 0;
+      entry.specialClassFee += specialClassAmount;
+      entry.specialClassTransportFee += specialClassTransportAmount;
       entry.bookFee += fee.bookFee || 0;
       entry.hostelFee += fee.hostelFee || 0;
-      entry.otherFee += fee.otherFee || 0;
-      entry.applicationFee += (fee as any).applicationFee || 0;
+
+      entry.otherFee += (fee.otherFee || 0) + ((fee as any).applicationFee || 0);
       entry.customItemsTotal += (fee.customItems || []).reduce(
         (s, ci) => s + (ci.amount || 0),
         0,
       );
       entry.totalFee += fee.totalFee || 0;
-      entry.totalDiscount += fee.discount || 0;
 
-      const paid = this.getTotalEffectivePaid(fee.payments);
-      entry.totalPaid += paid;
-      entry.netOutstanding += Math.max(fee.netFee - paid, 0);
+      let manualDiscount = 0;
+      let actualPaid = 0;
+
+      for (const p of fee.payments || []) {
+        const baseAmount = Number(p.amount || 0);
+        const pManualDiscount = Math.max(Number(p.manualDiscount || 0), 0);
+        const status = p.status || 'SUCCESS';
+
+        if (status === 'CANCELLED') continue;
+
+        if (status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED') {
+          const refunded = Number(p.refundAmount || 0);
+          const netAmount = Math.max(baseAmount - refunded, 0);
+          if (baseAmount > 0) {
+            actualPaid += netAmount;
+            manualDiscount += pManualDiscount * (netAmount / baseAmount);
+          }
+        } else {
+          actualPaid += baseAmount;
+          manualDiscount += pManualDiscount;
+        }
+      }
+
+      entry.totalDiscount += (fee.discount || 0) + manualDiscount;
+      entry.totalPaid += actualPaid;
+      entry.netOutstanding += Math.max((fee.netFee || 0) - (actualPaid + manualDiscount), 0);
 
       // Aggregate term totals
       for (const term of fee.terms || []) {
@@ -3401,10 +3438,11 @@ export class FeesService {
         studentCount: acc.studentCount + r.studentCount,
         tuitionFee: acc.tuitionFee + r.tuitionFee,
         transportFee: acc.transportFee + r.transportFee,
+        specialClassFee: acc.specialClassFee + r.specialClassFee,
+        specialClassTransportFee: acc.specialClassTransportFee + r.specialClassTransportFee,
         bookFee: acc.bookFee + r.bookFee,
         hostelFee: acc.hostelFee + r.hostelFee,
         otherFee: acc.otherFee + r.otherFee,
-        applicationFee: (acc as any).applicationFee + (r as any).applicationFee,
         customItemsTotal: acc.customItemsTotal + r.customItemsTotal,
         totalFee: acc.totalFee + r.totalFee,
         totalDiscount: acc.totalDiscount + r.totalDiscount,
@@ -3415,10 +3453,11 @@ export class FeesService {
         studentCount: 0,
         tuitionFee: 0,
         transportFee: 0,
+        specialClassFee: 0,
+        specialClassTransportFee: 0,
         bookFee: 0,
         hostelFee: 0,
         otherFee: 0,
-        applicationFee: 0,
         customItemsTotal: 0,
         totalFee: 0,
         totalDiscount: 0,
