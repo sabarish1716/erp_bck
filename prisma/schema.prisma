@@ -333,6 +333,7 @@ model Document {
   aadharMother    Boolean @default(false)
   aadharStudent   Boolean @default(false)
   transferCert    Boolean @default(false)
+  entranceExam    Boolean @default(false)
 
   // ✅ Hard-copy flags (physical document received, not digitised)
   photoHardCopy         Boolean @default(false)
@@ -342,6 +343,7 @@ model Document {
   aadharMotherHardCopy  Boolean @default(false)
   aadharStudentHardCopy Boolean @default(false)
   transferCertHardCopy  Boolean @default(false)
+  entranceExamHardCopy  Boolean @default(false)
 
   // ✅ 3 photos received checkbox
   photosReceived        Boolean @default(false)
@@ -354,6 +356,7 @@ model Document {
   aadharMotherPath  String?
   aadharStudentPath String?
   transferCertPath  String?
+  entranceExamPath  String?
 
   student         Student @relation(fields: [studentId], references: [id])
 }

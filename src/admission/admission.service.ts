@@ -1047,6 +1047,7 @@ export class AdmissionService {
       'aadharFather',
       'aadharMother',
       'transferCert',
+      'entranceExam',
     ];
     for (const key of docKeys) {
       if (docs[key]?.path) {
@@ -1289,6 +1290,10 @@ export class AdmissionService {
                   transferCert: docs.transferCert?.uploaded ?? false,
                   transferCertPath: normalizePath(docs.transferCert?.path),
                   transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
+
+                  entranceExam: docs.entranceExam?.uploaded ?? false,
+                  entranceExamPath: normalizePath(docs.entranceExam?.path),
+                  entranceExamHardCopy: docs.entranceExam?.hardCopy ?? false,
 
                   photosReceived:
                     (data as any).photosReceived ??
@@ -1889,6 +1894,12 @@ export class AdmissionService {
               normalizePath(data.documents?.transferCert?.path) || '',
             transferCertHardCopy:
               data.documents?.transferCert?.hardCopy ?? false,
+
+            entranceExam: data.documents?.entranceExam?.uploaded ?? false,
+            entranceExamPath:
+              normalizePath(data.documents?.entranceExam?.path) || '',
+            entranceExamHardCopy:
+              data.documents?.entranceExam?.hardCopy ?? false,
 
             photosReceived:
               (data as any).photosReceived ??

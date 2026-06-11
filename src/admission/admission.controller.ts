@@ -400,6 +400,7 @@ export class AdmissionController {
       'aadharMother',
       'aadharStudent',
       'transferCert',
+      'entranceExam',
     ];
 
     docKeys.forEach((key) => {
