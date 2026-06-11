@@ -276,7 +276,7 @@ const BULK_UPLOAD_ALLOWED_KEYS = new Set([
   'preferredcontact',
   'parentsemailid',
   'singleparent',
-  'doornohoouseno',
+  'doornohouseno',
   'streetvillage',
   'dateofappearance',
 ]);
@@ -366,9 +366,7 @@ const HEADER_TO_CAMEL: Record<string, string> = {
   sibling2standard: 'sibling2Standard',
   sibling2school: 'sibling2School',
   doorno: 'doorNo',
-  doornohoouseno: 'doorNoHouseNo',
-  doornohousenodoorno: 'doorNoHouseNo',
-  doornohouuseno: 'doorNoHouseNo',
+  doornohouseno: 'doorNo',
   street: 'street',
   streetvillage: 'streetVillage',
   landmark: 'landmark',
@@ -533,6 +531,36 @@ function processSiblingSchoolSelection(
   };
 }
 
+
+/** Normalises gender regardless of case: "Male", "male", "MALE" → "MALE" etc. */
+function normalizeGender(raw?: string): 'MALE' | 'FEMALE' | 'OTHERS' {
+  const v = (raw || '').trim().toLowerCase();
+  if (v === 'female' || v === 'f') return 'FEMALE';
+  if (v === 'others' || v === 'other') return 'OTHERS';
+  return 'MALE';
+}
+
+/** Converts plain numeric standards ("1"–"12") to the enum format ("STD_1"–"STD_12").
+ *  LKG / UKG / STD_N are passed through unchanged. */
+function normalizeStandard(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const v = raw.trim().toUpperCase();
+  if (v === 'LKG' || v === 'UKG') return v;
+  if (/^STD_\d+$/.test(v)) return v;
+  if (/^\d+$/.test(v)) return `STD_${v}`;
+  return raw.trim();
+}
+
+/** Parses both YYYY-MM-DD and DD-MM-YYYY date strings, returns YYYY-MM-DD or undefined. */
+function parseDateFlexible(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const trimmed = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+  const ddmmyyyy = trimmed.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);
+  if (ddmmyyyy) return `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+  return trimmed;
+}
+
 @Injectable()
 export class AdmissionService {
   constructor(private prisma: PrismaService) {}
@@ -686,9 +714,9 @@ export class AdmissionService {
 
         await this.createAdmission({
           name: asOptionalString(row.name || row.studentName) || 'Unknown',
-          standard: asOptionalString(row.standard),
-          gender: asOptionalString(row.gender) === 'FEMALE' ? 'FEMALE' : 'MALE',
-          dob: asOptionalString(row.dob || row.dateOfBirth),
+          standard: normalizeStandard(asOptionalString(row.standard)),
+          gender: normalizeGender(asOptionalString(row.gender)),
+          dob: parseDateFlexible(asOptionalString(row.dob || row.dateOfBirth)),
           religion: asOptionalString(row.religion),
           community: asOptionalString(row.community) || 'OTHERS',
           customCommunity: asOptionalString(

@@ -20,8 +20,9 @@ import {
 import { multerConfig } from '../utils/multer.config';
 import { AdmissionService } from './admission.service';
 import { CreateAdmissionDto } from './create-admission.dto';
-import { diskStorage } from 'multer';
-import { extname } from 'path/win32';
+import { memoryStorage } from 'multer';
+import { extname, join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
 import { Permissions } from '../auth/permissions.decorator';
 import { Permission } from '../auth/permission.enum';
 import { SetAdmissionApprovalDto } from './set-admission-approval.dto';
@@ -31,6 +32,43 @@ import { UpdateStandardSeatsDto } from './standard-seats.dto';
 import { DemoteIndividualDto } from './demote-individual.dto';
 import { CreateAcademicStreamDto } from './create-academic-stream.dto';
 import { AcademicStreamService } from './academic-stream.service';
+
+const BASE_DOCS_PATH = process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents';
+
+/**
+ * Returns (and creates if needed) the structured student folder:
+ *   BASE_DOCS_PATH / academicYear / admNo_Standard /
+ * All segments are sanitised to avoid path traversal.
+ * Uses mkdirSync which is a no-op when the folder already exists.
+ */
+function resolveStudentFolder(
+  academicYear?: string,
+  admNo?: string,
+  standard?: string,
+): string {
+  const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const yearPart = safe(academicYear || 'UNKNOWN_YEAR');
+  const studentPart = admNo ? `${safe(admNo)}_${safe(standard || '')}` : safe(standard || 'UNKNOWN_STD');
+  const folderPath = join(BASE_DOCS_PATH, yearPart, studentPart);
+  mkdirSync(folderPath, { recursive: true }); // idempotent – no duplicate creation
+  return folderPath;
+}
+
+/**
+ * Writes a multer memory-storage file to the student folder.
+ * Returns the relative path stored in the DB.
+ */
+function saveFileToDisk(
+  file: Express.Multer.File,
+  folderPath: string,
+): string {
+  const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+  const ext = extname(file.originalname);
+  const filename = `${file.fieldname}-${uniqueSuffix}${ext}`;
+  writeFileSync(join(folderPath, filename), file.buffer);
+  // Store a relative path for portability
+  return join(folderPath, filename).replace(/\\/g, '/');
+}
 
 @Controller('admissions')
 export class AdmissionController {
@@ -107,17 +145,7 @@ export class AdmissionController {
         { name: 'transferCert', maxCount: 1 },
         { name: 'entranceExam', maxCount: 1 },
       ],
-      {
-        storage: diskStorage({
-          destination: process.env.STUDENT_DOCS_PATH || 'D:/Student_Documents',
-          filename: (req, file, cb) => {
-            const uniqueSuffix =
-              Date.now() + '-' + Math.round(Math.random() * 1e9);
-            const ext = extname(file.originalname);
-            cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
-          },
-        }),
-      },
+      { storage: memoryStorage() },
     ),
   )
   async create(
@@ -135,7 +163,7 @@ export class AdmissionController {
   ) {
     let parsedBody = body;
 
-    // ✅ Parse JSON (form-data support)
+    // Parse JSON wrapped in a 'data' field (multipart/form-data)
     if (body.data && typeof body.data === 'string') {
       try {
         parsedBody = JSON.parse(body.data);
@@ -144,36 +172,32 @@ export class AdmissionController {
       }
     }
 
-    // ✅ Convert documents array → object
+    // Convert documents array → object
     if (Array.isArray(parsedBody.documents)) {
-      const docObj = {};
-      parsedBody.documents.forEach((doc) => {
-        docObj[doc.key] = doc;
-      });
+      const docObj: Record<string, any> = {};
+      parsedBody.documents.forEach((doc: any) => { docObj[doc.key] = doc; });
       parsedBody.documents = docObj;
     }
+    if (!parsedBody.documents) parsedBody.documents = {};
 
-    if (!parsedBody.documents) {
-      parsedBody.documents = {};
-    }
+    // Determine student folder AFTER body is parsed so we have admissionNo / standard / academicYear
+    // (admissionNo may be AUTO at this point – fall back to a timestamp placeholder)
+    const admNo = parsedBody.admission?.admissionNo || parsedBody.admissionNo || `NEW_${Date.now()}`;
+    const standard = parsedBody.standard || parsedBody.admission?.standard || 'UNKNOWN';
+    const academicYear = parsedBody.academicYear || parsedBody.admission?.academicYear || 'UNKNOWN_YEAR';
 
-    // ✅ Attach uploaded files
     if (files) {
-      Object.keys(files).forEach((key) => {
-        const fileArr = files[key];
-        if (!fileArr || !fileArr[0]) return;
-        const file = fileArr[0];
-
-        if (!parsedBody.documents[key]) {
-          parsedBody.documents[key] = {};
-        }
-
-        parsedBody.documents[key].path = `student_documents/${file.filename}`;
-        parsedBody.documents[key].uploaded = true;
+      const folderPath = resolveStudentFolder(academicYear, admNo, standard);
+      Object.keys(files).forEach((fieldname) => {
+        const fileArr = (files as any)[fieldname] as Express.Multer.File[] | undefined;
+        if (!fileArr?.[0]) return;
+        const savedPath = saveFileToDisk(fileArr[0], folderPath);
+        if (!parsedBody.documents[fieldname]) parsedBody.documents[fieldname] = {};
+        parsedBody.documents[fieldname].path = savedPath;
+        parsedBody.documents[fieldname].uploaded = true;
       });
     }
 
-    // 🔥 FINAL CALL (WITH USER)
     return this.service.createAdmission(parsedBody, req.user, files);
   }
 
@@ -303,7 +327,7 @@ export class AdmissionController {
   //   }
   @Put(':id')
   @Permissions(Permission.ADMISSION_UPDATE)
-  @UseInterceptors(AnyFilesInterceptor(multerConfig))
+  @UseInterceptors(AnyFilesInterceptor({ storage: memoryStorage() }))
   async update(
     @Param('id') id: string,
     @Body() body: any,
@@ -311,7 +335,7 @@ export class AdmissionController {
   ) {
     let parsedBody = body;
 
-    // ✅ Parse JSON safely
+    // Parse JSON safely
     if (body.data && typeof body.data === 'string') {
       try {
         parsedBody = JSON.parse(body.data);
@@ -320,46 +344,54 @@ export class AdmissionController {
       }
     }
 
-    // Normalize documents when frontend sends an array of keyed items.
+    // Normalize documents when frontend sends an array of keyed items
     if (Array.isArray(parsedBody.documents)) {
       const normalizedDocs: Record<string, any> = {};
       parsedBody.documents.forEach((doc: any) => {
         if (!doc || typeof doc !== 'object' || !doc.key) return;
-        normalizedDocs[doc.key] = {
-          ...(normalizedDocs[doc.key] || {}),
-          ...doc,
-        };
+        normalizedDocs[doc.key] = { ...(normalizedDocs[doc.key] || {}), ...doc };
       });
       parsedBody.documents = normalizedDocs;
     }
 
-    // ✅ STEP 0: Fetch existing student
+    // Fetch existing student to access academicYear, admissionNo, standard
     const existingStudent = await this.service.getStudentById(id);
-
-    // ⚠️ documents is array → take first element
     const existingDocuments = existingStudent?.documents?.[0] || {};
+    const existingAdmission = existingStudent?.admission?.[0] || existingStudent?.admission || {};
 
-    // ✅ Ensure documents object exists
+    const academicYear =
+      parsedBody.academicYear ||
+      existingAdmission.admissionYear ||
+      existingStudent?.academicYear ||
+      'UNKNOWN_YEAR';
+    const admNo =
+      existingAdmission.admissionNo ||
+      existingStudent?.admission?.admissionNo ||
+      id;
+    const standard =
+      parsedBody.standard ||
+      existingAdmission.standard ||
+      existingStudent?.standard ||
+      'UNKNOWN';
+
     if (!parsedBody.documents) parsedBody.documents = {};
 
-    // ✅ Normalize path helper
-    const normalizePath = (p: string) => p.replace(/\\/g, '/');
-
-    // ✅ STEP 1: Convert uploaded files → map
+    // Write memory-storage files to the correct student folder (reuses existing folder)
     const uploadedMap: Record<string, string> = {};
-
     if (files?.length) {
+      const folderPath = resolveStudentFolder(academicYear, admNo, standard);
       files.forEach((file) => {
-        uploadedMap[file.fieldname] = `student_documents/${file.filename}`;
+        const savedPath = saveFileToDisk(file, folderPath);
+        uploadedMap[file.fieldname] = savedPath;
       });
     }
 
-    // Frontend uploads profilePhoto, while DB stores it under photo/photoPath.
+    // Map profilePhoto → photo (canonical backend key)
     if (uploadedMap.profilePhoto) {
       uploadedMap.photo = uploadedMap.profilePhoto;
     }
 
-    // ✅ STEP 2: Merge logic (VERY IMPORTANT)
+    // Merge uploaded files + existing document paths
     const docKeys = [
       'photo',
       'birthCert',
@@ -371,42 +403,33 @@ export class AdmissionController {
     ];
 
     docKeys.forEach((key) => {
-      if (!parsedBody.documents[key]) {
-        parsedBody.documents[key] = {};
-      }
+      if (!parsedBody.documents[key]) parsedBody.documents[key] = {};
 
-      // 🔥 CASE 1: New upload → replace
       if (uploadedMap[key]) {
+        // New upload → use new path
         parsedBody.documents[key].path = uploadedMap[key];
         parsedBody.documents[key].uploaded = true;
-      }
-      // 🔥 CASE 2: No upload → keep existing DB value
-      else {
+      } else {
+        // No upload → keep existing DB value
         const existingPath = existingDocuments[`${key}Path`] || '';
-
-        parsedBody.documents[key].path =
-          parsedBody.documents[key].path || existingPath;
-
-        parsedBody.documents[key].uploaded =
-          parsedBody.documents[key].uploaded ?? !!existingDocuments[key];
+        parsedBody.documents[key].path = parsedBody.documents[key].path || existingPath;
+        parsedBody.documents[key].uploaded = parsedBody.documents[key].uploaded ?? !!existingDocuments[key];
       }
 
-      // 🔥 CASE 3: If unchecked → clear path
+      // Unchecked → clear path
       if (parsedBody.documents[key].uploaded === false) {
         parsedBody.documents[key].path = '';
       }
 
-      // 🔥 CASE 4: Preserve hardCopy flag — keep existing if not explicitly set
+      // Preserve hardCopy flag
       if (parsedBody.documents[key].hardCopy === undefined) {
-        parsedBody.documents[key].hardCopy =
-          existingDocuments[`${key}HardCopy`] ?? false;
+        parsedBody.documents[key].hardCopy = existingDocuments[`${key}HardCopy`] ?? false;
       }
     });
 
-    // Remove transient frontend key once mapped to canonical backend key.
+    // Remove transient frontend key once mapped to canonical backend key
     delete parsedBody.documents.profilePhoto;
 
-    // ✅ DEBUG (optional)
     console.log('FINAL DOCUMENTS:', parsedBody.documents);
 
     return this.service.updateStudent(id, parsedBody);
