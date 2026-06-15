@@ -531,7 +531,6 @@ function processSiblingSchoolSelection(
   };
 }
 
-
 /** Normalises gender regardless of case: "Male", "male", "MALE" → "MALE" etc. */
 function normalizeGender(raw?: string): 'MALE' | 'FEMALE' | 'OTHERS' {
   const v = (raw || '').trim().toLowerCase();

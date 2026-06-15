@@ -35,6 +35,14 @@ class StudentFeeTermDto {
   @IsNotEmpty() @IsString() termName: string;
   @IsOptional() @IsString() dueDate?: string;
   @IsNotEmpty() @IsNumber() amount: number;
+  @IsOptional() @IsNumber() transportAmount?: number;
+  @IsOptional() @IsNumber() tuitionAmount?: number;
+  @IsOptional() @IsNumber() bookAmount?: number;
+  @IsOptional() @IsNumber() hostelAmount?: number;
+  @IsOptional() @IsNumber() otherAmount?: number;
+  @IsOptional() @IsNumber() applicationAmount?: number;
+  @IsOptional() @IsNumber() specialClassAmount?: number;
+  @IsOptional() @IsNumber() specialClassTransportAmount?: number;
 }
 
 export class AssignFeeDto {

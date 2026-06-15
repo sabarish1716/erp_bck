@@ -21,7 +21,7 @@ import {
 
 @Injectable()
 export class ExamService {
-  constructor(private readonly prisma: PrismaService) { }
+  constructor(private readonly prisma: PrismaService) {}
 
   async createExam(dto: CreateExamDto) {
     const startDate = new Date(dto.startDate);
@@ -632,7 +632,7 @@ export class ExamService {
       throw new BadRequestException('No subjects found');
     }
 
-    let baseStartDate = new Date(exam.startDate);
+    const baseStartDate = new Date(exam.startDate);
     if (Number.isNaN(baseStartDate.getTime())) {
       throw new BadRequestException('Exam start date is invalid or not set');
     }
@@ -641,7 +641,8 @@ export class ExamService {
     const advanceDateSkippingSundays = (d: Date) => {
       const next = new Date(d);
       next.setDate(next.getDate() + 1);
-      while (next.getDay() === 0) { // 0 is Sunday
+      while (next.getDay() === 0) {
+        // 0 is Sunday
         next.setDate(next.getDate() + 1);
       }
       return next;
@@ -676,7 +677,9 @@ export class ExamService {
 
         for (const subject of groupSubjects) {
           if (!subject.teacherId) {
-            throw new BadRequestException(`Teacher not assigned for ${subject.name} (${subject.standard} ${subject.section || ''})`);
+            throw new BadRequestException(
+              `Teacher not assigned for ${subject.name} (${subject.standard} ${subject.section || ''})`,
+            );
           }
 
           const pattern = this.getPattern(exam.maxMarks, subject.standard);
@@ -923,9 +926,15 @@ export class ExamService {
       const scheduleIds = schedules.map((s) => s.id);
 
       if (scheduleIds.length > 0) {
-        await tx.examSeatAllocation.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
-        await tx.examScheduleHall.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
-        await tx.examInvigilatorAssignment.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+        await tx.examSeatAllocation.deleteMany({
+          where: { scheduleId: { in: scheduleIds } },
+        });
+        await tx.examScheduleHall.deleteMany({
+          where: { scheduleId: { in: scheduleIds } },
+        });
+        await tx.examInvigilatorAssignment.deleteMany({
+          where: { scheduleId: { in: scheduleIds } },
+        });
       }
 
       await tx.examSchedule.deleteMany({ where: { examId } });
@@ -978,9 +987,9 @@ export class ExamService {
     const overlapFilter =
       args.periodStart !== undefined && args.periodEnd !== undefined
         ? {
-          periodStart: { lte: args.periodEnd },
-          periodEnd: { gte: args.periodStart },
-        }
+            periodStart: { lte: args.periodEnd },
+            periodEnd: { gte: args.periodStart },
+          }
         : { startsAt: { lt: args.endsAt }, endsAt: { gt: args.startsAt } };
 
     const classClash = await db.examSchedule.findFirst({
@@ -1290,14 +1299,14 @@ export class ExamService {
       const rolls2 =
         hallCfg.standard2 && (hallCfg.count2 ?? 0) > 0
           ? await this.prisma.examRollNumber.findMany({
-            where: {
-              examId: schedule.examId,
-              standard: hallCfg.standard2,
-              section: hallCfg.section2 ?? null,
-            },
-            orderBy: { rollNumber: 'asc' },
-            take: hallCfg.count2,
-          })
+              where: {
+                examId: schedule.examId,
+                standard: hallCfg.standard2,
+                section: hallCfg.section2 ?? null,
+              },
+              orderBy: { rollNumber: 'asc' },
+              take: hallCfg.count2,
+            })
           : [];
 
       // Interleave: seat them alternately (1 from class1, 1 from class2, ...)
@@ -1462,7 +1471,7 @@ export class ExamService {
       schedule.endsAt,
       scheduleId,
       schedule.periodStart ?? undefined,
-      schedule.periodEnd ?? undefined
+      schedule.periodEnd ?? undefined,
     );
     const overlappingAssignment =
       await this.prisma.examInvigilatorAssignment.findFirst({

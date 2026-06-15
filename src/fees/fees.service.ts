@@ -645,7 +645,8 @@ export class FeesService {
     // Calculate total discount amount
     let discountAmount = 0;
     for (const d of allDiscounts) {
-      if (d.type === DiscountType.FLAT) {
+      const isFlatComputed = d.reason && d.reason.includes('[Pct:');
+      if (d.type === DiscountType.FLAT || isFlatComputed) {
         discountAmount += d.value;
       } else if (d.type === DiscountType.TEACHER_DISCOUNT) {
         // Staff discount applies only on tuition/term fees (without book/store fees)
@@ -837,14 +838,18 @@ export class FeesService {
         termName: t.termName,
         amount: t.amount,
         dueDate: t.dueDate ? new Date(t.dueDate) : null,
-        tuitionAmount: comp.tuition[i],
-        transportAmount: comp.transport[i],
-        specialClassAmount: comp.specialClass[i],
-        specialClassTransportAmount: comp.specialClassTransport[i],
-        bookAmount: comp.book[i],
-        hostelAmount: comp.hostel[i],
-        otherAmount: comp.other[i],
-        applicationAmount: comp.application[i],
+        tuitionAmount:
+          t.tuitionAmount !== undefined ? t.tuitionAmount : comp.tuition[i],
+        transportAmount:
+          t.transportAmount !== undefined
+            ? t.transportAmount
+            : comp.transport[i],
+        specialClassAmount: t.specialClassAmount !== undefined ? t.specialClassAmount : comp.specialClass[i],
+        specialClassTransportAmount: t.specialClassTransportAmount !== undefined ? t.specialClassTransportAmount : comp.specialClassTransport[i],
+        bookAmount: t.bookAmount !== undefined ? t.bookAmount : comp.book[i],
+        hostelAmount: t.hostelAmount !== undefined ? t.hostelAmount : comp.hostel[i],
+        otherAmount: t.otherAmount !== undefined ? t.otherAmount : comp.other[i],
+        applicationAmount: t.applicationAmount !== undefined ? t.applicationAmount : comp.application[i],
       }));
       numberOfTerms = customStudentTerms.length;
     } else if (structureTerms.length > 0) {
@@ -1420,7 +1425,8 @@ export class FeesService {
 
     let discountAmount = 0;
     for (const d of allDiscounts) {
-      if (d.type === DiscountType.FLAT) {
+      const isFlatComputed = d.reason && d.reason.includes('[Pct:');
+      if (d.type === DiscountType.FLAT || isFlatComputed) {
         discountAmount += d.value;
       } else if (d.type === DiscountType.TEACHER_DISCOUNT) {
         // Staff discount applies only on tuition/term fees (without book/store fees)
@@ -1557,7 +1563,7 @@ export class FeesService {
 
         // If using data.terms, amount is already calculated from frontend, otherwise re-sum
         const finalAmount =
-          t.amount != null
+          data.terms && t.amount != null
             ? t.amount
             : Math.round(
                 (tAmt + trAmt + bkAmt + hAmt + oAmt + scAmt + sctAmt + appAmt) *
@@ -2468,39 +2474,74 @@ export class FeesService {
     };
   }
 
-  async getFeesDashboard(academicYear: string) {
+  async getFeesDashboard(academicYear: string, status?: string) {
+    const whereClause: any = { academicYear };
+    
+    if (status) {
+      if (status === 'ACTIVE') {
+        whereClause.student = { users: { isActive: { not: false } } };
+      } else if (status === 'ARCHIVED') {
+        whereClause.student = { users: { isActive: false } };
+      } else if (status === 'TC_CERTIFIED') {
+        whereClause.student = {
+          docRequests: { some: { type: 'TRANSFER_CERTIFICATE', status: 'APPROVED' } },
+        };
+      }
+    }
+
     const fees = await this.prisma.studentFee.findMany({
-      where: { academicYear },
-      include: { payments: true },
+      where: whereClause,
+      include: { 
+        payments: true,
+        student: { select: { standard: true } }
+      },
     });
+
+    const structures = await this.prisma.feeStructure.findMany({
+      where: { academicYear },
+      include: { customItems: true },
+    });
+
+    const structuredFeesByStandard: Record<string, number> = {};
+    for (const struct of structures) {
+      const std = struct.standard;
+      let total = 0;
+      total += struct.tuitionFee || 0;
+      total += struct.transportFee || 0;
+      total += struct.bookFee || 0;
+      total += struct.hostelFee || 0;
+      total += struct.otherFee || 0;
+      total += struct.applicationFee || 0;
+      total += (struct.specialClassFee || 0) * (struct.specialClassMonths || 1);
+      total += (struct.specialClassTransportFee || 0) * (struct.specialClassTransportMonths || 1);
+      
+      if (struct.customItems) {
+        total += struct.customItems.reduce((acc: number, item: any) => acc + (item.amount || 0), 0);
+      }
+      structuredFeesByStandard[std] = (structuredFeesByStandard[std] || 0) + total;
+    }
 
     let totalAssigned = 0;
     let totalCollected = 0;
     let totalPending = 0;
-
-    for (const fee of fees) {
-      totalAssigned += fee.netFee;
-      const paid = this.getTotalEffectivePaid(fee.payments);
-      totalCollected += paid;
-      totalPending += fee.netFee - paid;
-    }
 
     // Group by standard
     const byStandard: Record<
       string,
       { assigned: number; collected: number; pending: number; count: number }
     > = {};
+
     for (const fee of fees) {
+      totalAssigned += fee.totalFee;
       const paid = this.getTotalEffectivePaid(fee.payments);
-      const student = await this.prisma.student.findUnique({
-        where: { id: fee.studentId },
-        select: { standard: true },
-      });
-      const std = student?.standard || 'Unknown';
+      totalCollected += paid;
+      totalPending += fee.netFee - paid;
+
+      const std = fee.student?.standard || 'Unknown';
       if (!byStandard[std]) {
         byStandard[std] = { assigned: 0, collected: 0, pending: 0, count: 0 };
       }
-      byStandard[std].assigned += fee.netFee;
+      byStandard[std].assigned += fee.totalFee;
       byStandard[std].collected += paid;
       byStandard[std].pending += fee.netFee - paid;
       byStandard[std].count += 1;
@@ -2513,6 +2554,7 @@ export class FeesService {
       totalCollected,
       totalPending,
       byStandard,
+      structuredFeesByStandard,
     };
   }
 
@@ -3286,8 +3328,12 @@ export class FeesService {
       entry.grandStaffDiscount += staff;
       entry.grandAdditionalDiscount += addl;
       entry.grandManualDiscount += manual;
-      entry.grandSpecialClassFee += ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
-      entry.grandSpecialClassTransportFee += ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
+      entry.grandSpecialClassFee +=
+        ((fee as any).specialClassFee || 0) *
+        ((fee as any).specialClassMonths || 0);
+      entry.grandSpecialClassTransportFee +=
+        ((fee as any).specialClassTransportFee || 0) *
+        ((fee as any).specialClassTransportMonths || 0);
     }
 
     return {
@@ -3358,23 +3404,65 @@ export class FeesService {
         });
       }
       const entry = classMap.get(std)!;
-      entry.studentCount++;
-      const specialClassAmount = ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
-      const specialClassTransportAmount = ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
+      // Derive assigned amounts from terms (the authoritative source after edits)
+      const coreTerms = (fee.terms || []).filter(
+        (t) =>
+          t.termName !== 'Special Class' &&
+          t.termName !== 'Special Class Transport' &&
+          t.termName !== 'Application Fee',
+      );
+      const splClassTerm = (fee.terms || []).find(
+        (t) => t.termName === 'Special Class',
+      );
+      const splTransTerm = (fee.terms || []).find(
+        (t) => t.termName === 'Special Class Transport',
+      );
+      const appFeeTerm = (fee.terms || []).find(
+        (t) => t.termName === 'Application Fee',
+      );
 
-      entry.tuitionFee += fee.tuitionFee || 0;
-      entry.transportFee += fee.transportFee || 0;
-      entry.specialClassFee += specialClassAmount;
-      entry.specialClassTransportFee += specialClassTransportAmount;
-      entry.bookFee += fee.bookFee || 0;
-      entry.hostelFee += fee.hostelFee || 0;
+      // Tuition = sum of core term tuitionAmount (or amount - bookAmount fallback)
+      const assignedTuition = coreTerms.reduce((s, t) => {
+        const bk = Number((t as any).bookAmount || 0);
+        const amt = Number(t.amount || 0);
+        const tuAmt = (t as any).tuitionAmount != null
+          ? Number((t as any).tuitionAmount)
+          : Math.max(0, amt - bk);
+        return s + tuAmt;
+      }, 0);
 
-      entry.otherFee += (fee.otherFee || 0) + ((fee as any).applicationFee || 0);
-      entry.customItemsTotal += (fee.customItems || []).reduce(
+      // Transport = sum of transportAmount across core terms
+      const assignedTransport = coreTerms.reduce(
+        (s, t) => s + Number((t as any).transportAmount || 0),
+        0,
+      );
+
+      // Book = sum of bookAmount across core terms
+      const assignedBook = coreTerms.reduce(
+        (s, t) => s + Number((t as any).bookAmount || 0),
+        0,
+      );
+
+      // Gross component amounts for this student
+      const grossTuition = assignedTuition || fee.tuitionFee || 0;
+      const grossTransport = assignedTransport || fee.transportFee || 0;
+      const grossSplClass = splClassTerm
+        ? Number(splClassTerm.amount || 0)
+        : ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
+      const grossSplTransport = splTransTerm
+        ? Number(splTransTerm.amount || 0)
+        : ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
+      const grossBook = assignedBook || fee.bookFee || 0;
+      const grossHostel = fee.hostelFee || 0;
+      const grossOther =
+        (fee.otherFee || 0) +
+        (appFeeTerm
+          ? Number(appFeeTerm.amount || 0)
+          : (fee as any).applicationFee || 0);
+      const grossCustom = (fee.customItems || []).reduce(
         (s, ci) => s + (ci.amount || 0),
         0,
       );
-      entry.totalFee += fee.totalFee || 0;
 
       let manualDiscount = 0;
       let actualPaid = 0;
@@ -3399,9 +3487,41 @@ export class FeesService {
         }
       }
 
-      entry.totalDiscount += (fee.discount || 0) + manualDiscount;
+      // Net fee after all discounts (assigned discount + manual payment discounts)
+      const totalDiscountForFee = (fee.discount || 0) + manualDiscount;
+      const studentNetFee = Math.max((fee.netFee || 0) - manualDiscount, 0);
+      // Use the stored netFee directly as the authoritative net amount
+      const netFeeValue = fee.netFee || 0;
+
+      // Gross total of components (may differ from fee.totalFee if edits happened)
+      const grossComponentsTotal =
+        grossTuition + grossTransport + grossSplClass + grossSplTransport +
+        grossBook + grossHostel + grossOther + grossCustom;
+
+      // Scale factor: apply discount proportionally across components
+      // so that component columns reflect net amounts after discount
+      const scaleFactor = grossComponentsTotal > 0
+        ? Math.max(netFeeValue, 0) / grossComponentsTotal
+        : 1;
+
+      entry.tuitionFee += Math.floor(grossTuition * scaleFactor + 0.9);
+      entry.transportFee += Math.floor(grossTransport * scaleFactor + 0.9);
+      entry.specialClassFee += Math.floor(grossSplClass * scaleFactor + 0.9);
+      entry.specialClassTransportFee += Math.floor(grossSplTransport * scaleFactor + 0.9);
+      entry.bookFee += Math.floor(grossBook * scaleFactor + 0.9);
+      entry.hostelFee += Math.floor(grossHostel * scaleFactor + 0.9);
+      entry.otherFee += Math.floor(grossOther * scaleFactor + 0.9);
+      entry.customItemsTotal += Math.floor(grossCustom * scaleFactor + 0.9);
+
+      // Total column = netFee (after discount), Discount column = discount amount
+      entry.totalFee += netFeeValue;
+
+      entry.totalDiscount += totalDiscountForFee;
       entry.totalPaid += actualPaid;
-      entry.netOutstanding += Math.max((fee.netFee || 0) - (actualPaid + manualDiscount), 0);
+      entry.netOutstanding += Math.max(
+        netFeeValue - (actualPaid + manualDiscount),
+        0,
+      );
 
       // Aggregate term totals
       for (const term of fee.terms || []) {
@@ -3439,7 +3559,8 @@ export class FeesService {
         tuitionFee: acc.tuitionFee + r.tuitionFee,
         transportFee: acc.transportFee + r.transportFee,
         specialClassFee: acc.specialClassFee + r.specialClassFee,
-        specialClassTransportFee: acc.specialClassTransportFee + r.specialClassTransportFee,
+        specialClassTransportFee:
+          acc.specialClassTransportFee + r.specialClassTransportFee,
         bookFee: acc.bookFee + r.bookFee,
         hostelFee: acc.hostelFee + r.hostelFee,
         otherFee: acc.otherFee + r.otherFee,

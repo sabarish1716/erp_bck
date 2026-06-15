@@ -121,7 +121,9 @@ describe('ExamService', () => {
       { id: 'roll-2', studentId: 'stu-2', rollNumber: 'R-002' },
     ]);
 
-    await expect(service.autoAllocateSeats('sch-1', ['hall-1'])).rejects.toThrow(
+    await expect(
+      service.autoAllocateSeats('sch-1', ['hall-1']),
+    ).rejects.toThrow(
       new BadRequestException('Insufficient seats. Required 2, available 1'),
     );
   });
@@ -147,7 +149,10 @@ describe('ExamService', () => {
     prisma.examSeatAllocation.createMany.mockResolvedValue({ count: 3 });
     prisma.$transaction.mockResolvedValue([{ count: 0 }, { count: 3 }]);
 
-    const result = await service.autoAllocateSeats('sch-1', ['hall-1', 'hall-2']);
+    const result = await service.autoAllocateSeats('sch-1', [
+      'hall-1',
+      'hall-2',
+    ]);
 
     expect(prisma.examSeatAllocation.createMany).toHaveBeenCalledWith({
       data: [

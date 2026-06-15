@@ -3217,7 +3217,7 @@ export class TransportService {
     const configuredSpecialClassTransportMonths = sctConfig.months;
 
     let totalTransportFee = 0;
-    let specialClassTransportFee = 0;
+    let specialClassTransportFeeTotal = 0;
     let specialClassTransportMonths = 0;
 
     for (const t of timelines) {
@@ -3243,7 +3243,7 @@ export class TransportService {
 
         if (t.isSplClass) {
           specialClassTransportMonths += multiplier;
-          specialClassTransportFee = splFeeRate;
+          specialClassTransportFeeTotal += Number(t.feeCharged || 0);
         } else {
           // If not special class, charge the regular route base fee
           totalTransportFee += monthlyBase * multiplier;
@@ -3263,8 +3263,8 @@ export class TransportService {
       try {
         await this.feesService.updateStudentFee(studentFee.id, {
           transportFee: totalTransportFee,
-          specialClassTransportFee: specialClassTransportFee,
-          specialClassTransportMonths: specialClassTransportMonths,
+          specialClassTransportFee: specialClassTransportFeeTotal,
+          specialClassTransportMonths: specialClassTransportMonths > 0 ? 1 : 0,
         } as any);
       } catch (err) {
         console.error(

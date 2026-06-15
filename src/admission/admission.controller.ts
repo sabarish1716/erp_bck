@@ -48,7 +48,9 @@ function resolveStudentFolder(
 ): string {
   const safe = (s: string) => String(s || '').replace(/[^a-zA-Z0-9_\-]/g, '_');
   const yearPart = safe(academicYear || 'UNKNOWN_YEAR');
-  const studentPart = admNo ? `${safe(admNo)}_${safe(standard || '')}` : safe(standard || 'UNKNOWN_STD');
+  const studentPart = admNo
+    ? `${safe(admNo)}_${safe(standard || '')}`
+    : safe(standard || 'UNKNOWN_STD');
   const folderPath = join(BASE_DOCS_PATH, yearPart, studentPart);
   mkdirSync(folderPath, { recursive: true }); // idempotent – no duplicate creation
   return folderPath;
@@ -58,10 +60,7 @@ function resolveStudentFolder(
  * Writes a multer memory-storage file to the student folder.
  * Returns the relative path stored in the DB.
  */
-function saveFileToDisk(
-  file: Express.Multer.File,
-  folderPath: string,
-): string {
+function saveFileToDisk(file: Express.Multer.File, folderPath: string): string {
   const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
   const ext = extname(file.originalname);
   const filename = `${file.fieldname}-${uniqueSuffix}${ext}`;
@@ -175,24 +174,36 @@ export class AdmissionController {
     // Convert documents array → object
     if (Array.isArray(parsedBody.documents)) {
       const docObj: Record<string, any> = {};
-      parsedBody.documents.forEach((doc: any) => { docObj[doc.key] = doc; });
+      parsedBody.documents.forEach((doc: any) => {
+        docObj[doc.key] = doc;
+      });
       parsedBody.documents = docObj;
     }
     if (!parsedBody.documents) parsedBody.documents = {};
 
     // Determine student folder AFTER body is parsed so we have admissionNo / standard / academicYear
     // (admissionNo may be AUTO at this point – fall back to a timestamp placeholder)
-    const admNo = parsedBody.admission?.admissionNo || parsedBody.admissionNo || `NEW_${Date.now()}`;
-    const standard = parsedBody.standard || parsedBody.admission?.standard || 'UNKNOWN';
-    const academicYear = parsedBody.academicYear || parsedBody.admission?.academicYear || 'UNKNOWN_YEAR';
+    const admNo =
+      parsedBody.admission?.admissionNo ||
+      parsedBody.admissionNo ||
+      `NEW_${Date.now()}`;
+    const standard =
+      parsedBody.standard || parsedBody.admission?.standard || 'UNKNOWN';
+    const academicYear =
+      parsedBody.academicYear ||
+      parsedBody.admission?.academicYear ||
+      'UNKNOWN_YEAR';
 
     if (files) {
       const folderPath = resolveStudentFolder(academicYear, admNo, standard);
       Object.keys(files).forEach((fieldname) => {
-        const fileArr = (files as any)[fieldname] as Express.Multer.File[] | undefined;
+        const fileArr = (files as any)[fieldname] as
+          | Express.Multer.File[]
+          | undefined;
         if (!fileArr?.[0]) return;
         const savedPath = saveFileToDisk(fileArr[0], folderPath);
-        if (!parsedBody.documents[fieldname]) parsedBody.documents[fieldname] = {};
+        if (!parsedBody.documents[fieldname])
+          parsedBody.documents[fieldname] = {};
         parsedBody.documents[fieldname].path = savedPath;
         parsedBody.documents[fieldname].uploaded = true;
       });
@@ -349,7 +360,10 @@ export class AdmissionController {
       const normalizedDocs: Record<string, any> = {};
       parsedBody.documents.forEach((doc: any) => {
         if (!doc || typeof doc !== 'object' || !doc.key) return;
-        normalizedDocs[doc.key] = { ...(normalizedDocs[doc.key] || {}), ...doc };
+        normalizedDocs[doc.key] = {
+          ...(normalizedDocs[doc.key] || {}),
+          ...doc,
+        };
       });
       parsedBody.documents = normalizedDocs;
     }
@@ -357,7 +371,8 @@ export class AdmissionController {
     // Fetch existing student to access academicYear, admissionNo, standard
     const existingStudent = await this.service.getStudentById(id);
     const existingDocuments = existingStudent?.documents?.[0] || {};
-    const existingAdmission = existingStudent?.admission?.[0] || existingStudent?.admission || {};
+    const existingAdmission =
+      existingStudent?.admission?.[0] || existingStudent?.admission || {};
 
     const academicYear =
       parsedBody.academicYear ||
@@ -413,8 +428,10 @@ export class AdmissionController {
       } else {
         // No upload → keep existing DB value
         const existingPath = existingDocuments[`${key}Path`] || '';
-        parsedBody.documents[key].path = parsedBody.documents[key].path || existingPath;
-        parsedBody.documents[key].uploaded = parsedBody.documents[key].uploaded ?? !!existingDocuments[key];
+        parsedBody.documents[key].path =
+          parsedBody.documents[key].path || existingPath;
+        parsedBody.documents[key].uploaded =
+          parsedBody.documents[key].uploaded ?? !!existingDocuments[key];
       }
 
       // Unchecked → clear path
@@ -424,7 +441,8 @@ export class AdmissionController {
 
       // Preserve hardCopy flag
       if (parsedBody.documents[key].hardCopy === undefined) {
-        parsedBody.documents[key].hardCopy = existingDocuments[`${key}HardCopy`] ?? false;
+        parsedBody.documents[key].hardCopy =
+          existingDocuments[`${key}HardCopy`] ?? false;
       }
     });
 

@@ -252,8 +252,11 @@ export class FeesController {
 
   @Get('dashboard')
   @Permissions(Permission.FEES_DASHBOARD)
-  getDashboard(@Query('academicYear') academicYear: string) {
-    return this.feesService.getFeesDashboard(academicYear);
+  getDashboard(
+    @Query('academicYear') academicYear: string,
+    @Query('status') status?: string,
+  ) {
+    return this.feesService.getFeesDashboard(academicYear, status);
   }
 
   @Get('multi-year-ledger')
