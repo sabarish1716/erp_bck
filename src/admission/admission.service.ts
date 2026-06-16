@@ -2448,9 +2448,38 @@ export class AdmissionService {
       return Number(payment.amount);
     };
 
+    const allStudentIds = students.map((s) => s.id);
+
+    // Identify archived students (user account deactivated)
+    const archivedUsers = await this.prisma.user.findMany({
+      where: { studentId: { in: allStudentIds }, isActive: false },
+      select: { studentId: true },
+    });
+    const archivedStudentIds = new Set(
+      archivedUsers.map((u) => u.studentId).filter(Boolean) as string[],
+    );
+
+    // Identify TC-issued students
+    const tcIssuedRequests = await this.prisma.docRequest.findMany({
+      where: {
+        studentId: { in: allStudentIds },
+        type: 'TRANSFER_CERTIFICATE',
+        status: 'ISSUED',
+      },
+      select: { studentId: true },
+    });
+    const tcIssuedStudentIds = new Set(
+      tcIssuedRequests.map((r) => r.studentId).filter(Boolean) as string[],
+    );
+
+    // Only promote eligible students — skip archived and TC-issued
+    const eligibleStudents = students.filter(
+      (s) => !archivedStudentIds.has(s.id) && !tcIssuedStudentIds.has(s.id),
+    );
+
     const targetStandards = Array.from(
       new Set(
-        students
+        eligibleStudents
           .map((student) => getNextStandard(student.standard))
           .filter((standard) => isPromotableStandard(standard)),
       ),
@@ -2486,7 +2515,7 @@ export class AdmissionService {
     const currentYearFees = await this.prisma.studentFee.findMany({
       where: {
         academicYear,
-        studentId: { in: students.map((student) => student.id) },
+        studentId: { in: eligibleStudents.map((student) => student.id) },
       },
       include: {
         payments: true,
@@ -2496,7 +2525,7 @@ export class AdmissionService {
     // Also fetch fee structures for the OLD academic year so we can flag
     // students whose fees were never assigned (no studentFee record exists)
     const currentYearStandards = Array.from(
-      new Set(students.map((s) => s.standard)),
+      new Set(eligibleStudents.map((s) => s.standard)),
     );
     const oldYearStructures = await this.prisma.feeStructure.findMany({
       where: {
@@ -2530,7 +2559,7 @@ export class AdmissionService {
       feeNotAssigned?: boolean;
     }> = [];
 
-    for (const student of students) {
+    for (const student of eligibleStudents) {
       const nextStandard = getNextStandard(student.standard);
 
       const currentYearFee = feeByStudentId.get(student.id);
@@ -2708,6 +2737,8 @@ export class AdmissionService {
       updatedCount,
       newAcademicYear,
       autoFeeAssignedCount,
+      skippedArchivedCount: archivedStudentIds.size,
+      skippedTcCount: tcIssuedStudentIds.size,
       studentsWithPreviousYearPendingCount:
         studentsWithPreviousYearPending.length,
       studentsWithPreviousYearPending,
