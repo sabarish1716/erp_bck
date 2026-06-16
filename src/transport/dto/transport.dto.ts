@@ -66,6 +66,8 @@ export class CreateTransportRouteDto {
   @Max(4)
   numberOfTerms?: number;
 
+  @IsOptional() @IsString() defaultDriverId?: string;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

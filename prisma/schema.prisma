@@ -583,6 +583,7 @@ model Driver {
   mileages   Mileage[] @relation("DriverMileages")
   fuelLogs   FuelLog[] @relation("DriverFuelLogs")
   rotations  DriverRotation[] @relation("DriverRotations")
+  routeDefaultFor TransportRoute[] @relation("RouteDefaultDriver")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt @default(now())
 }
@@ -1122,6 +1123,10 @@ model TransportRoute {
   // Conductor info
   conductorName  String?
   conductorPhone String?
+
+  // Default driver for the route (auto-populated in monthly rotation)
+  defaultDriverId String?
+  defaultDriver   Driver? @relation("RouteDefaultDriver", fields: [defaultDriverId], references: [id])
 
   stops         TransportStop[]
   students      StudentTransport[]

@@ -641,10 +641,11 @@ export class TransportService {
           conductorName: data.conductorName,
           conductorPhone: data.conductorPhone,
           numberOfTerms: data.numberOfTerms || 1,
+          defaultDriverId: data.defaultDriverId || null,
           stops:
             sanitizedStops.length > 0 ? { create: sanitizedStops } : undefined,
         },
-        include: { stops: { orderBy: { stopOrder: 'asc' } } },
+        include: { stops: { orderBy: { stopOrder: 'asc' } }, defaultDriver: true },
       });
     } catch (error) {
       this.handleTransportWriteError(error);
@@ -667,12 +668,13 @@ export class TransportService {
           conductorName: data.conductorName,
           conductorPhone: data.conductorPhone,
           numberOfTerms: data.numberOfTerms || 1,
+          defaultDriverId: data.defaultDriverId || null,
           stops: {
             deleteMany: {},
             create: sanitizedStops,
           },
         },
-        include: { stops: { orderBy: { stopOrder: 'asc' } } },
+        include: { stops: { orderBy: { stopOrder: 'asc' } }, defaultDriver: true },
       });
     } catch (error) {
       this.handleTransportWriteError(error);
@@ -683,6 +685,7 @@ export class TransportService {
     return this.prisma.transportRoute.findMany({
       include: {
         buses: true,
+        defaultDriver: true,
         stops: { orderBy: { stopOrder: 'asc' } },
         _count: { select: { students: true } },
       },
