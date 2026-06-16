@@ -715,6 +715,16 @@ export class FeesService {
       other: number[];
       application: number[];
     } => {
+      const isAppTerm = (t: any) =>
+        String(t.termName || '').toLowerCase().includes('application fee');
+      const isSplClassTerm = (t: any) => {
+        const n = String(t.termName || '').toLowerCase();
+        return n === 'special class' || (n.includes('special class') && !n.includes('transport'));
+      };
+      const isSplClassTransportTerm = (t: any) => {
+        const n = String(t.termName || '').toLowerCase();
+        return n.includes('special class') && n.includes('transport');
+      };
       const isCoreTermFilter = (t: any) => {
         const lowerName = String(t.termName || '').toLowerCase();
         if (lowerName.includes('special class')) return false;
@@ -722,12 +732,37 @@ export class FeesService {
         if (lowerName.includes('store')) return false;
         return true;
       };
+
+      // Detect whether dedicated terms exist for these fee components.
+      // If a dedicated term exists, that component must NOT also be distributed
+      // into core terms — otherwise it would be double-counted.
+      const hasDedicatedAppTerm = termsArray.some(isAppTerm);
+      const hasDedicatedSplTerm = termsArray.some(isSplClassTerm);
+      const hasDedicatedSptTerm = termsArray.some(isSplClassTransportTerm);
+
       const coreTerms = termsArray.filter(isCoreTermFilter);
       const nCore = coreTerms.length > 0 ? coreTerms.length : termsArray.length;
       const nTerms = termsArray.length;
 
-      const splitEvenly = (val: number, n: number) => {
+      const splitProportionally = (val: number, terms: any[]) => {
+        const n = terms.length;
         if (n <= 0) return [];
+        
+        const totalAmount = terms.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+        if (totalAmount > 0) {
+          let remaining = val;
+          return terms.map((t, i) => {
+            if (i === n - 1) {
+              const finalVal = Math.round(remaining * 100) / 100;
+              return finalVal;
+            }
+            const ratio = (Number(t.amount) || 0) / totalAmount;
+            const portion = Math.round((val * ratio) * 100) / 100;
+            remaining -= portion;
+            return portion;
+          });
+        }
+
         const perTerm = Math.round((val / n) * 100) / 100;
         return Array.from({ length: n }, (_, i) =>
           i === n - 1
@@ -742,19 +777,21 @@ export class FeesService {
         return arr;
       };
 
-      const coreTuition = splitEvenly(tuitionFee, nCore);
-      const coreTransport = splitEvenly(transportFee, nCore);
-      const fullSpecialClass = splitEvenly(
-        specialClassFee * specialClassMonths,
-        nCore,
-      );
-      const fullSpecialClassTransport = splitEvenly(
-        specialClassTransportFee * specialClassTransportMonths,
-        nCore,
-      );
-      const fullHostel = splitEvenly(hostelFee, nCore);
-      const fullOther = splitEvenly(otherFee, nCore);
-      const fullApplication = splitEvenly(applicationFee, nCore);
+      const coreTuition = splitProportionally(tuitionFee, coreTerms);
+      const coreTransport = splitProportionally(transportFee, coreTerms);
+      // Only spread special class / application fees into core terms if there is
+      // NO dedicated term for them; otherwise those will be handled below.
+      const fullSpecialClass = hasDedicatedSplTerm
+        ? Array(nCore).fill(0)
+        : splitProportionally(specialClassFee * specialClassMonths, coreTerms);
+      const fullSpecialClassTransport = hasDedicatedSptTerm
+        ? Array(nCore).fill(0)
+        : splitProportionally(specialClassTransportFee * specialClassTransportMonths, coreTerms);
+      const fullHostel = splitProportionally(hostelFee, coreTerms);
+      const fullOther = splitProportionally(otherFee, coreTerms);
+      const fullApplication = hasDedicatedAppTerm
+        ? Array(nCore).fill(0)
+        : splitProportionally(applicationFee, coreTerms);
 
       // Kit items split
       const kitSplit = Array(nTerms).fill(0);
@@ -785,13 +822,38 @@ export class FeesService {
           transportArr.push(coreTransport[coreIdx] || 0);
           tuitionArr.push(coreTuition[coreIdx] || 0);
           specialClassArr.push(fullSpecialClass[coreIdx] || 0);
-          specialClassTransportArr.push(
-            fullSpecialClassTransport[coreIdx] || 0,
-          );
+          specialClassTransportArr.push(fullSpecialClassTransport[coreIdx] || 0);
           hostelArr.push(fullHostel[coreIdx] || 0);
           otherArr.push(fullOther[coreIdx] || 0);
           applicationArr.push(fullApplication[coreIdx] || 0);
           coreIdx++;
+        } else if (isAppTerm(t)) {
+          // Dedicated Application Fee term — assign the full applicationFee here
+          transportArr.push(0);
+          tuitionArr.push(0);
+          specialClassArr.push(0);
+          specialClassTransportArr.push(0);
+          hostelArr.push(0);
+          otherArr.push(0);
+          applicationArr.push(applicationFee);
+        } else if (isSplClassTransportTerm(t)) {
+          // Dedicated Special Class Transport term
+          transportArr.push(0);
+          tuitionArr.push(0);
+          specialClassArr.push(0);
+          specialClassTransportArr.push(specialClassTransportFee * specialClassTransportMonths);
+          hostelArr.push(0);
+          otherArr.push(0);
+          applicationArr.push(0);
+        } else if (isSplClassTerm(t)) {
+          // Dedicated Special Class term
+          transportArr.push(0);
+          tuitionArr.push(0);
+          specialClassArr.push(specialClassFee * specialClassMonths);
+          specialClassTransportArr.push(0);
+          hostelArr.push(0);
+          otherArr.push(0);
+          applicationArr.push(0);
         } else {
           transportArr.push(0);
           tuitionArr.push(0);

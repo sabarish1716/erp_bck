@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { const s = await prisma.feeStructure.findFirst({where: {standard: 'STD_1'}, include: {kitItems: true}}); console.log(JSON.stringify(s.kitItems, null, 2)); } main().catch(e => console.error(e)).finally(() => prisma.$disconnect());
