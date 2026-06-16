@@ -246,8 +246,11 @@ export class FeesController {
 
   @Get('daily-collection')
   @Permissions(Permission.FEES_DASHBOARD)
-  getDailyCollection(@Query('date') date?: string) {
-    return this.feesService.getDailyCollection(date);
+  getDailyCollection(
+    @Query('date') date?: string,
+    @Query('paymentMode') paymentMode?: string,
+  ) {
+    return this.feesService.getDailyCollection(date, paymentMode);
   }
 
   @Get('dashboard')
@@ -255,8 +258,9 @@ export class FeesController {
   getDashboard(
     @Query('academicYear') academicYear: string,
     @Query('status') status?: string,
+    @Query('paymentMode') paymentMode?: string,
   ) {
-    return this.feesService.getFeesDashboard(academicYear, status);
+    return this.feesService.getFeesDashboard(academicYear, status, paymentMode);
   }
 
   @Get('multi-year-ledger')

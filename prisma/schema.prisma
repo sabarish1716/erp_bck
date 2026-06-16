@@ -90,6 +90,7 @@ enum Standard {
   STD_10
   STD_11
   STD_12
+  ALUMNI
 }
 
 model AcademicStream {

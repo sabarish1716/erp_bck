@@ -74,7 +74,7 @@ export class AdmissionController {
   constructor(
     private readonly service: AdmissionService,
     private readonly academicStreamService: AcademicStreamService,
-  ) {}
+  ) { }
 
   @Get('streams')
   @Permissions(Permission.ADMISSION_READ)

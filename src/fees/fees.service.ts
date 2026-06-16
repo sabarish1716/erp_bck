@@ -2490,17 +2490,22 @@ export class FeesService {
     });
   }
 
-  async getDailyCollection(date?: string) {
+  async getDailyCollection(date?: string, paymentMode?: string) {
     const target = date ? new Date(date) : new Date();
     const startOfDay = new Date(target);
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date(target);
     endOfDay.setHours(23, 59, 59, 999);
 
+    const whereClause: any = {
+      paymentDate: { gte: startOfDay, lte: endOfDay },
+    };
+    if (paymentMode && paymentMode !== 'ALL') {
+      whereClause.paymentMode = paymentMode;
+    }
+
     const payments = await this.prisma.payment.findMany({
-      where: {
-        paymentDate: { gte: startOfDay, lte: endOfDay },
-      },
+      where: whereClause,
       include: {
         studentFee: {
           include: {
@@ -2536,18 +2541,20 @@ export class FeesService {
     };
   }
 
-  async getFeesDashboard(academicYear: string, status?: string) {
+  async getFeesDashboard(academicYear: string, status?: string, paymentMode?: string) {
     const whereClause: any = { academicYear };
     
     if (status) {
       if (status === 'ACTIVE') {
-        whereClause.student = { users: { isActive: { not: false } } };
+        whereClause.student = { users: { isActive: { not: false } }, standard: { not: 'ALUMNI' } };
       } else if (status === 'ARCHIVED') {
-        whereClause.student = { users: { isActive: false } };
+        whereClause.student = { users: { isActive: false }, standard: { not: 'ALUMNI' } };
       } else if (status === 'TC_CERTIFIED') {
         whereClause.student = {
           docRequests: { some: { type: 'TRANSFER_CERTIFICATE', status: 'APPROVED' } },
         };
+      } else if (status === 'ALUMNI') {
+        whereClause.student = { standard: 'ALUMNI' };
       }
     }
 
@@ -2595,17 +2602,24 @@ export class FeesService {
 
     for (const fee of fees) {
       totalAssigned += fee.totalFee;
-      const paid = this.getTotalEffectivePaid(fee.payments);
-      totalCollected += paid;
-      totalPending += fee.netFee - paid;
+
+      let paymentsToCount = fee.payments;
+      if (paymentMode && paymentMode !== 'ALL') {
+        paymentsToCount = fee.payments.filter((p) => p.paymentMode === paymentMode);
+      }
+      const paidByMode = this.getTotalEffectivePaid(paymentsToCount);
+      const totalPaidOverall = this.getTotalEffectivePaid(fee.payments);
+
+      totalCollected += paidByMode;
+      totalPending += fee.netFee - totalPaidOverall;
 
       const std = fee.student?.standard || 'Unknown';
       if (!byStandard[std]) {
         byStandard[std] = { assigned: 0, collected: 0, pending: 0, count: 0 };
       }
       byStandard[std].assigned += fee.totalFee;
-      byStandard[std].collected += paid;
-      byStandard[std].pending += fee.netFee - paid;
+      byStandard[std].collected += paidByMode;
+      byStandard[std].pending += fee.netFee - totalPaidOverall;
       byStandard[std].count += 1;
     }
 
@@ -3466,6 +3480,7 @@ export class FeesService {
         });
       }
       const entry = classMap.get(std)!;
+      entry.studentCount += 1;
       // Derive assigned amounts from terms (the authoritative source after edits)
       const coreTerms = (fee.terms || []).filter(
         (t) =>
@@ -3609,6 +3624,7 @@ export class FeesService {
       'STD_10',
       'STD_11',
       'STD_12',
+      'ALUMNI',
     ];
     const rows = Array.from(classMap.values()).sort(
       (a, b) => stdOrder.indexOf(a.standard) - stdOrder.indexOf(b.standard),

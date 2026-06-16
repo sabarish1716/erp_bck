@@ -562,7 +562,7 @@ function parseDateFlexible(raw?: string): string | undefined {
 
 @Injectable()
 export class AdmissionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   // 👇 your methods here
 
@@ -979,7 +979,7 @@ export class AdmissionService {
     let dirCreated = false;
     const ensureDir = async () => {
       if (!dirCreated) {
-        await fs.mkdir(targetDir, { recursive: true }).catch(() => {});
+        await fs.mkdir(targetDir, { recursive: true }).catch(() => { });
         dirCreated = true;
       }
     };
@@ -1111,8 +1111,8 @@ export class AdmissionService {
         rte: data.rte || false,
         academicStream: ((val) =>
           val ? { connect: { name: val } } : undefined)(
-          toAcademicStreamEnum(data.academicStream),
-        ),
+            toAcademicStreamEnum(data.academicStream),
+          ),
 
         section: data.section || null,
 
@@ -1128,261 +1128,261 @@ export class AdmissionService {
         // ✅ FAMILY
         family: data.family
           ? {
-              create: {
-                fatherName:
-                  data.family.isSingleParent &&
+            create: {
+              fatherName:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'father'
-                    ? null
-                    : data.family.fatherName,
-                fatherPhone:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.fatherName,
+              fatherPhone:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'father'
-                    ? null
-                    : data.family.fatherPhone,
-                fatherWhatsapp:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.fatherPhone,
+              fatherWhatsapp:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'father'
-                    ? null
-                    : data.family.fatherWhatsapp,
-                fatherAadhar:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.fatherWhatsapp,
+              fatherAadhar:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'father'
-                    ? null
-                    : data.family.fatherAadhar,
-                fatherOccupation:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.fatherAadhar,
+              fatherOccupation:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'father'
-                    ? null
-                    : data.family.fatherOccupation,
-                preferredPhone: data.preferredPhone,
-                parentsEmail: data.parentsEmail,
-                motherName:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.fatherOccupation,
+              preferredPhone: data.preferredPhone,
+              parentsEmail: data.parentsEmail,
+              motherName:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'mother'
-                    ? null
-                    : data.family.motherName,
-                motherPhone:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.motherName,
+              motherPhone:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'mother'
-                    ? null
-                    : data.family.motherPhone,
-                motherWhatsapp:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.motherPhone,
+              motherWhatsapp:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'mother'
-                    ? null
-                    : data.family.motherWhatsapp,
-                motherAadhar:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.motherWhatsapp,
+              motherAadhar:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'mother'
-                    ? null
-                    : data.family.motherAadhar,
-                motherOccupation:
-                  data.family.isSingleParent &&
+                  ? null
+                  : data.family.motherAadhar,
+              motherOccupation:
+                data.family.isSingleParent &&
                   data.family.guardianRelation !== 'mother'
-                    ? null
-                    : data.family.motherOccupation,
+                  ? null
+                  : data.family.motherOccupation,
 
-                // Single parent & guardian
-                isSingleParent: data.family.isSingleParent || false,
-                guardianName: data.family.guardianName,
-                guardianPhone: data.family.guardianPhone,
-                guardianWhatsapp: data.family.guardianWhatsapp,
-                guardianAadhar: data.family.guardianAadhar,
-                guardianOccupation: data.family.guardianOccupation,
-                guardianRelation: data.family.guardianRelation,
+              // Single parent & guardian
+              isSingleParent: data.family.isSingleParent || false,
+              guardianName: data.family.guardianName,
+              guardianPhone: data.family.guardianPhone,
+              guardianWhatsapp: data.family.guardianWhatsapp,
+              guardianAadhar: data.family.guardianAadhar,
+              guardianOccupation: data.family.guardianOccupation,
+              guardianRelation: data.family.guardianRelation,
 
-                // ✅ Sibling 1 details with school selection validation
-                sibling1Name: data.family.sibling1Name,
-                sibling1Standard: data.family.sibling1Standard,
-                ...(() => {
-                  const sibling1Result = processSiblingSchoolSelection(
-                    '1',
-                    data.family.sibling1School,
-                    data.family.sibling1OtherSchoolName,
-                  );
-                  return {
-                    sibling1School: sibling1Result.processedSchool,
-                    sibling1OtherSchoolName:
-                      sibling1Result.processedCustomSchoolName,
-                  };
-                })(),
+              // ✅ Sibling 1 details with school selection validation
+              sibling1Name: data.family.sibling1Name,
+              sibling1Standard: data.family.sibling1Standard,
+              ...(() => {
+                const sibling1Result = processSiblingSchoolSelection(
+                  '1',
+                  data.family.sibling1School,
+                  data.family.sibling1OtherSchoolName,
+                );
+                return {
+                  sibling1School: sibling1Result.processedSchool,
+                  sibling1OtherSchoolName:
+                    sibling1Result.processedCustomSchoolName,
+                };
+              })(),
 
-                // ✅ Sibling 2 details with school selection validation
-                sibling2Name: data.family.sibling2Name,
-                sibling2Standard: data.family.sibling2Standard,
-                ...(() => {
-                  const sibling2Result = processSiblingSchoolSelection(
-                    '2',
-                    data.family.sibling2School,
-                    data.family.sibling2OtherSchoolName,
-                  );
-                  return {
-                    sibling2School: sibling2Result.processedSchool,
-                    sibling2OtherSchoolName:
-                      sibling2Result.processedCustomSchoolName,
-                  };
-                })(),
+              // ✅ Sibling 2 details with school selection validation
+              sibling2Name: data.family.sibling2Name,
+              sibling2Standard: data.family.sibling2Standard,
+              ...(() => {
+                const sibling2Result = processSiblingSchoolSelection(
+                  '2',
+                  data.family.sibling2School,
+                  data.family.sibling2OtherSchoolName,
+                );
+                return {
+                  sibling2School: sibling2Result.processedSchool,
+                  sibling2OtherSchoolName:
+                    sibling2Result.processedCustomSchoolName,
+                };
+              })(),
 
-                familyIncome: data.family.familyIncome
-                  ? parseFloat(data.family.familyIncome)
-                  : null,
-                siblings: data.family.siblings,
-                hostelRequired: data.family.hostelRequired || false,
-              },
-            }
+              familyIncome: data.family.familyIncome
+                ? parseFloat(data.family.familyIncome)
+                : null,
+              siblings: data.family.siblings,
+              hostelRequired: data.family.hostelRequired || false,
+            },
+          }
           : undefined,
 
         // ✅ ADDRESS
         address: data.address
           ? {
-              create: {
-                doorNo: data.address.doorNo || data.address.line1 || 'Pending',
-                street: data.address.street || data.address.line2 || '',
-                landmark: data.address.landmark || '',
-                city: data.address.city || '',
-                state: data.address.state || '',
-                line1: data.address.doorNo || data.address.line1 || 'Pending',
-                line2: data.address.street || data.address.line2 || '',
-                line3:
-                  data.address.line3 ||
-                  [data.address.landmark, data.address.city, data.address.state]
-                    .filter(Boolean)
-                    .join(', '),
-                pin: data.address.pin || '000000',
-              },
-            }
+            create: {
+              doorNo: data.address.doorNo || data.address.line1 || 'Pending',
+              street: data.address.street || data.address.line2 || '',
+              landmark: data.address.landmark || '',
+              city: data.address.city || '',
+              state: data.address.state || '',
+              line1: data.address.doorNo || data.address.line1 || 'Pending',
+              line2: data.address.street || data.address.line2 || '',
+              line3:
+                data.address.line3 ||
+                [data.address.landmark, data.address.city, data.address.state]
+                  .filter(Boolean)
+                  .join(', '),
+              pin: data.address.pin || '000000',
+            },
+          }
           : undefined,
 
         // ✅ DOCUMENTS (FIXED)
         documents: data.documents
           ? {
-              create: [
-                {
-                  photo:
-                    docs.profilePhoto?.uploaded ??
-                    docs.photo?.uploaded ??
-                    false,
-                  photoPath: normalizePath(
-                    docs.profilePhoto?.path || docs.photo?.path,
-                  ),
+            create: [
+              {
+                photo:
+                  docs.profilePhoto?.uploaded ??
+                  docs.photo?.uploaded ??
+                  false,
+                photoPath: normalizePath(
+                  docs.profilePhoto?.path || docs.photo?.path,
+                ),
 
-                  birthCert: docs.birthCert?.uploaded ?? false,
-                  birthCertPath: normalizePath(docs.birthCert?.path),
-                  birthCertHardCopy: docs.birthCert?.hardCopy ?? false,
+                birthCert: docs.birthCert?.uploaded ?? false,
+                birthCertPath: normalizePath(docs.birthCert?.path),
+                birthCertHardCopy: docs.birthCert?.hardCopy ?? false,
 
-                  communityCert: docs.communityCert?.uploaded ?? false,
-                  communityCertPath: normalizePath(docs.communityCert?.path),
-                  communityCertHardCopy: docs.communityCert?.hardCopy ?? false,
+                communityCert: docs.communityCert?.uploaded ?? false,
+                communityCertPath: normalizePath(docs.communityCert?.path),
+                communityCertHardCopy: docs.communityCert?.hardCopy ?? false,
 
-                  aadharStudent: docs.aadharStudent?.uploaded ?? false,
-                  aadharStudentPath: normalizePath(docs.aadharStudent?.path),
-                  aadharStudentHardCopy: docs.aadharStudent?.hardCopy ?? false,
+                aadharStudent: docs.aadharStudent?.uploaded ?? false,
+                aadharStudentPath: normalizePath(docs.aadharStudent?.path),
+                aadharStudentHardCopy: docs.aadharStudent?.hardCopy ?? false,
 
-                  aadharFather: docs.aadharFather?.uploaded ?? false,
-                  aadharFatherPath: normalizePath(docs.aadharFather?.path),
-                  aadharFatherHardCopy: docs.aadharFather?.hardCopy ?? false,
+                aadharFather: docs.aadharFather?.uploaded ?? false,
+                aadharFatherPath: normalizePath(docs.aadharFather?.path),
+                aadharFatherHardCopy: docs.aadharFather?.hardCopy ?? false,
 
-                  aadharMother: docs.aadharMother?.uploaded ?? false,
-                  aadharMotherPath: normalizePath(docs.aadharMother?.path),
-                  aadharMotherHardCopy: docs.aadharMother?.hardCopy ?? false,
+                aadharMother: docs.aadharMother?.uploaded ?? false,
+                aadharMotherPath: normalizePath(docs.aadharMother?.path),
+                aadharMotherHardCopy: docs.aadharMother?.hardCopy ?? false,
 
-                  transferCert: docs.transferCert?.uploaded ?? false,
-                  transferCertPath: normalizePath(docs.transferCert?.path),
-                  transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
+                transferCert: docs.transferCert?.uploaded ?? false,
+                transferCertPath: normalizePath(docs.transferCert?.path),
+                transferCertHardCopy: docs.transferCert?.hardCopy ?? false,
 
-                  entranceExam: docs.entranceExam?.uploaded ?? false,
-                  entranceExamPath: normalizePath(docs.entranceExam?.path),
-                  entranceExamHardCopy: docs.entranceExam?.hardCopy ?? false,
+                entranceExam: docs.entranceExam?.uploaded ?? false,
+                entranceExamPath: normalizePath(docs.entranceExam?.path),
+                entranceExamHardCopy: docs.entranceExam?.hardCopy ?? false,
 
-                  photosReceived:
-                    (data as any).photosReceived ??
-                    docs.photosReceived ??
-                    false,
-                },
-              ],
-            }
+                photosReceived:
+                  (data as any).photosReceived ??
+                  docs.photosReceived ??
+                  false,
+              },
+            ],
+          }
           : undefined,
 
         // ✅ ACADEMICS — stores the qualifying examination table (SSLC/MATRIC/CBSE)
         academics:
           data.academics && data.academics.length > 0
             ? {
-                create: await Promise.all(
-                  data.academics.map(async (acad) => {
-                    const totals = calcAcademicTotals({
-                      ...acad,
-                      subjects: acad.subjects?.map((s) => ({
-                        maxMarks: s.maxMarks ?? 0,
-                        obtainedMarks: s.obtainedMarks ?? 0,
-                      })),
-                    });
-                    return {
-                      examName: acad.examName,
-                      boardName: acad.boardName || 'State Board',
-                      registerNo: acad.registerNo,
-                      monthYear: acad.monthYear,
-                      totalMaxMarks: totals.totalMaxMarks,
-                      totalObtainedMarks: totals.totalObtainedMarks,
-                      totalPercentage: totals.totalPercentage,
-                      academicStream: ((val) =>
-                        val ? { connect: { name: val } } : undefined)(
+              create: await Promise.all(
+                data.academics.map(async (acad) => {
+                  const totals = calcAcademicTotals({
+                    ...acad,
+                    subjects: acad.subjects?.map((s) => ({
+                      maxMarks: s.maxMarks ?? 0,
+                      obtainedMarks: s.obtainedMarks ?? 0,
+                    })),
+                  });
+                  return {
+                    examName: acad.examName,
+                    boardName: acad.boardName || 'State Board',
+                    registerNo: acad.registerNo,
+                    monthYear: acad.monthYear,
+                    totalMaxMarks: totals.totalMaxMarks,
+                    totalObtainedMarks: totals.totalObtainedMarks,
+                    totalPercentage: totals.totalPercentage,
+                    academicStream: ((val) =>
+                      val ? { connect: { name: val } } : undefined)(
                         toAcademicStreamEnum(acad.stream),
                       ),
 
-                      subjects:
-                        acad.subjects && acad.subjects.length > 0
-                          ? {
-                              create: acad.subjects.map((s) => ({
-                                subjectName: s.subjectName || 'N/A',
-                                maxMarks: s.maxMarks ?? 0,
-                                obtainedMarks: s.obtainedMarks ?? 0,
-                                percentage:
-                                  s.percentage ??
-                                  ((s.maxMarks ?? 0) > 0
-                                    ? parseFloat(
-                                        (
-                                          ((s.obtainedMarks ?? 0) /
-                                            (s.maxMarks ?? 1)) *
-                                          100
-                                        ).toFixed(2),
-                                      )
-                                    : 0),
-                              })),
-                            }
-                          : undefined,
-                    };
-                  }),
-                ),
-              }
+                    subjects:
+                      acad.subjects && acad.subjects.length > 0
+                        ? {
+                          create: acad.subjects.map((s) => ({
+                            subjectName: s.subjectName || 'N/A',
+                            maxMarks: s.maxMarks ?? 0,
+                            obtainedMarks: s.obtainedMarks ?? 0,
+                            percentage:
+                              s.percentage ??
+                              ((s.maxMarks ?? 0) > 0
+                                ? parseFloat(
+                                  (
+                                    ((s.obtainedMarks ?? 0) /
+                                      (s.maxMarks ?? 1)) *
+                                    100
+                                  ).toFixed(2),
+                                )
+                                : 0),
+                          })),
+                        }
+                        : undefined,
+                  };
+                }),
+              ),
+            }
             : undefined,
 
         // ✅ ADMISSION (auto-generate admission number if not provided or 'AUTO')
         admission: data.admission
           ? {
-              create: {
-                admissionNo: data.admission.admissionNo,
+            create: {
+              admissionNo: data.admission.admissionNo,
 
-                admissionDate: data.admission.admissionDate
-                  ? new Date(data.admission.admissionDate)
-                  : new Date(),
+              admissionDate: data.admission.admissionDate
+                ? new Date(data.admission.admissionDate)
+                : new Date(),
 
-                standard: toStandardEnum(
-                  data.admission.standard || data.standard,
-                ),
+              standard: toStandardEnum(
+                data.admission.standard || data.standard,
+              ),
 
-                // Approval logic based on settings
-                isApproved: requireApproval
-                  ? user?.permissions?.includes('admission:approve') || false
-                  : true,
-                staffSignature:
-                  data.admission.staffSignaturePath ||
-                  data.admission.staffSignature,
+              // Approval logic based on settings
+              isApproved: requireApproval
+                ? user?.permissions?.includes('admission:approve') || false
+                : true,
+              staffSignature:
+                data.admission.staffSignaturePath ||
+                data.admission.staffSignature,
 
-                principalSignature:
-                  data.admission.principalSignaturePath ||
-                  data.admission.principalSignature,
-              },
-            }
+              principalSignature:
+                data.admission.principalSignaturePath ||
+                data.admission.principalSignature,
+            },
+          }
           : undefined,
         users: {
           create: {
@@ -1448,8 +1448,8 @@ export class AdmissionService {
       ...s,
       siblings: s.siblingGroupId
         ? (siblingGroups.get(s.siblingGroupId) || []).filter(
-            (sib) => sib.id !== s.id,
-          )
+          (sib) => sib.id !== s.id,
+        )
         : [],
     }));
   }
@@ -1574,8 +1574,8 @@ export class AdmissionService {
       rte: typeof data.rte === 'boolean' ? data.rte : false,
       academicStream: ((val) =>
         val ? { connect: { name: val } } : { disconnect: true })(
-        toAcademicStreamEnum(data.academicStream),
-      ),
+          toAcademicStreamEnum(data.academicStream),
+        ),
 
       section: data.section ?? undefined,
       academicYear:
@@ -1597,54 +1597,54 @@ export class AdmissionService {
           update: {
             fatherName:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherName,
             fatherPhone:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherPhone,
             fatherWhatsapp:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherWhatsapp,
             fatherAadhar:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherAadhar,
             fatherOccupation:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherOccupation,
             preferredPhone: familyAny.preferredPhone || data.preferredPhone,
             parentsEmail: familyAny.parentsEmail || data.parentsEmail,
             motherName:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherName,
             motherPhone:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherPhone,
             motherWhatsapp:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherWhatsapp,
             motherAadhar:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherAadhar,
             motherOccupation:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherOccupation,
             isSingleParent: data.family.isSingleParent || false,
@@ -1693,54 +1693,54 @@ export class AdmissionService {
           create: {
             fatherName:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherName,
             fatherPhone:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherPhone,
             fatherWhatsapp:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherWhatsapp,
             fatherAadhar:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherAadhar,
             fatherOccupation:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'father'
+                data.family.guardianRelation !== 'father'
                 ? null
                 : data.family.fatherOccupation,
             preferredPhone: familyAny.preferredPhone || data.preferredPhone,
             parentsEmail: familyAny.parentsEmail || data.parentsEmail,
             motherName:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherName,
             motherPhone:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherPhone,
             motherWhatsapp:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherWhatsapp,
             motherAadhar:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherAadhar,
             motherOccupation:
               data.family.isSingleParent &&
-              data.family.guardianRelation !== 'mother'
+                data.family.guardianRelation !== 'mother'
                 ? null
                 : data.family.motherOccupation,
             isSingleParent: data.family.isSingleParent || false,
@@ -1943,28 +1943,28 @@ export class AdmissionService {
               totalPercentage: totals.totalPercentage,
               academicStream: ((val) =>
                 val ? { connect: { name: val } } : undefined)(
-                toAcademicStreamEnum(acad.stream),
-              ),
+                  toAcademicStreamEnum(acad.stream),
+                ),
 
               subjects:
                 acad.subjects && acad.subjects.length > 0
                   ? {
-                      create: acad.subjects.map((s) => ({
-                        subjectName: s.subjectName || 'N/A',
-                        maxMarks: s.maxMarks ?? 0,
-                        obtainedMarks: s.obtainedMarks ?? 0,
-                        percentage:
-                          s.percentage ??
-                          ((s.maxMarks ?? 0) > 0
-                            ? parseFloat(
-                                (
-                                  ((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) *
-                                  100
-                                ).toFixed(2),
-                              )
-                            : 0),
-                      })),
-                    }
+                    create: acad.subjects.map((s) => ({
+                      subjectName: s.subjectName || 'N/A',
+                      maxMarks: s.maxMarks ?? 0,
+                      obtainedMarks: s.obtainedMarks ?? 0,
+                      percentage:
+                        s.percentage ??
+                        ((s.maxMarks ?? 0) > 0
+                          ? parseFloat(
+                            (
+                              ((s.obtainedMarks ?? 0) / (s.maxMarks ?? 1)) *
+                              100
+                            ).toFixed(2),
+                          )
+                          : 0),
+                    })),
+                  }
                   : undefined,
             };
           }),
@@ -2100,17 +2100,17 @@ export class AdmissionService {
       : undefined;
     const previousWhere = previousDateRange
       ? {
-          admissionDate: {
-            gte: previousDateRange.start,
-            lte: previousDateRange.end,
-          },
-        }
+        admissionDate: {
+          gte: previousDateRange.start,
+          lte: previousDateRange.end,
+        },
+      }
       : undefined;
 
     const admissionStudentIds = dateRange
       ? await this.prisma.admission
-          .findMany({ where, select: { studentId: true } })
-          .then((rows) => rows.map((r) => r.studentId))
+        .findMany({ where, select: { studentId: true } })
+        .then((rows) => rows.map((r) => r.studentId))
       : null;
 
     const docsMissingWhere =
@@ -2250,10 +2250,10 @@ export class AdmissionService {
     const percentageChange =
       previousYearTotal > 0
         ? Number(
-            (((total - previousYearTotal) / previousYearTotal) * 100).toFixed(
-              2,
-            ),
-          )
+          (((total - previousYearTotal) / previousYearTotal) * 100).toFixed(
+            2,
+          ),
+        )
         : total > 0
           ? 100
           : 0;
@@ -2340,10 +2340,10 @@ export class AdmissionService {
     const dateRange = getAcademicYearDateRange(academicYear);
     const where = dateRange
       ? {
-          admission: {
-            is: { admissionDate: { gte: dateRange.start, lte: dateRange.end } },
-          },
-        }
+        admission: {
+          is: { admissionDate: { gte: dateRange.start, lte: dateRange.end } },
+        },
+      }
       : undefined;
 
     const students = await this.prisma.student.findMany({
@@ -2681,11 +2681,11 @@ export class AdmissionService {
             structure.terms?.length > 0
               ? structure.terms
               : Array.from({ length: numberOfTerms }, (_, index) => ({
-                  termNumber: index + 1,
-                  termName:
-                    numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
-                  dueDate: null,
-                }));
+                termNumber: index + 1,
+                termName:
+                  numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                dueDate: null,
+              }));
 
           await this.prisma.studentFee.create({
             data: {
@@ -2703,11 +2703,11 @@ export class AdmissionService {
               customItems:
                 customItems.length > 0
                   ? {
-                      create: customItems.map((item) => ({
-                        name: item.name,
-                        amount: Number(item.amount || 0),
-                      })),
-                    }
+                    create: customItems.map((item) => ({
+                      name: item.name,
+                      amount: Number(item.amount || 0),
+                    })),
+                  }
                   : undefined,
               terms: {
                 create: termTemplates.map((template, index) => ({
@@ -2969,11 +2969,11 @@ export class AdmissionService {
             structure.terms?.length > 0
               ? structure.terms
               : Array.from({ length: numberOfTerms }, (_, index) => ({
-                  termNumber: index + 1,
-                  termName:
-                    numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
-                  dueDate: null,
-                }));
+                termNumber: index + 1,
+                termName:
+                  numberOfTerms === 1 ? 'Full Fee' : `Term ${index + 1}`,
+                dueDate: null,
+              }));
 
           await this.prisma.studentFee.create({
             data: {
@@ -2991,11 +2991,11 @@ export class AdmissionService {
               customItems:
                 customItems.length > 0
                   ? {
-                      create: customItems.map((item) => ({
-                        name: item.name,
-                        amount: Number(item.amount || 0),
-                      })),
-                    }
+                    create: customItems.map((item) => ({
+                      name: item.name,
+                      amount: Number(item.amount || 0),
+                    })),
+                  }
                   : undefined,
               terms: {
                 create: termTemplates.map((template, index) => ({
