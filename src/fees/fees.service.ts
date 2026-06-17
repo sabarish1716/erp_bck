@@ -186,7 +186,7 @@ export class FeesService {
 
     // Auto-generate terms if not provided
     const termsData = data.terms || [];
-    if (termsData.length === 0 && numberOfTerms > 1) {
+    if (termsData.length === 0 && numberOfTerms >= 1) {
       const perTerm = Math.round((totalBase / numberOfTerms) * 100) / 100;
       for (let i = 1; i <= numberOfTerms; i++) {
         termsData.push({
@@ -293,7 +293,7 @@ export class FeesService {
       specialClassTransportFee * specialClassTransportMonths;
 
     const termsData = data.terms || [];
-    if (termsData.length === 0 && numberOfTerms > 1) {
+    if (termsData.length === 0 && numberOfTerms >= 1) {
       const perTerm = Math.round((totalBase / numberOfTerms) * 100) / 100;
       for (let i = 1; i <= numberOfTerms; i++) {
         termsData.push({
@@ -942,7 +942,7 @@ export class FeesService {
         };
       });
       numberOfTerms = structureTerms.length;
-    } else if (numberOfTerms > 1) {
+    } else if (numberOfTerms >= 1) {
       const dummyTerms = Array.from({ length: numberOfTerms }, (_, idx) => ({
         termNumber: idx + 1,
       }));
@@ -1599,9 +1599,13 @@ export class FeesService {
       const bkSplit = firstOnly(bookFee, nTerms);
       const hSplit = splitEvenly(hostelFee, coreTermsCount);
       const oSplit = firstOnly(otherFee, coreTermsCount);
-      const appSplit = firstOnly(applicationFee, coreTermsCount);
-      const scSplit = firstOnly(specialClassFeeTotal, coreTermsCount);
-      const sctSplit = firstOnly(specialClassTransportFeeTotal, coreTermsCount);
+      const hasDedicatedAppTerm = baseTerms.some((t: any) => String(t.termName || '').toLowerCase().includes('application fee'));
+      const hasDedicatedScTerm = baseTerms.some((t: any) => String(t.termName || '').toLowerCase() === 'special class');
+      const hasDedicatedSctTerm = baseTerms.some((t: any) => String(t.termName || '').toLowerCase() === 'special class transport');
+
+      const appSplit = hasDedicatedAppTerm ? [] : firstOnly(applicationFee, coreTermsCount);
+      const scSplit = hasDedicatedScTerm ? [] : firstOnly(specialClassFeeTotal, coreTermsCount);
+      const sctSplit = hasDedicatedSctTerm ? [] : firstOnly(specialClassTransportFeeTotal, coreTermsCount);
 
       let coreIdx = 0;
       for (let i = 0; i < baseTerms.length; i++) {
@@ -1613,15 +1617,15 @@ export class FeesService {
         const oAmt = isCore ? oSplit[coreIdx] || 0 : 0;
         const bkAmt = bkSplit[i] || 0;
 
-        let scAmt = 0;
-        let sctAmt = 0;
-        let appAmt = 0;
+        let scAmt = isCore ? scSplit[coreIdx] || 0 : 0;
+        let sctAmt = isCore ? sctSplit[coreIdx] || 0 : 0;
+        let appAmt = isCore ? appSplit[coreIdx] || 0 : 0;
 
         const lowerName = String(t.termName || '').toLowerCase();
         if (lowerName === 'special class') scAmt = specialClassFeeTotal;
         if (lowerName === 'special class transport')
           sctAmt = specialClassTransportFeeTotal;
-        if (lowerName === 'application fee') appAmt = applicationFee;
+        if (lowerName.includes('application fee')) appAmt = applicationFee;
 
         // If using data.terms, amount is already calculated from frontend, otherwise re-sum
         const finalAmount =
