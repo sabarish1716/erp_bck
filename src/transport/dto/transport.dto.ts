@@ -151,3 +151,22 @@ export class UpdateBusDto {
   @IsInt()
   capacity?: number;
 }
+
+// ════════════════════════════════════════════════
+// WORKSHOP MASTER
+// ════════════════════════════════════════════════
+
+export class CreateWorkshopDto {
+  @IsNotEmpty() @IsString() name: string;
+  @IsOptional() @IsString() contactPerson?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() address?: string;
+}
+
+export class UpdateWorkshopDto {
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() contactPerson?: string;
+  @IsOptional() @IsString() phone?: string;
+  @IsOptional() @IsString() address?: string;
+  @IsOptional() @IsBoolean() isActive?: boolean;
+}

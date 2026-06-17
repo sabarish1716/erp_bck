@@ -23,6 +23,8 @@ import {
   UpdateDriverDto,
   CreateBusDto,
   UpdateBusDto,
+  CreateWorkshopDto,
+  UpdateWorkshopDto,
 } from './dto/transport.dto';
 import { BulkAssignTransportDto } from './dto/bulk-assign.dto';
 import { UpdateSplClassDatesDto } from './dto/spl-class.dto';
@@ -531,5 +533,31 @@ export class TransportController {
   @Permissions(Permission.TRANSPORT_ASSIGN)
   unassignDriverFromBus(@Param('driverId') driverId: string) {
     return this.transportService.unassignDriverFromBus(driverId);
+  }
+
+  // ─── WORKSHOP MASTER ──────────────────────────
+
+  @Get('workshops')
+  @Permissions(Permission.TRANSPORT_READ)
+  getAllWorkshops() {
+    return this.transportService.getAllWorkshops();
+  }
+
+  @Post('workshops')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  createWorkshop(@Body() dto: CreateWorkshopDto) {
+    return this.transportService.createWorkshop(dto);
+  }
+
+  @Put('workshops/:id')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  updateWorkshop(@Param('id') id: string, @Body() dto: UpdateWorkshopDto) {
+    return this.transportService.updateWorkshop(id, dto);
+  }
+
+  @Delete('workshops/:id')
+  @Permissions(Permission.TRANSPORT_ASSIGN)
+  deleteWorkshop(@Param('id') id: string) {
+    return this.transportService.deleteWorkshop(id);
   }
 }

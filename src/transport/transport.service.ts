@@ -3320,4 +3320,24 @@ export class TransportService {
       include: { driver: true, route: true },
     });
   }
+
+  // ─── WORKSHOP MASTER ──────────────────────────────────────────────────────
+
+  async getAllWorkshops() {
+    return this.prisma.workshop.findMany({
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  async createWorkshop(data: { name: string; contactPerson?: string; phone?: string; address?: string }) {
+    return this.prisma.workshop.create({ data });
+  }
+
+  async updateWorkshop(id: string, data: { name?: string; contactPerson?: string; phone?: string; address?: string; isActive?: boolean }) {
+    return this.prisma.workshop.update({ where: { id }, data });
+  }
+
+  async deleteWorkshop(id: string) {
+    return this.prisma.workshop.delete({ where: { id } });
+  }
 }
