@@ -805,7 +805,15 @@ export class FeesService {
       // Handle remainder of bookFee
       const kitTotal = kitSplit.reduce((s, a) => s + a, 0);
       const remainder = Math.max(bookFee - kitTotal, 0);
-      kitSplit[0] += remainder;
+      const remainderSplit = splitProportionally(remainder, coreTerms);
+      
+      let coreIdxKit = 0;
+      for (let i = 0; i < termsArray.length; i++) {
+        if (isCoreTermFilter(termsArray[i])) {
+          kitSplit[i] += remainderSplit[coreIdxKit] || 0;
+          coreIdxKit++;
+        }
+      }
 
       const transportArr: number[] = [];
       const tuitionArr: number[] = [];
@@ -3182,7 +3190,7 @@ export class FeesService {
       const newNetFee = existing.netFee + amount;
 
       await this.prisma.$transaction(async (tx) => {
-        await tx.feeCustomItem.create({
+        await tx.studentCustomFeeItem.create({
           data: {
             studentFeeId: existing.id,
             name: newCustomItem.name,
@@ -3447,25 +3455,41 @@ export class FeesService {
         else if (d.type === 'TEACHER_DISCOUNT') staff += d.value;
         else addl += d.value;
       }
-      // Manual discounts from payments
+      // Manual discounts and actual paid from payments
       let manual = 0;
+      let paid = 0;
       for (const p of fee.payments || []) {
-        manual += p.manualDiscount || 0;
+        const baseAmount = Number(p.amount || 0);
+        const pManualDiscount = Math.max(Number(p.manualDiscount || 0), 0);
+        const status = p.status || 'SUCCESS';
+
+        if (status === 'CANCELLED') continue;
+
+        if (status === 'REFUNDED' || status === 'PARTIALLY_REFUNDED') {
+          const refunded = Number(p.refundAmount || 0);
+          const netAmount = Math.max(baseAmount - refunded, 0);
+          if (baseAmount > 0) {
+            paid += netAmount;
+            const keptRatio = netAmount / baseAmount;
+            manual += Math.round(pManualDiscount * keptRatio * 100) / 100;
+          }
+        } else {
+          paid += baseAmount;
+          manual += pManualDiscount;
+        }
       }
+
       // 3. Total Discount
       const totalDiscount = rte + sibling + staff + addl + manual;
 
       // 4. Net Fee (after all discounts)
       const netFee = Math.max(totalFee - totalDiscount, 0);
 
-      // 5. Paid Amount (only actual payments, exclude manual discounts)
-      const paid = (fee.payments || []).reduce(
-        (sum, p) => sum + Number(p.amount || 0),
-        0,
-      );
-
       // 6. Balance
       const balance = Math.max(netFee - paid, 0);
+
+      const specialClassFee = ((fee as any).specialClassFee || 0) * ((fee as any).specialClassMonths || 0);
+      const specialClassTransportFee = ((fee as any).specialClassTransportFee || 0) * ((fee as any).specialClassTransportMonths || 0);
 
       entry.yearData[fee.academicYear] = {
         totalFee,
@@ -3478,6 +3502,8 @@ export class FeesService {
         manualDiscount: manual,
         netFee,
         balance,
+        specialClassFee,
+        specialClassTransportFee,
       };
       entry.grandTotal += totalFee;
       entry.grandPaid += paid;
@@ -3488,12 +3514,8 @@ export class FeesService {
       entry.grandStaffDiscount += staff;
       entry.grandAdditionalDiscount += addl;
       entry.grandManualDiscount += manual;
-      entry.grandSpecialClassFee +=
-        ((fee as any).specialClassFee || 0) *
-        ((fee as any).specialClassMonths || 0);
-      entry.grandSpecialClassTransportFee +=
-        ((fee as any).specialClassTransportFee || 0) *
-        ((fee as any).specialClassTransportMonths || 0);
+      entry.grandSpecialClassFee += specialClassFee;
+      entry.grandSpecialClassTransportFee += specialClassTransportFee;
     }
 
     return {
@@ -3506,9 +3528,9 @@ export class FeesService {
   // CLASS-WISE FEE SUMMARY
   // -----------------------------------------------
 
-  async getClassWiseSummary(academicYear: string) {
+  async getClassWiseSummary(academicYear?: string) {
     const fees = await this.prisma.studentFee.findMany({
-      where: { academicYear },
+      where: academicYear ? { academicYear } : {},
       include: {
         student: { select: { standard: true, section: true, kitTag: true } },
         payments: true,

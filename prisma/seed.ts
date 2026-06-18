@@ -50,6 +50,9 @@ async function resetDatabase() {
   await prisma.stockTransferItem.deleteMany();
   await prisma.stockTransfer.deleteMany();
   await prisma.storeStock.deleteMany();
+
+  await prisma.studentKitIssue.deleteMany();
+  await prisma.feeKitItem.deleteMany();
   await prisma.storeItem.deleteMany();
   await prisma.supplier.deleteMany();
   await prisma.store.deleteMany();
@@ -65,12 +68,20 @@ async function resetDatabase() {
   await prisma.feeTermTemplate.deleteMany();
   await prisma.feeStructure.deleteMany();
 
+  await prisma.transportExpense.deleteMany();
+  await prisma.fuelLog.deleteMany();
+  await prisma.mileage.deleteMany();
+  await prisma.vehicleTripLog.deleteMany();
+  await prisma.workshop.deleteMany();
+
   await prisma.location.deleteMany();
   await prisma.driver.deleteMany();
   await prisma.bus.deleteMany();
 
+  await prisma.studentTransportTimeline.deleteMany();
   await prisma.studentTransport.deleteMany();
   await prisma.transportStop.deleteMany();
+  await prisma.driverRotation.deleteMany();
   await prisma.transportRoute.deleteMany();
 
   await prisma.attendance.deleteMany();
