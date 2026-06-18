@@ -3402,6 +3402,8 @@ export class FeesService {
             manualDiscount: number;
             netFee: number;
             balance: number;
+            specialClassFee: number;
+            specialClassTransportFee: number;
           }
         >;
         grandTotal: number;
