@@ -113,6 +113,14 @@ export class FeesController {
     return this.feesService.updateStudentFee(id, dto);
   }
 
+  @Post('add-pending-fee')
+  @Permissions(Permission.FEES_ASSIGN)
+  addPreviousYearPendingFee(
+    @Body() body: { studentId: string; academicYear: string; amount: number; note: string },
+  ) {
+    return this.feesService.addPreviousYearPendingFee(body);
+  }
+
   @Get('student/:studentId')
   @Permissions(Permission.FEES_READ)
   getStudentFee(

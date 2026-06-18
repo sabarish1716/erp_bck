@@ -3147,6 +3147,86 @@ export class FeesService {
   }
 
   // -----------------------------------------------
+  // PREVIOUS YEAR PENDING FEE (create or append)
+  // -----------------------------------------------
+
+  async addPreviousYearPendingFee(data: {
+    studentId: string;
+    academicYear: string;
+    amount: number;
+    note: string;
+  }) {
+    const { studentId, academicYear, amount, note } = data;
+
+    if (!studentId) throw new BadRequestException('studentId is required');
+    if (!academicYear) throw new BadRequestException('academicYear is required');
+    if (!amount || amount <= 0) throw new BadRequestException('amount must be positive');
+    if (!note?.trim()) throw new BadRequestException('note/reason is required');
+
+    const student = await this.prisma.student.findUnique({ where: { id: studentId } });
+    if (!student) throw new BadRequestException('Student not found');
+
+    const newCustomItem = { name: note.trim(), amount };
+
+    // Check if a fee record already exists for this student + year
+    const existing = await this.prisma.studentFee.findFirst({
+      where: { studentId, academicYear },
+      include: { customItems: true },
+    });
+
+    if (existing) {
+      // Append the pending custom item to the existing fee record
+      const updatedCustomTotal =
+        existing.customItems.reduce((s, ci) => s + ci.amount, 0) + amount;
+      const newTotalFee = existing.totalFee + amount;
+      const newNetFee = existing.netFee + amount;
+
+      await this.prisma.$transaction(async (tx) => {
+        await tx.feeCustomItem.create({
+          data: {
+            studentFeeId: existing.id,
+            name: newCustomItem.name,
+            amount: newCustomItem.amount,
+          },
+        });
+        await tx.studentFee.update({
+          where: { id: existing.id },
+          data: { totalFee: newTotalFee, netFee: newNetFee },
+        });
+      });
+
+      return { message: 'Pending fee appended to existing record', studentFeeId: existing.id, academicYear };
+    } else {
+      // No existing record — create a minimal fee record with just the custom item
+      const fee = await this.prisma.studentFee.create({
+        data: {
+          studentId,
+          academicYear,
+          tuitionFee: 0,
+          transportFee: 0,
+          bookFee: 0,
+          hostelFee: 0,
+          otherFee: 0,
+          applicationFee: 0,
+          specialClassFee: 0,
+          specialClassMonths: 0,
+          specialClassTransportFee: 0,
+          specialClassTransportMonths: 0,
+          numberOfTerms: 0,
+          totalFee: amount,
+          discount: 0,
+          netFee: amount,
+          customItems: {
+            create: [newCustomItem],
+          },
+        },
+      });
+
+      return { message: 'Pending fee record created', studentFeeId: fee.id, academicYear };
+    }
+  }
+
+  // -----------------------------------------------
   // BULK / WHOLE CLASS FEE ASSIGNMENT
   // -----------------------------------------------
 
