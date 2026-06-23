@@ -647,6 +647,7 @@ export class PosService {
     const summary: Record<
       string,
       {
+        itemId: string;
         itemName: string;
         freeLimit: number;
         totalGiven: number;
@@ -657,6 +658,7 @@ export class PosService {
     for (const r of records) {
       if (!summary[r.itemId]) {
         summary[r.itemId] = {
+          itemId: r.itemId,
           itemName: r.item.name,
           freeLimit: r.item.freeLimit,
           totalGiven: 0,
