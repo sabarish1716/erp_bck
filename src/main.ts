@@ -21,6 +21,7 @@ async function bootstrap() {
       transform: true,        // auto transform types
     }),
   );
-await app.listen(3000, '0.0.0.0');
+const port = process.env.PORT || 3000;
+await app.listen(port, '0.0.0.0');
 }
 bootstrap();
